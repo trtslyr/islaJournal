@@ -1,6 +1,6 @@
-# isla_journal
+# Isla Journal
 
-A new Flutter project.
+A Flutter-based AI-powered journaling application with complete offline functionality.
 
 ## Getting Started
 
@@ -14,3 +14,7 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Project Details
+
+For detailed technical specifications and development plan, see [ISLA_JOURNAL_TECH_STACK_PLAN.md](ISLA_JOURNAL_TECH_STACK_PLAN.md).
