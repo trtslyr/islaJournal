@@ -67,7 +67,7 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                   // Root folders
                   ...provider.rootFolders.map((folder) => _buildFolderTile(folder, provider)),
                   // Root files
-                  ...provider.currentFolderFiles.where((file) => file.folderId == null).map((file) => _buildFileTile(file, provider)),
+                  ...provider.files.where((file) => file.folderId == null).map((file) => _buildFileTile(file, provider)),
                 ],
               ),
             ),

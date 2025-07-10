@@ -277,8 +277,10 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class CreateFileDialog extends StatefulWidget {
+  const CreateFileDialog({super.key});
+
   @override
-  _CreateFileDialogState createState() => _CreateFileDialogState();
+  State<CreateFileDialog> createState() => _CreateFileDialogState();
 }
 
 class _CreateFileDialogState extends State<CreateFileDialog> {

@@ -99,12 +99,24 @@ class DatabaseService {
 
   Future<List<JournalFolder>> getFolders({String? parentId}) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'folders',
-      where: parentId != null ? 'parent_id = ?' : 'parent_id IS NULL',
-      whereArgs: parentId != null ? [parentId] : null,
-      orderBy: 'name ASC',
-    );
+    final List<Map<String, dynamic>> maps;
+    
+    if (parentId == null) {
+      // Get all folders
+      maps = await db.query(
+        'folders',
+        orderBy: 'name ASC',
+      );
+    } else {
+      // Get folders with specific parent
+      maps = await db.query(
+        'folders',
+        where: 'parent_id = ?',
+        whereArgs: [parentId],
+        orderBy: 'name ASC',
+      );
+    }
+    
     return maps.map((map) => JournalFolder.fromMap(map)).toList();
   }
 
@@ -152,7 +164,17 @@ class DatabaseService {
   Future<String> createFile(String name, String content, {String? folderId}) async {
     final db = await database;
     final documentsDir = await getApplicationDocumentsDirectory();
-    final filePath = join(documentsDir.path, 'journal_files', '$name.md');
+    
+    // Create database entry first to get the ID
+    final journalFile = JournalFile(
+      name: name,
+      folderId: folderId,
+      filePath: '', // Will be set after creating the path
+      content: content,
+      wordCount: JournalFile.calculateWordCount(content),
+    );
+    
+    final filePath = join(documentsDir.path, 'journal_files', '${journalFile.id}.md');
     
     // Ensure the directory exists
     final fileDir = Directory(dirname(filePath));
@@ -164,35 +186,41 @@ class DatabaseService {
     final file = File(filePath);
     await file.writeAsString(content);
     
-    // Create database entry
-    final journalFile = JournalFile(
-      name: name,
-      folderId: folderId,
-      filePath: filePath,
-      content: content,
-      wordCount: JournalFile.calculateWordCount(content),
-    );
+    // Update the file path in the journal file
+    final updatedJournalFile = journalFile.copyWith(filePath: filePath);
     
-    await db.insert('files', journalFile.toMap());
+    await db.insert('files', updatedJournalFile.toMap());
     
     // Update search index
     await db.insert('files_fts', {
-      'file_id': journalFile.id,
+      'file_id': updatedJournalFile.id,
       'title': name,
       'content': content,
     });
     
-    return journalFile.id;
+    return updatedJournalFile.id;
   }
 
   Future<List<JournalFile>> getFiles({String? folderId}) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'files',
-      where: folderId != null ? 'folder_id = ?' : 'folder_id IS NULL',
-      whereArgs: folderId != null ? [folderId] : null,
-      orderBy: 'updated_at DESC',
-    );
+    final List<Map<String, dynamic>> maps;
+    
+    if (folderId == null) {
+      // Get all files
+      maps = await db.query(
+        'files',
+        orderBy: 'updated_at DESC',
+      );
+    } else {
+      // Get files in specific folder
+      maps = await db.query(
+        'files',
+        where: 'folder_id = ?',
+        whereArgs: [folderId],
+        orderBy: 'updated_at DESC',
+      );
+    }
+    
     return maps.map((map) => JournalFile.fromMap(map)).toList();
   }
 

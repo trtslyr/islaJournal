@@ -116,7 +116,9 @@ class _EditorWidgetState extends State<EditorWidget> {
       builder: (context, provider, child) {
         // Check if selected file changed
         if (provider.selectedFileId != _currentFile?.id) {
-          _loadFile();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _loadFile();
+          });
         }
 
         if (_isLoading) {
