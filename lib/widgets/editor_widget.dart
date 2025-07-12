@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/journal_provider.dart';
+import '../providers/ai_provider.dart';
 import '../models/journal_file.dart';
 import '../core/theme/app_theme.dart';
 
@@ -19,10 +21,13 @@ class _EditorWidgetState extends State<EditorWidget> {
   bool _isLoading = true;
   bool _hasUnsavedChanges = false;
   JournalFile? _currentFile;
+  bool _isProcessingAI = false;
+  FocusNode? _focusNode;
 
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode();
     _loadFile();
   }
 
@@ -30,6 +35,7 @@ class _EditorWidgetState extends State<EditorWidget> {
   void dispose() {
     _saveTimer?.cancel();
     _controller?.dispose();
+    _focusNode?.dispose();
     super.dispose();
   }
 
@@ -56,7 +62,7 @@ class _EditorWidgetState extends State<EditorWidget> {
     
     try {
       // Try to parse as Delta JSON first (from previous flutter_quill content)
-      final deltaJson = jsonDecode(content);
+      jsonDecode(content);
       // Extract plain text from delta - this is a simplified extraction
       plainText = content; // For now, just use the content as-is
     } catch (e) {
@@ -79,6 +85,98 @@ class _EditorWidgetState extends State<EditorWidget> {
       _saveTimer = Timer(const Duration(seconds: 2), () {
         _saveFile();
       });
+    }
+  }
+
+  Future<void> _handleKeyPress(RawKeyEvent event) async {
+    if (event is RawKeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+      await _checkForSlashCommand();
+    }
+  }
+
+  Future<void> _checkForSlashCommand() async {
+    if (_controller == null || _isProcessingAI) return;
+    
+    final text = _controller!.text;
+    final cursorPosition = _controller!.selection.baseOffset;
+    
+    // Find the current line
+    final textBeforeCursor = text.substring(0, cursorPosition);
+    final lines = textBeforeCursor.split('\n');
+    
+    if (lines.isEmpty) return;
+    
+    final currentLine = lines.last.trim();
+    
+    // Check if the line starts with a slash command
+    if (currentLine.startsWith('/') && currentLine.length > 1) {
+      final command = currentLine.substring(1).trim();
+      if (command.isNotEmpty) {
+        await _processSlashCommand(command, currentLine);
+      }
+    }
+  }
+
+  Future<void> _processSlashCommand(String command, String originalLine) async {
+    if (_controller == null) return;
+    
+    setState(() {
+      _isProcessingAI = true;
+    });
+    
+    try {
+      final aiProvider = Provider.of<AIProvider>(context, listen: false);
+      
+      // Check if AI is available
+      if (!aiProvider.isModelLoaded) {
+        _addTextAfterLine(originalLine, '\n🤖 AI not available. Please go to Settings to set up AI models.');
+        return;
+      }
+      
+      // Add processing indicator after the command
+      _addTextAfterLine(originalLine, '\n🤖 Processing: $command...');
+      
+      // Get AI response
+      final response = await aiProvider.generateResponse(command);
+      
+      // Replace processing indicator with response
+      _replaceLastLine('🤖 Processing: $command...', '🤖 $response');
+      
+      // Move cursor to end
+      _controller!.selection = TextSelection.collapsed(offset: _controller!.text.length);
+      
+    } catch (e) {
+      _replaceLastLine('🤖 Processing: $command...', '🤖 Error: Unable to process command');
+      debugPrint('Error processing slash command: $e');
+    } finally {
+      setState(() {
+        _isProcessingAI = false;
+      });
+    }
+  }
+
+  void _addTextAfterLine(String targetLine, String textToAdd) {
+    if (_controller == null) return;
+    
+    final text = _controller!.text;
+    final lastIndex = text.lastIndexOf(targetLine);
+    
+    if (lastIndex != -1) {
+      final insertPosition = lastIndex + targetLine.length;
+      final newText = text.substring(0, insertPosition) + textToAdd + text.substring(insertPosition);
+      _controller!.text = newText;
+    }
+  }
+
+  void _replaceLastLine(String oldLine, String newLine) {
+    if (_controller == null) return;
+    
+    final text = _controller!.text;
+    final lastIndex = text.lastIndexOf(oldLine);
+    
+    if (lastIndex != -1) {
+      final newText = text.substring(0, lastIndex) + newLine + text.substring(lastIndex + oldLine.length);
+      _controller!.text = newText;
     }
   }
 
@@ -128,7 +226,7 @@ class _EditorWidgetState extends State<EditorWidget> {
 
         return Column(
           children: [
-            // Header with file info
+            // Clean header
             Container(
               padding: const EdgeInsets.all(16.0),
               decoration: BoxDecoration(
@@ -148,63 +246,66 @@ class _EditorWidgetState extends State<EditorWidget> {
                       children: [
                         Text(
                           _currentFile!.name,
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontFamily: 'JetBrainsMono',
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
+                        const SizedBox(height: 4),
                         Text(
                           '${_currentFile!.wordCount} words • ${_hasUnsavedChanges ? "Unsaved changes" : "Saved"}',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'JetBrainsMono',
+                            color: AppTheme.mediumGray,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.save),
-                        onPressed: _hasUnsavedChanges ? _saveFile : null,
-                        tooltip: 'Save',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.file_download),
-                        onPressed: () => _showExportDialog(context),
-                        tooltip: 'Export',
-                      ),
-                    ],
-                  ),
+                  if (_hasUnsavedChanges)
+                    IconButton(
+                      icon: const Icon(Icons.save),
+                      onPressed: _saveFile,
+                      tooltip: 'Save',
+                    ),
                 ],
               ),
             ),
-            // Editor
+            // Clean editor
             Expanded(
               child: _controller != null
                   ? Container(
-                      padding: const EdgeInsets.all(16.0),
-                      child: TextField(
-                        controller: _controller!,
-                        maxLines: null,
-                        expands: true,
-                        textAlignVertical: TextAlignVertical.top,
-                        decoration: InputDecoration(
-                          hintText: 'Start writing your journal entry...',
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                          hintStyle: const TextStyle(
+                      padding: const EdgeInsets.all(24.0),
+                      child: RawKeyboardListener(
+                        focusNode: _focusNode!,
+                        onKey: _handleKeyPress,
+                        child: TextField(
+                          controller: _controller!,
+                          maxLines: null,
+                          expands: true,
+                          textAlignVertical: TextAlignVertical.top,
+                          decoration: InputDecoration(
+                            hintText: 'Start writing...\n\nTip: Type "/" followed by a question and press Enter to ask AI',
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                            hintStyle: TextStyle(
+                              fontFamily: 'JetBrainsMono',
+                              color: AppTheme.mediumGray.withOpacity(0.6),
+                              fontSize: 16.0,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          style: const TextStyle(
                             fontFamily: 'JetBrainsMono',
-                            color: AppTheme.mediumGray,
+                            color: AppTheme.darkText,
                             fontSize: 16.0,
                             fontWeight: FontWeight.w400,
+                            height: 1.6,
                           ),
+                          cursorColor: AppTheme.warmBrown,
                         ),
-                        style: const TextStyle(
-                          fontFamily: 'JetBrainsMono',
-                          color: AppTheme.darkText,
-                          fontSize: 16.0,
-                          fontWeight: FontWeight.w400,
-                          height: 1.5,
-                        ),
-                        cursorColor: AppTheme.warmBrown,
                       ),
                     )
                   : const Center(
@@ -215,41 +316,5 @@ class _EditorWidgetState extends State<EditorWidget> {
         );
       },
     );
-  }
-
-  void _showExportDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Export File'),
-        content: const Text('Export functionality will be enhanced in the next update. For now, you can copy your text directly from the editor.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _exportAsText();
-            },
-            child: const Text('Copy Text'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _exportAsText() {
-    if (_controller != null) {
-      // For now, just show a snackbar. In a full implementation,
-      // this would copy to clipboard or save to file
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Text ready to copy from editor'),
-          backgroundColor: AppTheme.warmBrown,
-        ),
-      );
-    }
   }
 }

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/journal_provider.dart';
+import '../providers/ai_provider.dart';
 import '../widgets/file_tree_widget.dart';
 import '../widgets/editor_widget.dart';
 import '../widgets/search_widget.dart';
+import '../screens/settings_screen.dart';
 import '../core/theme/app_theme.dart';
-import '../models/journal_file.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,8 +27,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _initializeProvider() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final provider = Provider.of<JournalProvider>(context, listen: false);
-      await provider.initialize();
+      final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+      final aiProvider = Provider.of<AIProvider>(context, listen: false);
+      
+      await journalProvider.initialize();
+      await aiProvider.initialize();
     });
   }
 
@@ -330,17 +334,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showSettings(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Settings'),
-        content: const Text('Settings panel coming soon in Phase 2'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const SettingsScreen(),
       ),
     );
   }

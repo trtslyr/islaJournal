@@ -82,7 +82,7 @@ packages:
     source: hosted
     version: "0.3.4+2"
   crypto:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: crypto
       sha256: "1e445881f28f22d6140f181e07737b22f1e099a5e1ff94b0af2f9e4a463f4855"
@@ -97,6 +97,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.8"
+  dio:
+    dependency: "direct main"
+    description:
+      name: dio
+      sha256: "253a18bbd4851fecba42f7343a1df3a9a4c1d31a2c1b37e221086b4fa8c8dbc9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.8.0+1"
+  dio_web_adapter:
+    dependency: transitive
+    description:
+      name: dio_web_adapter
+      sha256: "7586e476d70caecaf1686d21eee7247ea43ef5c345eab9e0cc3583ff13378d78"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.1"
   fake_async:
     dependency: transitive
     description:
@@ -129,6 +145,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
+  fllama:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: main
+      resolved-ref: d341e65d596e4d9dd888eab21e04eef1736fd661
+      url: "https://github.com/Telosnex/fllama.git"
+    source: git
+    version: "0.0.1"
   flutter:
     dependency: "direct main"
     description: flutter
@@ -176,8 +201,16 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "14.8.1"
-  http:
+  html_unescape:
     dependency: transitive
+    description:
+      name: html_unescape
+      sha256: "15362d7a18f19d7b742ef8dcb811f5fd2a2df98db9f80ea393c075189e0b61e3"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
+  http:
+    dependency: "direct main"
     description:
       name: http
       sha256: "2c11f3f94c687ee9bad77c171151672986360b2b001d109814ee7140b2cf261b"
@@ -208,6 +241,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.19.0"
+  jinja:
+    dependency: transitive
+    description:
+      name: jinja
+      sha256: "8cf446a04d01d10bf1c213c2c9d2a30b3602d1c035ae3ad86e518770abc05987"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.6.4"
   leak_tracker:
     dependency: transitive
     description:
@@ -509,6 +550,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.2"
+  textwrap:
+    dependency: transitive
+    description:
+      name: textwrap
+      sha256: "780b164d83dfed30b475b1310d288145c5e0109193c3c507cf015d38e4adc844"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
   typed_data:
     dependency: transitive
     description:

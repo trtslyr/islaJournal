@@ -61,6 +61,15 @@ dependencies:
   
   # Icons
   flutter_svg: ^2.0.9
+  
+  # AI/ML Dependencies
+  fllama:
+    git:
+      url: https://github.com/Telosnex/fllama.git
+      ref: main
+  http: ^1.1.0
+  dio: ^5.4.0  # For progressive downloads
+  crypto: ^3.0.3  # For model verification
 
 dev_dependencies:
   flutter_test:
