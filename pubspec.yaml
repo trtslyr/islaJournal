@@ -61,6 +61,21 @@ dependencies:
   
   # Icons
   flutter_svg: ^2.0.9
+  
+  # AI & ML Dependencies (Phase 2 & 3)
+  langchain_dart: ^0.7.0
+  ollama_dart: ^0.2.0
+  http: ^1.1.0
+  
+  # Vector storage and embeddings
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  
+  # JSON handling for AI responses
+  json_annotation: ^4.8.1
+  
+  # Secure storage for AI settings
+  flutter_secure_storage: ^9.0.0
 
 dev_dependencies:
   flutter_test:
