@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/journal_provider.dart';
 import 'providers/ai_provider.dart';
+import 'providers/rag_provider.dart';
+import 'providers/mood_provider.dart';
+import 'providers/auto_tagging_provider.dart';
 import 'screens/home_screen.dart';
 
 void main() {
@@ -18,6 +21,9 @@ class IslaJournalApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (context) => JournalProvider()),
         ChangeNotifierProvider(create: (context) => AIProvider()),
+        ChangeNotifierProvider(create: (context) => RAGProvider()),
+        ChangeNotifierProvider(create: (context) => MoodProvider()),
+        ChangeNotifierProvider(create: (context) => AutoTaggingProvider()),
       ],
       child: MaterialApp(
         title: 'Isla Journal',

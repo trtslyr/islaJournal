@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/ai_provider.dart';
+import '../providers/rag_provider.dart';
 import '../services/ai_service.dart';
 import '../core/theme/app_theme.dart';
 
@@ -19,12 +20,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Settings'),
         backgroundColor: AppTheme.darkerCream,
       ),
-      body: Consumer<AIProvider>(
-        builder: (context, aiProvider, child) {
+      body: Consumer2<AIProvider, RAGProvider>(
+        builder: (context, aiProvider, ragProvider, child) {
           return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
               _buildAISection(aiProvider),
+              const SizedBox(height: 24),
+              _buildRAGSection(ragProvider),
               const SizedBox(height: 24),
               _buildStorageSection(aiProvider),
               const SizedBox(height: 24),
@@ -362,6 +365,319 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildRAGSection(RAGProvider ragProvider) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_stories, color: AppTheme.warmBrown),
+                const SizedBox(width: 8),
+                Text(
+                  'Knowledge Base',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontFamily: 'JetBrainsMono',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // RAG Status
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.darkerCream,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    ragProvider.isInitialized ? Icons.check_circle : Icons.circle_outlined,
+                    color: ragProvider.isInitialized ? Colors.green : AppTheme.mediumGray,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      ragProvider.isInitialized 
+                        ? 'Knowledge Base Ready: ${ragProvider.indexingSummary}'
+                        : 'Knowledge Base not initialized',
+                      style: const TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Indexing Status
+            if (ragProvider.isIndexing) ...[
+              Text(
+                'Indexing Progress',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontFamily: 'JetBrainsMono',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: ragProvider.indexingPercentage / 100,
+                backgroundColor: AppTheme.darkerCream,
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                ragProvider.indexingStatus,
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12,
+                  color: AppTheme.mediumGray,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            
+            // Imported Documents
+            if (ragProvider.importedDocuments.isNotEmpty) ...[
+              Text(
+                'Imported Documents (${ragProvider.importedDocuments.length})',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontFamily: 'JetBrainsMono',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...ragProvider.importedDocuments.take(5).map((doc) => 
+                Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.darkerCream,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        doc.contentType.contains('pdf') ? Icons.picture_as_pdf : Icons.description,
+                        size: 16,
+                        color: AppTheme.mediumGray,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          doc.originalFilename,
+                          style: const TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${doc.wordCount} words',
+                        style: const TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 10,
+                          color: AppTheme.mediumGray,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (ragProvider.importedDocuments.length > 5) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '... and ${ragProvider.importedDocuments.length - 5} more documents',
+                  style: const TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 12,
+                    color: AppTheme.mediumGray,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+            ],
+            
+            // RAG Statistics
+            if (ragProvider.ragStats.isNotEmpty) ...[
+              Text(
+                'Statistics',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontFamily: 'JetBrainsMono',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkerCream,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatRow('Vocabulary Size', '${ragProvider.vocabularySize} words'),
+                    _buildStatRow('Total Indexed Items', '${ragProvider.ragStats['totalIndexedItems'] ?? 0}'),
+                    _buildStatRow('Journal Entries', '${ragProvider.ragStats['journalEntriesIndexed'] ?? 0}'),
+                    _buildStatRow('Imported Content', '${ragProvider.ragStats['importedContentIndexed'] ?? 0}'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            
+            // Action buttons
+            Row(
+              children: [
+                if (ragProvider.isInitialized && !ragProvider.isIndexing) ...[
+                  ElevatedButton.icon(
+                    onPressed: () => ragProvider.reindexAllContent(),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Reindex All'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.warmBrown,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      try {
+                        await ragProvider.clearCorruptedEmbeddings();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Corrupted embeddings cleared successfully')),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to clear embeddings: $e')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.clear, size: 16),
+                    label: const Text('Clear Corrupted'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.warningRed,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                TextButton.icon(
+                  onPressed: () => _showRAGAnalytics(ragProvider),
+                  icon: const Icon(Icons.analytics, size: 16),
+                  label: const Text('View Analytics'),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () async {
+                    final status = await ragProvider.debugDatabaseStatus();
+                    _showDebugDialog(status);
+                  },
+                  icon: const Icon(Icons.bug_report, size: 16),
+                  label: const Text('Debug'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12,
+              color: AppTheme.mediumGray,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRAGAnalytics(RAGProvider ragProvider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Knowledge Base Analytics'),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Your AI assistant has access to:',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...ragProvider.ragStats.entries.map((entry) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          entry.key,
+                          style: const TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          entry.value.toString(),
+                          style: const TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStorageSection(AIProvider aiProvider) {
     return Card(
       child: Padding(
@@ -620,6 +936,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: const Text(
           'Storage management features:\n\n• View detailed storage usage\n• Clean up temporary files\n• Manage model cache\n\nThese features will be available in a future update.',
           style: TextStyle(fontFamily: 'JetBrainsMono'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDebugDialog(Map<String, dynamic> status) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('RAG Database Debug'),
+        content: SizedBox(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Database Status:',
+                  style: const TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text('Files: ${status['totalFiles'] ?? 0}'),
+                Text('Embeddings: ${status['totalEmbeddings'] ?? 0}'),
+                Text('Linked Embeddings: ${status['embeddingsWithFiles'] ?? 0}'),
+                const SizedBox(height: 16),
+                if (status['details'] != null) ...[
+                  const Text(
+                    'File Details:',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...(status['details'] as List).map((detail) => 
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '${detail['name']}: ${detail['embedding_size']} bytes',
+                        style: const TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ).toList(),
+                ],
+                if (status['error'] != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error: ${status['error']}',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(

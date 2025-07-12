@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/journal_provider.dart';
 import '../providers/ai_provider.dart';
+import '../providers/rag_provider.dart';
+import '../providers/auto_tagging_provider.dart';
 import '../widgets/file_tree_widget.dart';
 import '../widgets/editor_widget.dart';
 import '../widgets/search_widget.dart';
 import '../screens/settings_screen.dart';
+import '../screens/insights_screen.dart';
 import '../core/theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -29,9 +32,13 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final journalProvider = Provider.of<JournalProvider>(context, listen: false);
       final aiProvider = Provider.of<AIProvider>(context, listen: false);
+      final ragProvider = Provider.of<RAGProvider>(context, listen: false);
+      final autoTaggingProvider = Provider.of<AutoTaggingProvider>(context, listen: false);
       
       await journalProvider.initialize();
       await aiProvider.initialize();
+      await ragProvider.initialize();
+      await autoTaggingProvider.initialize();
     });
   }
 
@@ -64,6 +71,16 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => _showCreateDialog(context),
           ),
           IconButton(
+            icon: const Icon(Icons.file_upload),
+            onPressed: () => _showImportDialog(context),
+            tooltip: 'Import Documents',
+          ),
+          IconButton(
+            icon: const Icon(Icons.analytics),
+            onPressed: () => _showInsights(context),
+            tooltip: 'Personal Insights',
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => _showSettings(context),
           ),
@@ -75,12 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Container(
               padding: const EdgeInsets.all(16.0),
               color: AppTheme.darkerCream,
-              child: SearchWidget(
-                controller: _searchController,
-                onSearch: (query) {
-                  context.read<JournalProvider>().searchFiles(query);
-                },
-              ),
+              child: const SearchWidget(),
             ),
           Expanded(
             child: Row(
@@ -99,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: const FileTreeWidget(),
                 ),
-                // Right panel - Editor
+                // Right panel - Editor/Conversation
                 Expanded(
                   child: Consumer<JournalProvider>(
                     builder: (context, provider, child) {
@@ -232,6 +244,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+
+
   Widget _buildWelcomeScreen(JournalProvider provider) {
     return Padding(
       padding: const EdgeInsets.all(32.0),
@@ -340,6 +354,21 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  void _showInsights(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const InsightsScreen(),
+      ),
+    );
+  }
+
+  void _showImportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => ImportDocumentDialog(),
+    );
+  }
 }
 
 class CreateFileDialog extends StatefulWidget {
@@ -442,5 +471,152 @@ class _CreateFileDialogState extends State<CreateFileDialog> {
         ),
       ],
     );
+  }
+}
+
+class ImportDocumentDialog extends StatefulWidget {
+  const ImportDocumentDialog({super.key});
+
+  @override
+  State<ImportDocumentDialog> createState() => _ImportDocumentDialogState();
+}
+
+class _ImportDocumentDialogState extends State<ImportDocumentDialog> {
+  bool _isImporting = false;
+  String _importStatus = '';
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Import Documents'),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Import PDF, Word, or text documents to enhance your AI assistant with additional context.',
+              style: TextStyle(fontFamily: 'JetBrainsMono'),
+            ),
+            const SizedBox(height: 16),
+            if (_isImporting) ...[
+              const LinearProgressIndicator(),
+              const SizedBox(height: 8),
+              Text(
+                _importStatus,
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12,
+                  color: AppTheme.mediumGray,
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Consumer<RAGProvider>(
+              builder: (context, ragProvider, child) {
+                return Column(
+                  children: [
+                    if (ragProvider.importedDocuments.isNotEmpty) ...[
+                      const Text(
+                        'Imported Documents:',
+                        style: TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                                             ...ragProvider.importedDocuments.take(3).map((doc) => 
+                         Text(
+                           '• ${doc.originalFilename}',
+                           style: const TextStyle(
+                             fontFamily: 'JetBrainsMono',
+                             fontSize: 12,
+                             color: AppTheme.mediumGray,
+                           ),
+                         ),
+                       ),
+                      if (ragProvider.importedDocuments.length > 3)
+                        Text(
+                          '... and ${ragProvider.importedDocuments.length - 3} more',
+                          style: const TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 12,
+                            color: AppTheme.mediumGray,
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                    ],
+                    Text(
+                      ragProvider.indexingSummary,
+                      style: const TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 12,
+                        color: AppTheme.mediumGray,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+        ElevatedButton(
+          onPressed: _isImporting ? null : () => _importDocuments(),
+          child: const Text('Import Documents'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _importDocuments() async {
+    if (_isImporting) return;
+    
+    setState(() {
+      _isImporting = true;
+      _importStatus = 'Selecting documents...';
+    });
+
+    try {
+      final ragProvider = Provider.of<RAGProvider>(context, listen: false);
+      
+      setState(() {
+        _importStatus = 'Importing documents...';
+      });
+      
+      final importedDocs = await ragProvider.importDocuments(
+        allowMultiple: true,
+        allowedExtensions: ['pdf', 'docx', 'doc', 'txt', 'md'],
+      );
+      
+      if (importedDocs.isNotEmpty) {
+        setState(() {
+          _importStatus = 'Successfully imported ${importedDocs.length} document(s)';
+        });
+        
+        // Close dialog after a short delay
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      } else {
+        setState(() {
+          _importStatus = 'No documents were imported';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _importStatus = 'Error importing documents: $e';
+      });
+    } finally {
+      setState(() {
+        _isImporting = false;
+      });
+    }
   }
 }
