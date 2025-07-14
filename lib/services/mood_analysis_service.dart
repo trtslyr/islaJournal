@@ -3,57 +3,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/journal_file.dart';
+import '../models/mood_entry.dart';
+import '../models/analytics_models.dart';
 import 'database_service.dart';
 import 'ai_service.dart';
 
-class MoodEntry {
-  final String id;
-  final String fileId;
-  final DateTime date;
-  final double valence; // -1 (negative) to 1 (positive)
-  final double arousal; // 0 (calm) to 1 (excited)
-  final List<String> emotions;
-  final String summary;
-  final double confidence;
-
-  MoodEntry({
-    required this.id,
-    required this.fileId,
-    required this.date,
-    required this.valence,
-    required this.arousal,
-    required this.emotions,
-    required this.summary,
-    required this.confidence,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'file_id': fileId,
-      'date': date.toIso8601String(),
-      'valence': valence,
-      'arousal': arousal,
-      'emotions': jsonEncode(emotions),
-      'summary': summary,
-      'confidence': confidence,
-      'created_at': DateTime.now().toIso8601String(),
-    };
-  }
-
-  factory MoodEntry.fromMap(Map<String, dynamic> map) {
-    return MoodEntry(
-      id: map['id'] as String,
-      fileId: map['file_id'] as String,
-      date: DateTime.parse(map['date'] as String),
-      valence: map['valence'] as double,
-      arousal: map['arousal'] as double,
-      emotions: List<String>.from(jsonDecode(map['emotions'] as String)),
-      summary: map['summary'] as String,
-      confidence: map['confidence'] as double,
-    );
-  }
-}
+// MoodEntry class is now imported from ../models/mood_entry.dart
 
 class MoodPattern {
   final DateTime startDate;

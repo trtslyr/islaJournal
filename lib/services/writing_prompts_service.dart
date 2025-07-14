@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/journal_file.dart';
+import '../models/writing_prompt.dart';
 import '../services/rag_service.dart';
 import '../services/mood_analysis_service.dart';
 import '../services/ai_service.dart';

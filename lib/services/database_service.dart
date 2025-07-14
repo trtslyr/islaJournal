@@ -796,4 +796,63 @@ class DatabaseService {
     final db = await database;
     await db.close();
   }
+
+  // Phase 3 AI Database Methods
+  Future<List<Map<String, dynamic>>> getTags() async {
+    final db = await database;
+    return await db.query('tags', orderBy: 'name');
+  }
+
+  Future<List<Map<String, dynamic>>> getThemes() async {
+    final db = await database;
+    return await db.query('themes', orderBy: 'name');
+  }
+
+  Future<void> insertTag(Map<String, dynamic> tag) async {
+    final db = await database;
+    await db.insert('tags', tag, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> insertTheme(Map<String, dynamic> theme) async {
+    final db = await database;
+    await db.insert('themes', theme, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> insertMoodEntry(Map<String, dynamic> moodEntry) async {
+    final db = await database;
+    await db.insert('mood_entries', moodEntry, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> getMoodEntries({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? fileId,
+  }) async {
+    final db = await database;
+    
+    String whereClause = '1=1';
+    List<dynamic> whereArgs = [];
+    
+    if (startDate != null) {
+      whereClause += ' AND date >= ?';
+      whereArgs.add(startDate.toIso8601String());
+    }
+    
+    if (endDate != null) {
+      whereClause += ' AND date <= ?';
+      whereArgs.add(endDate.toIso8601String());
+    }
+    
+    if (fileId != null) {
+      whereClause += ' AND file_id = ?';
+      whereArgs.add(fileId);
+    }
+    
+    return await db.query(
+      'mood_entries',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'date DESC',
+    );
+  }
 }

@@ -11,6 +11,8 @@ import '../providers/auto_tagging_provider.dart';
 import '../services/writing_prompts_service.dart';
 import '../services/mood_analysis_service.dart';
 import '../models/journal_file.dart';
+import '../models/mood_entry.dart';
+import '../models/writing_prompt.dart';
 import '../core/theme/app_theme.dart';
 
 class EditorWidget extends StatefulWidget {

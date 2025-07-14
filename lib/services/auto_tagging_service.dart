@@ -2,57 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/journal_file.dart';
+import '../models/auto_tagging_models.dart';
 import '../services/database_service.dart';
 import '../services/ai_service.dart';
 import '../services/rag_service.dart';
 
-class AutoTaggingResult {
-  final List<TagSuggestion> suggestedTags;
-  final List<ThemeSuggestion> suggestedThemes;
-  final double overallConfidence;
-  final Map<String, dynamic> analysisMetadata;
-
-  AutoTaggingResult({
-    required this.suggestedTags,
-    required this.suggestedThemes,
-    required this.overallConfidence,
-    required this.analysisMetadata,
-  });
-}
-
-class TagSuggestion {
-  final String tagId;
-  final String tagName;
-  final double confidence;
-  final String reason;
-  final bool isNewTag;
-
-  TagSuggestion({
-    required this.tagId,
-    required this.tagName,
-    required this.confidence,
-    required this.reason,
-    this.isNewTag = false,
-  });
-}
-
-class ThemeSuggestion {
-  final String themeId;
-  final String themeName;
-  final double relevanceScore;
-  final String category;
-  final String reasoning;
-  final bool isNewTheme;
-
-  ThemeSuggestion({
-    required this.themeId,
-    required this.themeName,
-    required this.relevanceScore,
-    required this.category,
-    required this.reasoning,
-    this.isNewTheme = false,
-  });
-}
+// AutoTaggingResult, TagSuggestion, and ThemeSuggestion classes are now imported from ../models/auto_tagging_models.dart
 
 class AutoTaggingService {
   static final AutoTaggingService _instance = AutoTaggingService._internal();
@@ -269,10 +224,10 @@ Guidelines:
       
       suggestions.add(TagSuggestion(
         tagId: tagId,
-        tagName: tagName,
+        name: tagName,
         confidence: confidence,
         reason: reason,
-        isNewTag: isNewTag,
+        isExisting: !isNewTag,
       ));
     }
     
@@ -318,16 +273,16 @@ Guidelines:
       
       suggestions.add(ThemeSuggestion(
         themeId: themeId,
-        themeName: themeName,
-        relevanceScore: relevance,
+        name: themeName,
+        relevance: relevance,
         category: category,
         reasoning: reasoning,
-        isNewTheme: isNewTheme,
+        isExisting: !isNewTheme,
       ));
     }
     
     // Sort by relevance and limit
-    suggestions.sort((a, b) => b.relevanceScore.compareTo(a.relevanceScore));
+    suggestions.sort((a, b) => b.relevance.compareTo(a.relevance));
     return suggestions.take(maxThemesPerEntry).toList();
   }
 

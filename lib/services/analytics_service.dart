@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../services/database_service.dart';
 import '../services/mood_analysis_service.dart';
 import '../models/journal_file.dart';
+import '../models/analytics_models.dart';
 
 class WritingStats {
   final int totalEntries;
