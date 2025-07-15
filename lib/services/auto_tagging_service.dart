@@ -1,57 +1,133 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import '../models/journal_file.dart';
-import '../services/database_service.dart';
-import '../services/ai_service.dart';
-import '../services/rag_service.dart';
-
-class AutoTaggingResult {
-  final List<TagSuggestion> suggestedTags;
-  final List<ThemeSuggestion> suggestedThemes;
-  final double overallConfidence;
-  final Map<String, dynamic> analysisMetadata;
-
-  AutoTaggingResult({
-    required this.suggestedTags,
-    required this.suggestedThemes,
-    required this.overallConfidence,
-    required this.analysisMetadata,
-  });
-}
+import 'database_service.dart';
+import 'ai_service.dart';
 
 class TagSuggestion {
   final String tagId;
   final String tagName;
   final double confidence;
-  final String reason;
-  final bool isNewTag;
+  final String source; // 'existing' or 'new'
+  final String? color;
+  final String? description;
 
   TagSuggestion({
     required this.tagId,
     required this.tagName,
     required this.confidence,
-    required this.reason,
-    this.isNewTag = false,
+    required this.source,
+    this.color,
+    this.description,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'tagId': tagId,
+      'tagName': tagName,
+      'confidence': confidence,
+      'source': source,
+      'color': color,
+      'description': description,
+    };
+  }
+
+  factory TagSuggestion.fromMap(Map<String, dynamic> map) {
+    return TagSuggestion(
+      tagId: map['tagId'] as String,
+      tagName: map['tagName'] as String,
+      confidence: map['confidence'] as double,
+      source: map['source'] as String,
+      color: map['color'] as String?,
+      description: map['description'] as String?,
+    );
+  }
 }
 
 class ThemeSuggestion {
   final String themeId;
   final String themeName;
   final double relevanceScore;
-  final String category;
-  final String reasoning;
-  final bool isNewTheme;
+  final String source; // 'existing' or 'new'
+  final String? category;
+  final String? description;
 
   ThemeSuggestion({
     required this.themeId,
     required this.themeName,
     required this.relevanceScore,
-    required this.category,
-    required this.reasoning,
-    this.isNewTheme = false,
+    required this.source,
+    this.category,
+    this.description,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'themeId': themeId,
+      'themeName': themeName,
+      'relevanceScore': relevanceScore,
+      'source': source,
+      'category': category,
+      'description': description,
+    };
+  }
+
+  factory ThemeSuggestion.fromMap(Map<String, dynamic> map) {
+    return ThemeSuggestion(
+      themeId: map['themeId'] as String,
+      themeName: map['themeName'] as String,
+      relevanceScore: map['relevanceScore'] as double,
+      source: map['source'] as String,
+      category: map['category'] as String?,
+      description: map['description'] as String?,
+    );
+  }
+}
+
+class AutoTaggingResult {
+  final String fileId;
+  final List<TagSuggestion> suggestedTags;
+  final List<ThemeSuggestion> suggestedThemes;
+  final double overallConfidence;
+  final DateTime analyzedAt;
+  final Map<String, dynamic>? metadata;
+
+  AutoTaggingResult({
+    required this.fileId,
+    required this.suggestedTags,
+    required this.suggestedThemes,
+    required this.overallConfidence,
+    DateTime? analyzedAt,
+    this.metadata,
+  }) : analyzedAt = analyzedAt ?? DateTime.now();
+
+  Map<String, dynamic> toMap() {
+    return {
+      'fileId': fileId,
+      'suggestedTags': suggestedTags.map((tag) => tag.toMap()).toList(),
+      'suggestedThemes': suggestedThemes.map((theme) => theme.toMap()).toList(),
+      'overallConfidence': overallConfidence,
+      'analyzedAt': analyzedAt.toIso8601String(),
+      'metadata': metadata,
+    };
+  }
+
+  factory AutoTaggingResult.fromMap(Map<String, dynamic> map) {
+    return AutoTaggingResult(
+      fileId: map['fileId'] as String,
+      suggestedTags: (map['suggestedTags'] as List)
+          .map((tagMap) => TagSuggestion.fromMap(tagMap))
+          .toList(),
+      suggestedThemes: (map['suggestedThemes'] as List)
+          .map((themeMap) => ThemeSuggestion.fromMap(themeMap))
+          .toList(),
+      overallConfidence: map['overallConfidence'] as double,
+      analyzedAt: DateTime.parse(map['analyzedAt'] as String),
+      metadata: map['metadata'] as Map<String, dynamic>?,
+    );
+  }
 }
 
 class AutoTaggingService {
@@ -61,380 +137,384 @@ class AutoTaggingService {
 
   final DatabaseService _dbService = DatabaseService();
   final AIService _aiService = AIService();
-  final RAGService _ragService = RAGService();
-  
+
   bool _isInitialized = false;
-  List<Map<String, dynamic>> _availableTags = [];
-  List<Map<String, dynamic>> _availableThemes = [];
-  
-  // Auto-tagging configuration
-  static const double minTagConfidence = 0.6;
-  static const double minThemeRelevance = 0.5;
-  static const int maxTagsPerEntry = 8;
-  static const int maxThemesPerEntry = 5;
 
   Future<void> initialize() async {
     if (_isInitialized) return;
     
     try {
       await _aiService.initialize();
-      await _ragService.initialize();
-      await _loadTagsAndThemes();
-      
       _isInitialized = true;
-      debugPrint('Auto-tagging Service initialized successfully');
     } catch (e) {
-      debugPrint('Error initializing auto-tagging service: $e');
+      print('Error initializing auto-tagging service: $e');
       throw Exception('Failed to initialize auto-tagging service: $e');
     }
   }
 
-  Future<void> _loadTagsAndThemes() async {
-    _availableTags = await _dbService.getTags();
-    _availableThemes = await _dbService.getThemes();
-    debugPrint('Loaded ${_availableTags.length} tags and ${_availableThemes.length} themes');
-  }
-
-  // Main auto-tagging method
+  // Analyze and suggest tags for a journal entry
   Future<AutoTaggingResult> analyzeAndTagEntry(JournalFile journalFile) async {
     if (!_isInitialized) await initialize();
     
     try {
-      debugPrint('Starting auto-tagging analysis for entry: ${journalFile.name}');
+      // Get AI analysis
+      final aiResponse = await _aiService.generateText(
+        journalFile.content,
+        systemPrompt: _getTaggingPrompt(),
+        maxTokens: 300,
+        temperature: 0.5,
+      );
+
+      // Parse AI response
+      final analysisData = _parseTaggingResponse(aiResponse);
       
-      // Refresh tags and themes cache
-      await _loadTagsAndThemes();
-      
-      // Get content analysis from AI
-      final analysisResult = await _analyzeContentWithAI(journalFile.content);
-      
-      // Process tag suggestions
-      final tagSuggestions = await _processTags(analysisResult['tags'] as List<dynamic>);
-      
-      // Process theme suggestions
-      final themeSuggestions = await _processThemes(analysisResult['themes'] as List<dynamic>);
-      
+      // Get existing tags and themes from database
+      final existingTags = await _getExistingTags();
+      final existingThemes = await _getExistingThemes();
+
+      // Process suggested tags
+      final suggestedTags = <TagSuggestion>[];
+      final suggestedThemes = <ThemeSuggestion>[];
+
+      // Process tags from AI response
+      for (final tagData in analysisData['tags']) {
+        final tagName = tagData['name'] as String;
+        final confidence = tagData['confidence'] as double;
+        
+        // Check if tag already exists
+        final existingTag = existingTags.firstWhere(
+          (tag) => tag['name'].toString().toLowerCase() == tagName.toLowerCase(),
+          orElse: () => <String, dynamic>{},
+        );
+
+        if (existingTag.isNotEmpty) {
+          // Use existing tag
+          suggestedTags.add(TagSuggestion(
+            tagId: existingTag['id'] as String,
+            tagName: existingTag['name'] as String,
+            confidence: confidence,
+            source: 'existing',
+            color: existingTag['color'] as String?,
+            description: existingTag['description'] as String?,
+          ));
+        } else {
+          // Suggest new tag
+          suggestedTags.add(TagSuggestion(
+            tagId: 'new_${const Uuid().v4()}',
+            tagName: tagName,
+            confidence: confidence,
+            source: 'new',
+            color: _generateTagColor(),
+            description: tagData['description'] as String?,
+          ));
+        }
+      }
+
+      // Process themes from AI response
+      for (final themeData in analysisData['themes']) {
+        final themeName = themeData['name'] as String;
+        final relevance = themeData['relevance'] as double;
+        
+        // Check if theme already exists
+        final existingTheme = existingThemes.firstWhere(
+          (theme) => theme['name'].toString().toLowerCase() == themeName.toLowerCase(),
+          orElse: () => <String, dynamic>{},
+        );
+
+        if (existingTheme.isNotEmpty) {
+          // Use existing theme
+          suggestedThemes.add(ThemeSuggestion(
+            themeId: existingTheme['id'] as String,
+            themeName: existingTheme['name'] as String,
+            relevanceScore: relevance,
+            source: 'existing',
+            category: existingTheme['category'] as String?,
+            description: existingTheme['description'] as String?,
+          ));
+        } else {
+          // Suggest new theme
+          suggestedThemes.add(ThemeSuggestion(
+            themeId: 'new_${const Uuid().v4()}',
+            themeName: themeName,
+            relevanceScore: relevance,
+            source: 'new',
+            category: themeData['category'] as String?,
+            description: themeData['description'] as String?,
+          ));
+        }
+      }
+
       // Calculate overall confidence
-      final overallConfidence = _calculateOverallConfidence(tagSuggestions, themeSuggestions);
+      final allConfidences = [
+        ...suggestedTags.map((tag) => tag.confidence),
+        ...suggestedThemes.map((theme) => theme.relevanceScore),
+      ];
       
-      final result = AutoTaggingResult(
-        suggestedTags: tagSuggestions,
-        suggestedThemes: themeSuggestions,
+      final overallConfidence = allConfidences.isNotEmpty
+          ? allConfidences.reduce((a, b) => a + b) / allConfidences.length
+          : 0.0;
+
+      return AutoTaggingResult(
+        fileId: journalFile.id,
+        suggestedTags: suggestedTags,
+        suggestedThemes: suggestedThemes,
         overallConfidence: overallConfidence,
-        analysisMetadata: {
-          'analysis_version': '1.0',
-          'processed_at': DateTime.now().toIso8601String(),
-          'content_length': journalFile.content.length,
+        metadata: {
+          'analysis_method': 'ai_llama',
           'word_count': journalFile.wordCount,
-          'model_used': 'llama3.2',
+          'content_length': journalFile.content.length,
         },
       );
-      
-      debugPrint('Auto-tagging completed: ${tagSuggestions.length} tags, ${themeSuggestions.length} themes');
-      return result;
     } catch (e) {
-      debugPrint('Error during auto-tagging analysis: $e');
+      print('Error analyzing entry for auto-tagging: $e');
       return AutoTaggingResult(
+        fileId: journalFile.id,
         suggestedTags: [],
         suggestedThemes: [],
         overallConfidence: 0.0,
-        analysisMetadata: {'error': e.toString()},
       );
     }
   }
 
-  // AI content analysis
-  Future<Map<String, dynamic>> _analyzeContentWithAI(String content) async {
-    // Build context of available tags and themes
-    final tagsContext = _availableTags.map((tag) => tag['name']).join(', ');
-    final themesContext = _availableThemes.map((theme) => '${theme['name']} (${theme['category']})').join(', ');
-    
-    final prompt = '''
-Analyze this journal entry and suggest appropriate tags and themes. Be specific and thoughtful.
-
-JOURNAL CONTENT:
-"$content"
-
-AVAILABLE TAGS: $tagsContext
-
-AVAILABLE THEMES: $themesContext
-
-Please respond with ONLY a valid JSON object in this exact format:
-{
-  "tags": [
-    {
-      "name": "tag_name",
-      "confidence": 0.8,
-      "reason": "why this tag applies",
-      "is_existing": true
-    }
-  ],
-  "themes": [
-    {
-      "name": "theme_name",
-      "category": "theme_category",
-      "relevance": 0.7,
-      "reasoning": "why this theme is relevant",
-      "is_existing": true
-    }
-  ],
-  "new_suggestions": {
-    "tags": [
-      {
-        "name": "new_tag_name",
-        "confidence": 0.6,
-        "reason": "why this new tag is needed"
-      }
-    ],
-    "themes": [
-      {
-        "name": "new_theme_name",
-        "category": "suggested_category",
-        "relevance": 0.8,
-        "reasoning": "why this new theme is relevant"
-      }
-    ]
-  }
-}
-
-Guidelines:
-- Only suggest tags/themes with confidence/relevance > 0.5
-- Prioritize existing tags/themes over new ones
-- Consider the emotional tone, topics, activities, and context
-- Be conservative - better to suggest fewer, more accurate tags
-- Max 6 tags and 4 themes per entry
-''';
-
-    try {
-      final response = await _aiService.generateText(
-        prompt,
-        maxTokens: 800,
-        temperature: 0.3,
-      );
-      
-      // Parse JSON response
-      final jsonResponse = _extractJsonFromResponse(response);
-      return jsonDecode(jsonResponse);
-    } catch (e) {
-      debugPrint('Error in AI content analysis: $e');
-      return {'tags': [], 'themes': [], 'new_suggestions': {'tags': [], 'themes': []}};
-    }
-  }
-
-  String _extractJsonFromResponse(String response) {
-    // Find JSON object in response
-    final jsonStart = response.indexOf('{');
-    final jsonEnd = response.lastIndexOf('}');
-    
-    if (jsonStart == -1 || jsonEnd == -1 || jsonStart >= jsonEnd) {
-      throw Exception('No valid JSON found in AI response');
-    }
-    
-    return response.substring(jsonStart, jsonEnd + 1);
-  }
-
-  // Process tag suggestions
-  Future<List<TagSuggestion>> _processTags(List<dynamic> aiTags) async {
-    final suggestions = <TagSuggestion>[];
-    
-    for (final tagData in aiTags) {
-      final tagName = tagData['name'] as String;
-      final confidence = (tagData['confidence'] as num).toDouble();
-      final reason = tagData['reason'] as String;
-      final isExisting = tagData['is_existing'] as bool? ?? false;
-      
-      if (confidence < minTagConfidence) continue;
-      
-      // Find existing tag or create suggestion for new one
-      String tagId;
-      bool isNewTag = false;
-      
-      if (isExisting) {
-        final existingTag = _availableTags.firstWhere(
-          (tag) => (tag['name'] as String).toLowerCase() == tagName.toLowerCase(),
-          orElse: () => <String, dynamic>{},
-        );
-        
-        if (existingTag.isNotEmpty) {
-          tagId = existingTag['id'] as String;
-        } else {
-          // Tag was supposed to exist but doesn't - create new
-          tagId = 'tag_${DateTime.now().millisecondsSinceEpoch}_${tagName.toLowerCase()}';
-          isNewTag = true;
-        }
-      } else {
-        tagId = 'tag_${DateTime.now().millisecondsSinceEpoch}_${tagName.toLowerCase()}';
-        isNewTag = true;
-      }
-      
-      suggestions.add(TagSuggestion(
-        tagId: tagId,
-        tagName: tagName,
-        confidence: confidence,
-        reason: reason,
-        isNewTag: isNewTag,
-      ));
-    }
-    
-    // Sort by confidence and limit
-    suggestions.sort((a, b) => b.confidence.compareTo(a.confidence));
-    return suggestions.take(maxTagsPerEntry).toList();
-  }
-
-  // Process theme suggestions
-  Future<List<ThemeSuggestion>> _processThemes(List<dynamic> aiThemes) async {
-    final suggestions = <ThemeSuggestion>[];
-    
-    for (final themeData in aiThemes) {
-      final themeName = themeData['name'] as String;
-      final category = themeData['category'] as String;
-      final relevance = (themeData['relevance'] as num).toDouble();
-      final reasoning = themeData['reasoning'] as String;
-      final isExisting = themeData['is_existing'] as bool? ?? false;
-      
-      if (relevance < minThemeRelevance) continue;
-      
-      // Find existing theme or create suggestion for new one
-      String themeId;
-      bool isNewTheme = false;
-      
-      if (isExisting) {
-        final existingTheme = _availableThemes.firstWhere(
-          (theme) => (theme['name'] as String).toLowerCase() == themeName.toLowerCase(),
-          orElse: () => <String, dynamic>{},
-        );
-        
-        if (existingTheme.isNotEmpty) {
-          themeId = existingTheme['id'] as String;
-        } else {
-          // Theme was supposed to exist but doesn't - create new
-          themeId = 'theme_${DateTime.now().millisecondsSinceEpoch}_${themeName.toLowerCase().replaceAll(' ', '_')}';
-          isNewTheme = true;
-        }
-      } else {
-        themeId = 'theme_${DateTime.now().millisecondsSinceEpoch}_${themeName.toLowerCase().replaceAll(' ', '_')}';
-        isNewTheme = true;
-      }
-      
-      suggestions.add(ThemeSuggestion(
-        themeId: themeId,
-        themeName: themeName,
-        relevanceScore: relevance,
-        category: category,
-        reasoning: reasoning,
-        isNewTheme: isNewTheme,
-      ));
-    }
-    
-    // Sort by relevance and limit
-    suggestions.sort((a, b) => b.relevanceScore.compareTo(a.relevanceScore));
-    return suggestions.take(maxThemesPerEntry).toList();
-  }
-
-  double _calculateOverallConfidence(List<TagSuggestion> tags, List<ThemeSuggestion> themes) {
-    if (tags.isEmpty && themes.isEmpty) return 0.0;
-    
-    final avgTagConfidence = tags.isEmpty ? 0.0 : tags.map((t) => t.confidence).reduce((a, b) => a + b) / tags.length;
-    final avgThemeRelevance = themes.isEmpty ? 0.0 : themes.map((t) => t.relevanceScore).reduce((a, b) => a + b) / themes.length;
-    
-    // Weight tags and themes equally
-    return (avgTagConfidence + avgThemeRelevance) / 2;
-  }
-
-  // Apply auto-tagging results to a journal file
-  Future<void> applyAutoTagging(String fileId, AutoTaggingResult result, {bool autoApprove = false}) async {
-    try {
-      // Apply tags
-      for (final tagSuggestion in result.suggestedTags) {
-        if (autoApprove || tagSuggestion.confidence >= 0.8) {
-          // Create new tag if needed
-          if (tagSuggestion.isNewTag) {
-            await _dbService.createTag(tagSuggestion.tagName);
-            await _loadTagsAndThemes(); // Refresh cache
-          }
-          
-          // Add tag to file
-          await _dbService.addFileTag(
-            fileId,
-            tagSuggestion.tagId,
-            confidence: tagSuggestion.confidence,
-            source: 'ai_auto_tagging',
-          );
-        }
-      }
-      
-      // Apply themes
-      for (final themeSuggestion in result.suggestedThemes) {
-        if (autoApprove || themeSuggestion.relevanceScore >= 0.7) {
-          // Create new theme if needed (would need to add createTheme method to db service)
-          // For now, only apply existing themes
-          if (!themeSuggestion.isNewTheme) {
-            await _dbService.addFileTheme(
-              fileId,
-              themeSuggestion.themeId,
-              themeSuggestion.relevanceScore,
-              source: 'ai_auto_tagging',
-            );
-          }
-        }
-      }
-      
-      debugPrint('Applied auto-tagging to file $fileId');
-    } catch (e) {
-      debugPrint('Error applying auto-tagging: $e');
-    }
-  }
-
-  // Batch process multiple files
-  Future<void> batchAutoTag(List<JournalFile> files, {
-    Function(int current, int total)? progressCallback,
+  // Apply auto-tagging result to a file
+  Future<void> applyAutoTagging(
+    String fileId,
+    AutoTaggingResult result, {
     bool autoApprove = false,
   }) async {
     if (!_isInitialized) await initialize();
     
+    final db = await _dbService.database;
+    final now = DateTime.now().toIso8601String();
+
+    try {
+      // Apply tags
+      for (final tagSuggestion in result.suggestedTags) {
+        String tagId = tagSuggestion.tagId;
+        
+        // Create new tag if needed
+        if (tagSuggestion.source == 'new') {
+          tagId = const Uuid().v4();
+          await db.insert('tags', {
+            'id': tagId,
+            'name': tagSuggestion.tagName,
+            'color': tagSuggestion.color,
+            'description': tagSuggestion.description,
+            'created_at': now,
+            'usage_count': 0,
+          });
+        }
+        
+        // Apply tag to file
+        await db.insert('file_tags', {
+          'id': const Uuid().v4(),
+          'file_id': fileId,
+          'tag_id': tagId,
+          'created_at': now,
+          'confidence': tagSuggestion.confidence,
+          'source': autoApprove ? 'auto_approved' : 'auto_suggested',
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        
+        // Update tag usage count
+        await db.rawUpdate(
+          'UPDATE tags SET usage_count = usage_count + 1 WHERE id = ?',
+          [tagId],
+        );
+      }
+
+      // Apply themes
+      for (final themeSuggestion in result.suggestedThemes) {
+        String themeId = themeSuggestion.themeId;
+        
+        // Create new theme if needed
+        if (themeSuggestion.source == 'new') {
+          themeId = const Uuid().v4();
+          await db.insert('themes', {
+            'id': themeId,
+            'name': themeSuggestion.themeName,
+            'category': themeSuggestion.category,
+            'description': themeSuggestion.description,
+            'created_at': now,
+            'usage_count': 0,
+          });
+        }
+        
+        // Apply theme to file
+        await db.insert('file_themes', {
+          'id': const Uuid().v4(),
+          'file_id': fileId,
+          'theme_id': themeId,
+          'relevance_score': themeSuggestion.relevanceScore,
+          'created_at': now,
+          'source': autoApprove ? 'auto_approved' : 'auto_suggested',
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        
+        // Update theme usage count
+        await db.rawUpdate(
+          'UPDATE themes SET usage_count = usage_count + 1 WHERE id = ?',
+          [themeId],
+        );
+      }
+    } catch (e) {
+      print('Error applying auto-tagging: $e');
+      throw Exception('Failed to apply auto-tagging: $e');
+    }
+  }
+
+  // Batch auto-tag multiple files
+  Future<void> batchAutoTag(
+    List<JournalFile> files, {
+    bool autoApprove = false,
+    Function(int current, int total)? progressCallback,
+  }) async {
+    if (!_isInitialized) await initialize();
+    
     for (int i = 0; i < files.length; i++) {
-      final file = files[i];
-      
       try {
-        final result = await analyzeAndTagEntry(file);
-        await applyAutoTagging(file.id, result, autoApprove: autoApprove);
-        
+        final result = await analyzeAndTagEntry(files[i]);
+        if (result.suggestedTags.isNotEmpty || result.suggestedThemes.isNotEmpty) {
+          await applyAutoTagging(files[i].id, result, autoApprove: autoApprove);
+        }
         progressCallback?.call(i + 1, files.length);
-        
-        // Small delay to prevent overwhelming the AI service
-        await Future.delayed(const Duration(milliseconds: 500));
       } catch (e) {
-        debugPrint('Error auto-tagging file ${file.name}: $e');
+        print('Error in batch auto-tagging for file ${files[i].id}: $e');
       }
     }
-    
-    debugPrint('Batch auto-tagging completed for ${files.length} files');
+  }
+
+  // Get existing tags from database
+  Future<List<Map<String, dynamic>>> _getExistingTags() async {
+    final db = await _dbService.database;
+    return await db.query('tags', orderBy: 'usage_count DESC');
+  }
+
+  // Get existing themes from database
+  Future<List<Map<String, dynamic>>> _getExistingThemes() async {
+    final db = await _dbService.database;
+    return await db.query('themes', orderBy: 'usage_count DESC');
   }
 
   // Get auto-tagging statistics
   Future<Map<String, dynamic>> getAutoTaggingStats() async {
+    final db = await _dbService.database;
+    
+    final tagStats = await db.rawQuery('''
+      SELECT 
+        COUNT(*) as total_tags,
+        COUNT(DISTINCT file_id) as tagged_files,
+        AVG(confidence) as avg_confidence
+      FROM file_tags 
+      WHERE source LIKE 'auto%'
+    ''');
+    
+    final themeStats = await db.rawQuery('''
+      SELECT 
+        COUNT(*) as total_themes,
+        COUNT(DISTINCT file_id) as themed_files,
+        AVG(relevance_score) as avg_relevance
+      FROM file_themes 
+      WHERE source LIKE 'auto%'
+    ''');
+    
+    return {
+      'autoTags': tagStats.first['total_tags'] as int,
+      'autoTaggedFiles': tagStats.first['tagged_files'] as int,
+      'avgTagConfidence': tagStats.first['avg_confidence'] as double? ?? 0.0,
+      'autoThemes': themeStats.first['total_themes'] as int,
+      'autoThemedFiles': themeStats.first['themed_files'] as int,
+      'avgThemeRelevance': themeStats.first['avg_relevance'] as double? ?? 0.0,
+    };
+  }
+
+  // Get system prompt for auto-tagging
+  String _getTaggingPrompt() {
+    return '''
+You are an expert content analyzer. Analyze the given journal entry and suggest relevant tags and themes.
+
+Respond with ONLY a JSON object in this exact format:
+
+{
+  "tags": [
+    {
+      "name": "Personal",
+      "confidence": 0.9,
+      "description": "Personal thoughts and reflections"
+    },
+    {
+      "name": "Goals",
+      "confidence": 0.7,
+      "description": "Goal setting and achievement"
+    }
+  ],
+  "themes": [
+    {
+      "name": "Self-Discovery",
+      "relevance": 0.8,
+      "category": "Personal Growth",
+      "description": "Exploring identity and personal insights"
+    }
+  ]
+}
+
+Guidelines:
+- Suggest 2-5 relevant tags based on the content
+- Suggest 1-3 themes that capture the main topics
+- Tags should be concise (1-2 words)
+- Themes can be longer phrases
+- Confidence/relevance: 0.0 to 1.0
+- Common tag categories: Personal, Work, Goals, Reflection, Gratitude, Learning, Ideas, Memories, Health, Relationships
+- Common theme categories: Personal Growth, Professional, Social, Creative, Lifestyle, Future, Routine
+
+Respond with ONLY the JSON object, no other text.
+''';
+  }
+
+  // Parse AI response for tagging data
+  Map<String, dynamic> _parseTaggingResponse(String response) {
     try {
-      final aiTaggedFiles = await _dbService.database.then((db) => 
-        db.rawQuery('SELECT COUNT(*) as count FROM file_tags WHERE source = ?', ['ai_auto_tagging'])
-      );
-      
-      final aiThemedFiles = await _dbService.database.then((db) => 
-        db.rawQuery('SELECT COUNT(*) as count FROM file_themes WHERE source = ?', ['ai_auto_tagging'])
-      );
+      final cleanResponse = response.trim();
+      final json = jsonDecode(cleanResponse);
       
       return {
-        'ai_tagged_files': aiTaggedFiles.first['count'] as int,
-        'ai_themed_files': aiThemedFiles.first['count'] as int,
-        'total_tags': _availableTags.length,
-        'total_themes': _availableThemes.length,
-        'last_updated': DateTime.now().toIso8601String(),
+        'tags': (json['tags'] as List?)?.map((tag) => {
+          'name': tag['name'] as String? ?? 'Unknown',
+          'confidence': (tag['confidence'] as num?)?.toDouble() ?? 0.5,
+          'description': tag['description'] as String?,
+        }).toList() ?? [],
+        'themes': (json['themes'] as List?)?.map((theme) => {
+          'name': theme['name'] as String? ?? 'Unknown',
+          'relevance': (theme['relevance'] as num?)?.toDouble() ?? 0.5,
+          'category': theme['category'] as String?,
+          'description': theme['description'] as String?,
+        }).toList() ?? [],
       };
     } catch (e) {
-      return {'error': e.toString()};
+      print('Error parsing tagging response: $e');
+      return {
+        'tags': <Map<String, dynamic>>[],
+        'themes': <Map<String, dynamic>>[],
+      };
     }
   }
 
+  // Generate a random color for new tags
+  String _generateTagColor() {
+    final colors = [
+      '#4A90E2', // Blue
+      '#F5A623', // Orange
+      '#7ED321', // Green
+      '#9013FE', // Purple
+      '#FF6B6B', // Red
+      '#4ECDC4', // Teal
+      '#95E1D3', // Mint
+      '#F38BA8', // Pink
+      '#FFD93D', // Yellow
+      '#6C5CE7', // Indigo
+    ];
+    return colors[DateTime.now().millisecondsSinceEpoch % colors.length];
+  }
+
   void dispose() {
-    // Cleanup if needed
+    _isInitialized = false;
   }
 } 

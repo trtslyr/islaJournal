@@ -1,40 +1,38 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
-import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
 import '../models/journal_file.dart';
-import '../services/rag_service.dart';
-import '../services/mood_analysis_service.dart';
-import '../services/ai_service.dart';
+import 'database_service.dart';
+import 'ai_service.dart';
 
 class WritingPrompt {
   final String id;
   final String prompt;
   final String category;
-  final String inspiration;
+  final double relevance;
+  final String? context;
   final DateTime createdAt;
-  final double relevanceScore;
-  final Map<String, dynamic> context;
+  final Map<String, dynamic>? metadata;
 
   WritingPrompt({
     required this.id,
     required this.prompt,
     required this.category,
-    required this.inspiration,
-    required this.createdAt,
-    required this.relevanceScore,
-    required this.context,
-  });
+    required this.relevance,
+    this.context,
+    DateTime? createdAt,
+    this.metadata,
+  }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'prompt': prompt,
       'category': category,
-      'inspiration': inspiration,
+      'relevance': relevance,
+      'context': context,
       'createdAt': createdAt.toIso8601String(),
-      'relevanceScore': relevanceScore,
-      'context': jsonEncode(context),
+      'metadata': metadata != null ? jsonEncode(metadata) : null,
     };
   }
 
@@ -43,28 +41,14 @@ class WritingPrompt {
       id: map['id'] as String,
       prompt: map['prompt'] as String,
       category: map['category'] as String,
-      inspiration: map['inspiration'] as String,
+      relevance: map['relevance'] as double,
+      context: map['context'] as String?,
       createdAt: DateTime.parse(map['createdAt'] as String),
-      relevanceScore: map['relevanceScore'] as double,
-      context: Map<String, dynamic>.from(jsonDecode(map['context'] as String)),
+      metadata: map['metadata'] != null 
+          ? Map<String, dynamic>.from(jsonDecode(map['metadata'] as String))
+          : null,
     );
   }
-}
-
-enum PromptCategory {
-  reflection('Reflection'),
-  growth('Personal Growth'),
-  creativity('Creative'),
-  emotions('Emotional'),
-  goals('Goals & Dreams'),
-  relationships('Relationships'),
-  memories('Memories'),
-  future('Future Planning'),
-  gratitude('Gratitude'),
-  challenges('Challenges');
-
-  const PromptCategory(this.displayName);
-  final String displayName;
 }
 
 class WritingPromptsService {
@@ -72,420 +56,469 @@ class WritingPromptsService {
   factory WritingPromptsService() => _instance;
   WritingPromptsService._internal();
 
-  final RAGService _ragService = RAGService();
-  final MoodAnalysisService _moodService = MoodAnalysisService();
+  final DatabaseService _dbService = DatabaseService();
   final AIService _aiService = AIService();
-  
+
   bool _isInitialized = false;
-  final Random _random = Random();
 
   Future<void> initialize() async {
     if (_isInitialized) return;
     
     try {
-      await _ragService.initialize();
-      await _moodService.initialize();
       await _aiService.initialize();
-      
       _isInitialized = true;
-      debugPrint('Writing Prompts Service initialized successfully');
     } catch (e) {
-      debugPrint('Error initializing writing prompts service: $e');
+      print('Error initializing writing prompts service: $e');
       throw Exception('Failed to initialize writing prompts service: $e');
     }
   }
 
-  // Generate contextual writing prompts
-  Future<List<WritingPrompt>> generateContextualPrompts({
-    String? currentContent,
-    int count = 5,
-    List<PromptCategory>? preferredCategories,
+  // Generate contextual writing prompts based on current content
+  Future<List<WritingPrompt>> generateContextualPrompts(
+    String currentContent, {
+    int maxPrompts = 5,
+    bool includeJournalHistory = true,
   }) async {
     if (!_isInitialized) await initialize();
     
     try {
-      // Gather context from user's writing history
-      final context = await _gatherWritingContext(currentContent);
-      
-      // Generate prompts using AI with context
-      final prompts = await _generateAIPrompts(context, count, preferredCategories);
-      
-      // If not enough AI prompts, supplement with fallback prompts
-      if (prompts.length < count) {
-        final fallbackPrompts = _generateFallbackPrompts(
-          context, 
-          count - prompts.length,
-          preferredCategories,
-        );
-        prompts.addAll(fallbackPrompts);
+      // Get context from journal history if requested
+      String historyContext = '';
+      if (includeJournalHistory) {
+        historyContext = await _getJournalHistoryContext();
       }
-      
-      // Sort by relevance score
-      prompts.sort((a, b) => b.relevanceScore.compareTo(a.relevanceScore));
-      
-      return prompts.take(count).toList();
-    } catch (e) {
-      debugPrint('Error generating contextual prompts: $e');
-      return _generateFallbackPrompts({}, count, preferredCategories);
-    }
-  }
 
-  // Gather context from user's writing history
-  Future<Map<String, dynamic>> _gatherWritingContext(String? currentContent) async {
-    try {
-      // Get recent journal themes using RAG
-      final recentThemes = await _getRecentThemes();
-      
-      // Get mood patterns
-      final moodPattern = await _moodService.analyzeMoodPattern(
-        startDate: DateTime.now().subtract(const Duration(days: 30)),
-        endDate: DateTime.now(),
+      // Generate prompts using AI
+      final aiResponse = await _aiService.generateText(
+        currentContent,
+        systemPrompt: _getPromptsSystemPrompt(historyContext),
+        maxTokens: 400,
+        temperature: 0.8,
       );
-      
-      // Analyze current content if provided
-      String? currentTheme;
-      if (currentContent != null && currentContent.trim().isNotEmpty) {
-        currentTheme = await _analyzeCurrentTheme(currentContent);
-      }
-      
-      return {
-        'recentThemes': recentThemes,
-        'moodPattern': {
-          'averageValence': moodPattern.averageValence,
-          'averageArousal': moodPattern.averageArousal,
-          'topEmotions': moodPattern.emotionFrequency.entries
-              .toList()
-              ..sort((a, b) => b.value.compareTo(a.value)),
-          'trend': moodPattern.trend,
-        },
-        'currentTheme': currentTheme,
-        'hasCurrentContent': currentContent?.trim().isNotEmpty ?? false,
-      };
-    } catch (e) {
-      debugPrint('Error gathering writing context: $e');
-      return {};
-    }
-  }
 
-  // Get recent themes from journal entries
-  Future<List<String>> _getRecentThemes() async {
-    try {
-      const query = 'What are the main themes and topics in my recent writing?';
-      final relevantContent = await _ragService.retrieveRelevantContent(
-        query,
-        maxResults: 10,
-        minSimilarity: 0.1,
-      );
+      // Parse AI response
+      final promptsData = _parsePromptsResponse(aiResponse);
       
-      if (relevantContent.isEmpty) return [];
-      
-      // Extract themes using AI
-      final prompt = '''
-Based on these recent journal entries, identify the 3-5 main themes or topics:
-
-${relevantContent.map((r) => '- ${r.content.substring(0, 200)}...').join('\n')}
-
-Please respond with ONLY a JSON array of theme strings:
-["theme1", "theme2", "theme3"]
-''';
-      
-      final response = await _aiService.generateText(
-        prompt,
-        maxTokens: 150,
-        temperature: 0.3,
-      );
-      
-      return _parseThemesResponse(response);
-    } catch (e) {
-      debugPrint('Error getting recent themes: $e');
-      return [];
-    }
-  }
-
-  List<String> _parseThemesResponse(String response) {
-    try {
-      final jsonStart = response.indexOf('[');
-      final jsonEnd = response.lastIndexOf(']') + 1;
-      
-      if (jsonStart == -1 || jsonEnd <= jsonStart) return [];
-      
-      final jsonString = response.substring(jsonStart, jsonEnd);
-      final parsed = jsonDecode(jsonString) as List;
-      
-      return parsed.map((theme) => theme.toString()).toList();
-    } catch (e) {
-      debugPrint('Error parsing themes response: $e');
-      return [];
-    }
-  }
-
-  // Analyze current content theme
-  Future<String?> _analyzeCurrentTheme(String content) async {
-    try {
-      final prompt = '''
-What is the main theme or topic of this text in 2-3 words?
-
-Text: "${content.substring(0, content.length.clamp(0, 500))}"
-
-Theme:''';
-      
-      final response = await _aiService.generateText(
-        prompt,
-        maxTokens: 20,
-        temperature: 0.3,
-      );
-      
-      return response.trim();
-    } catch (e) {
-      debugPrint('Error analyzing current theme: $e');
-      return null;
-    }
-  }
-
-  // Generate AI-powered prompts
-  Future<List<WritingPrompt>> _generateAIPrompts(
-    Map<String, dynamic> context,
-    int count,
-    List<PromptCategory>? preferredCategories,
-  ) async {
-    try {
+      // Create WritingPrompt objects
       final prompts = <WritingPrompt>[];
+      int index = 0;
       
-      // Generate different types of prompts based on context
-      if (context['hasCurrentContent'] == true) {
-        final continuationPrompts = await _generateContinuationPrompts(context, 2);
-        prompts.addAll(continuationPrompts);
+      for (final promptData in promptsData) {
+        if (index >= maxPrompts) break;
+        
+        prompts.add(WritingPrompt(
+          id: 'prompt_${DateTime.now().millisecondsSinceEpoch}_$index',
+          prompt: promptData['prompt'] as String,
+          category: promptData['category'] as String,
+          relevance: promptData['relevance'] as double,
+          context: promptData['context'] as String?,
+          metadata: {
+            'generated_from': 'ai_contextual',
+            'content_length': currentContent.length,
+            'has_history_context': includeJournalHistory,
+          },
+        ));
+        
+        index++;
       }
-      
-      final reflectionPrompts = await _generateReflectionPrompts(context, 2);
-      prompts.addAll(reflectionPrompts);
-      
-      final creativityPrompts = await _generateCreativityPrompts(context, 1);
-      prompts.addAll(creativityPrompts);
-      
+
       return prompts;
     } catch (e) {
-      debugPrint('Error generating AI prompts: $e');
-      return [];
+      print('Error generating contextual prompts: $e');
+      return _getFallbackPrompts();
     }
   }
 
-  // Generate continuation prompts for current content
-  Future<List<WritingPrompt>> _generateContinuationPrompts(
-    Map<String, dynamic> context,
-    int count,
-  ) async {
+  // Generate prompts based on specific themes or moods
+  Future<List<WritingPrompt>> generateThematicPrompts(
+    String theme, {
+    int maxPrompts = 3,
+  }) async {
+    if (!_isInitialized) await initialize();
+    
     try {
-      final currentTheme = context['currentTheme'] as String?;
-      if (currentTheme == null) return [];
-      
-      final prompt = '''
-The user is writing about: "$currentTheme"
+      final aiResponse = await _aiService.generateText(
+        'Generate writing prompts for the theme: $theme',
+        systemPrompt: _getThematicPromptsSystemPrompt(),
+        maxTokens: 250,
+        temperature: 0.9,
+      );
 
-Generate $count thoughtful writing prompts that help them continue or explore this topic deeper. Make the prompts:
-- Personal and introspective
-- Open-ended to encourage exploration
-- Connected to their current thoughts
-- Encouraging rather than prescriptive
-
-Format as JSON:
-[
-  {"prompt": "What aspect of [theme] surprises you most when you think about it?", "inspiration": "Explores unexpected angles"},
-  {"prompt": "How has your relationship with [theme] changed over time?", "inspiration": "Encourages temporal reflection"}
-]
-''';
+      final promptsData = _parsePromptsResponse(aiResponse);
       
-      final response = await _aiService.generateText(
-        prompt,
+      final prompts = <WritingPrompt>[];
+      int index = 0;
+      
+      for (final promptData in promptsData) {
+        if (index >= maxPrompts) break;
+        
+        prompts.add(WritingPrompt(
+          id: 'theme_prompt_${DateTime.now().millisecondsSinceEpoch}_$index',
+          prompt: promptData['prompt'] as String,
+          category: theme,
+          relevance: promptData['relevance'] as double,
+          context: promptData['context'] as String?,
+          metadata: {
+            'generated_from': 'ai_thematic',
+            'theme': theme,
+          },
+        ));
+        
+        index++;
+      }
+
+      return prompts;
+    } catch (e) {
+      print('Error generating thematic prompts: $e');
+      return _getFallbackPrompts();
+    }
+  }
+
+  // Get writing prompts based on recent journal patterns
+  Future<List<WritingPrompt>> getPatternBasedPrompts({
+    int maxPrompts = 5,
+    int daysPast = 7,
+  }) async {
+    if (!_isInitialized) await initialize();
+    
+    try {
+      // Get recent journal entries
+      final recentEntries = await _getRecentEntries(daysPast);
+      
+      if (recentEntries.isEmpty) {
+        return _getFallbackPrompts();
+      }
+
+      // Analyze patterns in recent entries
+      final patternAnalysis = await _analyzeWritingPatterns(recentEntries);
+      
+      // Generate prompts based on patterns
+      final aiResponse = await _aiService.generateText(
+        'Recent writing patterns: $patternAnalysis',
+        systemPrompt: _getPatternBasedPromptsSystemPrompt(),
         maxTokens: 300,
         temperature: 0.7,
       );
+
+      final promptsData = _parsePromptsResponse(aiResponse);
       
-      return _parsePromptResponse(response, PromptCategory.reflection, context);
+      final prompts = <WritingPrompt>[];
+      int index = 0;
+      
+      for (final promptData in promptsData) {
+        if (index >= maxPrompts) break;
+        
+        prompts.add(WritingPrompt(
+          id: 'pattern_prompt_${DateTime.now().millisecondsSinceEpoch}_$index',
+          prompt: promptData['prompt'] as String,
+          category: promptData['category'] as String,
+          relevance: promptData['relevance'] as double,
+          context: promptData['context'] as String?,
+          metadata: {
+            'generated_from': 'ai_pattern_based',
+            'entries_analyzed': recentEntries.length,
+            'days_past': daysPast,
+          },
+        ));
+        
+        index++;
+      }
+
+      return prompts;
     } catch (e) {
-      debugPrint('Error generating continuation prompts: $e');
-      return [];
+      print('Error generating pattern-based prompts: $e');
+      return _getFallbackPrompts();
     }
   }
 
-  // Generate reflection prompts based on mood and themes
-  Future<List<WritingPrompt>> _generateReflectionPrompts(
-    Map<String, dynamic> context,
-    int count,
-  ) async {
+  // Get daily writing prompts (general inspiration)
+  Future<List<WritingPrompt>> getDailyPrompts({
+    int maxPrompts = 3,
+  }) async {
+    if (!_isInitialized) await initialize();
+    
     try {
-      final recentThemes = context['recentThemes'] as List? ?? [];
-      final moodPattern = context['moodPattern'] as Map? ?? {};
-      final trend = moodPattern['trend'] as String? ?? 'stable';
-      
-      final prompt = '''
-Generate $count reflective writing prompts for someone who:
-- Recently wrote about: ${recentThemes.join(', ')}
-- Has a $trend mood trend
-- Wants to explore their thoughts and feelings deeper
-
-Make the prompts:
-- Thought-provoking but not overwhelming
-- Personally relevant based on their themes
-- Encouraging self-discovery
-- Suitable for journaling
-
-Format as JSON:
-[
-  {"prompt": "What patterns do you notice in your recent thoughts?", "inspiration": "Pattern recognition"},
-  {"prompt": "What would you tell your past self about handling challenges?", "inspiration": "Wisdom sharing"}
-]
-''';
-      
-      final response = await _aiService.generateText(
-        prompt,
-        maxTokens: 300,
-        temperature: 0.7,
-      );
-      
-      return _parsePromptResponse(response, PromptCategory.reflection, context);
-    } catch (e) {
-      debugPrint('Error generating reflection prompts: $e');
-      return [];
-    }
-  }
-
-  // Generate creativity prompts
-  Future<List<WritingPrompt>> _generateCreativityPrompts(
-    Map<String, dynamic> context,
-    int count,
-  ) async {
-    try {
-      final prompt = '''
-Generate $count creative writing prompts that:
-- Spark imagination and creativity
-- Are open-ended and inspiring
-- Encourage storytelling or creative thinking
-- Could lead to interesting journal entries
-
-Format as JSON:
-[
-  {"prompt": "If you could have dinner with any version of yourself, which would you choose and why?", "inspiration": "Self-exploration through imagination"},
-  {"prompt": "Describe a perfect day 10 years from now in vivid detail", "inspiration": "Future visioning"}
-]
-''';
-      
-      final response = await _aiService.generateText(
-        prompt,
+      final aiResponse = await _aiService.generateText(
+        'Generate daily writing prompts for journaling',
+        systemPrompt: _getDailyPromptsSystemPrompt(),
         maxTokens: 200,
         temperature: 0.8,
       );
+
+      final promptsData = _parsePromptsResponse(aiResponse);
       
-      return _parsePromptResponse(response, PromptCategory.creativity, context);
+      final prompts = <WritingPrompt>[];
+      int index = 0;
+      
+      for (final promptData in promptsData) {
+        if (index >= maxPrompts) break;
+        
+        prompts.add(WritingPrompt(
+          id: 'daily_prompt_${DateTime.now().millisecondsSinceEpoch}_$index',
+          prompt: promptData['prompt'] as String,
+          category: 'Daily Inspiration',
+          relevance: promptData['relevance'] as double,
+          context: promptData['context'] as String?,
+          metadata: {
+            'generated_from': 'ai_daily',
+            'date': DateTime.now().toIso8601String(),
+          },
+        ));
+        
+        index++;
+      }
+
+      return prompts;
     } catch (e) {
-      debugPrint('Error generating creativity prompts: $e');
-      return [];
+      print('Error generating daily prompts: $e');
+      return _getFallbackPrompts();
     }
   }
 
-  List<WritingPrompt> _parsePromptResponse(
-    String response, 
-    PromptCategory category,
-    Map<String, dynamic> context,
-  ) {
+  // Get journal history context for prompts
+  Future<String> _getJournalHistoryContext() async {
     try {
-      final jsonStart = response.indexOf('[');
-      final jsonEnd = response.lastIndexOf(']') + 1;
+      final db = await _dbService.database;
       
-      if (jsonStart == -1 || jsonEnd <= jsonStart) return [];
+      // Get recent entries
+      final recentEntries = await db.rawQuery('''
+        SELECT f.name, f.content, f.created_at, f.word_count
+        FROM files f
+        WHERE f.content IS NOT NULL AND f.content != ''
+        ORDER BY f.updated_at DESC
+        LIMIT 5
+      ''');
+
+      if (recentEntries.isEmpty) return '';
+
+      // Build context string
+      final contextParts = <String>[];
       
-      final jsonString = response.substring(jsonStart, jsonEnd);
+      for (final entry in recentEntries) {
+        final content = entry['content'] as String;
+        final preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+        contextParts.add('Entry: ${entry['name']} - $preview');
+      }
+      
+      return 'Recent journal entries context:\n${contextParts.join('\n')}';
+    } catch (e) {
+      print('Error getting journal history context: $e');
+      return '';
+    }
+  }
+
+  // Get recent journal entries
+  Future<List<Map<String, dynamic>>> _getRecentEntries(int daysPast) async {
+    final db = await _dbService.database;
+    final cutoffDate = DateTime.now().subtract(Duration(days: daysPast));
+    
+    return await db.rawQuery('''
+      SELECT f.id, f.name, f.content, f.created_at, f.updated_at, f.word_count
+      FROM files f
+      WHERE f.updated_at >= ? AND f.content IS NOT NULL AND f.content != ''
+      ORDER BY f.updated_at DESC
+      LIMIT 10
+    ''', [cutoffDate.toIso8601String()]);
+  }
+
+  // Analyze writing patterns in recent entries
+  Future<String> _analyzeWritingPatterns(List<Map<String, dynamic>> entries) async {
+    try {
+      final patterns = <String>[];
+      
+      // Analyze word count patterns
+      final wordCounts = entries.map((e) => e['word_count'] as int).toList();
+      final avgWordCount = wordCounts.isNotEmpty 
+          ? wordCounts.reduce((a, b) => a + b) / wordCounts.length
+          : 0;
+      patterns.add('Average word count: ${avgWordCount.toStringAsFixed(0)}');
+      
+      // Analyze writing frequency
+      patterns.add('Entries in period: ${entries.length}');
+      
+      // Analyze content themes (simplified)
+      final allContent = entries.map((e) => e['content'] as String).join(' ');
+      final commonWords = _extractCommonWords(allContent);
+      patterns.add('Common themes: ${commonWords.join(', ')}');
+      
+      return patterns.join('\n');
+    } catch (e) {
+      return 'Unable to analyze patterns';
+    }
+  }
+
+  // Extract common words from content
+  List<String> _extractCommonWords(String content) {
+    final words = content.toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .split(' ')
+        .where((word) => word.length > 4)
+        .toList();
+    
+    final wordCount = <String, int>{};
+    for (final word in words) {
+      wordCount[word] = (wordCount[word] ?? 0) + 1;
+    }
+    
+    final sortedWords = wordCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    return sortedWords.take(5).map((e) => e.key).toList();
+  }
+
+  // System prompts for different types of prompt generation
+  String _getPromptsSystemPrompt(String historyContext) {
+    return '''
+You are a creative writing coach. Generate personalized writing prompts based on the user's current content and journal history.
+
+Current content context: The user is currently writing/thinking about this topic.
+$historyContext
+
+Generate 3-5 writing prompts that:
+1. Build on their current thoughts
+2. Encourage deeper reflection
+3. Connect to their past entries when relevant
+4. Are specific and engaging
+
+Respond with ONLY a JSON array in this format:
+[
+  {
+    "prompt": "What emotions are you avoiding confronting about this situation?",
+    "category": "Self-Reflection",
+    "relevance": 0.9,
+    "context": "Based on your recent entries about work stress"
+  },
+  {
+    "prompt": "Describe this moment as if you were telling a story to a friend.",
+    "category": "Narrative",
+    "relevance": 0.8,
+    "context": "To help you process current experiences"
+  }
+]
+
+Guidelines:
+- Make prompts specific and actionable
+- Categories: Self-Reflection, Narrative, Gratitude, Goals, Memories, Future, Emotions, Relationships
+- Relevance: 0.0 to 1.0 (how relevant to current content)
+- Context: Brief explanation of why this prompt is suggested
+
+Respond with ONLY the JSON array, no other text.
+''';
+  }
+
+  String _getThematicPromptsSystemPrompt() {
+    return '''
+You are a writing prompt generator. Create thoughtful prompts for the given theme.
+
+Respond with ONLY a JSON array in this format:
+[
+  {
+    "prompt": "What does this theme mean to you personally?",
+    "category": "Theme Exploration",
+    "relevance": 0.9,
+    "context": "Personal connection to the theme"
+  }
+]
+
+Make prompts thought-provoking and specific to the theme.
+Respond with ONLY the JSON array, no other text.
+''';
+  }
+
+  String _getPatternBasedPromptsSystemPrompt() {
+    return '''
+You are a writing coach analyzing journal patterns. Based on the user's recent writing patterns, suggest prompts that:
+1. Build on their current interests
+2. Address gaps in their reflection
+3. Encourage growth and new perspectives
+
+Respond with ONLY a JSON array in this format:
+[
+  {
+    "prompt": "What patterns do you notice in your recent thoughts?",
+    "category": "Pattern Analysis",
+    "relevance": 0.9,
+    "context": "Based on your recent writing patterns"
+  }
+]
+
+Focus on helping them grow and reflect more deeply.
+Respond with ONLY the JSON array, no other text.
+''';
+  }
+
+  String _getDailyPromptsSystemPrompt() {
+    return '''
+You are a daily inspiration generator. Create general but engaging daily writing prompts for journaling.
+
+Respond with ONLY a JSON array in this format:
+[
+  {
+    "prompt": "What made you smile today, even if just for a moment?",
+    "category": "Daily Inspiration",
+    "relevance": 0.8,
+    "context": "Finding joy in everyday moments"
+  }
+]
+
+Make prompts universal yet meaningful.
+Respond with ONLY the JSON array, no other text.
+''';
+  }
+
+  // Parse AI response for prompts
+  List<Map<String, dynamic>> _parsePromptsResponse(String response) {
+    try {
+      final cleanResponse = response.trim();
+      
+      // Remove any markdown formatting
+      final jsonStart = cleanResponse.indexOf('[');
+      final jsonEnd = cleanResponse.lastIndexOf(']');
+      
+      if (jsonStart == -1 || jsonEnd == -1) {
+        throw Exception('No JSON array found in response');
+      }
+      
+      final jsonString = cleanResponse.substring(jsonStart, jsonEnd + 1);
       final parsed = jsonDecode(jsonString) as List;
       
-      return parsed.map((item) {
-        final promptData = item as Map<String, dynamic>;
-        return WritingPrompt(
-          id: 'ai_${DateTime.now().millisecondsSinceEpoch}_${_random.nextInt(1000)}',
-          prompt: promptData['prompt'] as String,
-          category: category.displayName,
-          inspiration: promptData['inspiration'] as String? ?? 'AI-generated prompt',
-          createdAt: DateTime.now(),
-          relevanceScore: 0.8 + (_random.nextDouble() * 0.2), // 0.8-1.0
-          context: context,
-        );
+      return parsed.map((item) => {
+        'prompt': item['prompt'] as String? ?? 'What are you thinking about right now?',
+        'category': item['category'] as String? ?? 'General',
+        'relevance': (item['relevance'] as num?)?.toDouble() ?? 0.7,
+        'context': item['context'] as String?,
       }).toList();
     } catch (e) {
-      debugPrint('Error parsing prompt response: $e');
+      print('Error parsing prompts response: $e');
       return [];
     }
   }
 
-  // Generate fallback prompts when AI generation fails
-  List<WritingPrompt> _generateFallbackPrompts(
-    Map<String, dynamic> context,
-    int count,
-    List<PromptCategory>? preferredCategories,
-  ) {
-    final fallbackPrompts = [
-      // Reflection prompts
+  // Fallback prompts when AI generation fails
+  List<WritingPrompt> _getFallbackPrompts() {
+    return [
       WritingPrompt(
-        id: 'fallback_reflection_1',
-        prompt: 'What three things are you most grateful for today?',
-        category: PromptCategory.gratitude.displayName,
-        inspiration: 'Daily gratitude practice',
-        createdAt: DateTime.now(),
-        relevanceScore: 0.6,
-        context: context,
+        id: 'fallback_1',
+        prompt: 'What are you feeling right now, and why?',
+        category: 'Self-Reflection',
+        relevance: 0.8,
+        context: 'A simple prompt to start reflection',
       ),
       WritingPrompt(
-        id: 'fallback_growth_1',
-        prompt: 'What skill or habit would you like to develop, and what\'s your first step?',
-        category: PromptCategory.growth.displayName,
-        inspiration: 'Personal development',
-        createdAt: DateTime.now(),
-        relevanceScore: 0.6,
-        context: context,
+        id: 'fallback_2',
+        prompt: 'Describe your ideal day from start to finish.',
+        category: 'Future Vision',
+        relevance: 0.7,
+        context: 'Explore your aspirations and desires',
       ),
       WritingPrompt(
-        id: 'fallback_emotions_1',
-        prompt: 'How would you describe your current emotional state to a close friend?',
-        category: PromptCategory.emotions.displayName,
-        inspiration: 'Emotional awareness',
-        createdAt: DateTime.now(),
-        relevanceScore: 0.6,
-        context: context,
-      ),
-      WritingPrompt(
-        id: 'fallback_memories_1',
-        prompt: 'What\'s a small moment from this week that brought you joy?',
-        category: PromptCategory.memories.displayName,
-        inspiration: 'Mindful appreciation',
-        createdAt: DateTime.now(),
-        relevanceScore: 0.6,
-        context: context,
-      ),
-      WritingPrompt(
-        id: 'fallback_future_1',
-        prompt: 'If you could send a message to yourself one year from now, what would it say?',
-        category: PromptCategory.future.displayName,
-        inspiration: 'Future self communication',
-        createdAt: DateTime.now(),
-        relevanceScore: 0.6,
-        context: context,
+        id: 'fallback_3',
+        prompt: 'What challenge are you facing, and what would you tell a friend in the same situation?',
+        category: 'Problem Solving',
+        relevance: 0.9,
+        context: 'Gain perspective on current challenges',
       ),
     ];
-    
-    // Shuffle and return requested count
-    fallbackPrompts.shuffle(_random);
-    return fallbackPrompts.take(count).toList();
-  }
-
-  // Get prompts by category
-  Future<List<WritingPrompt>> getPromptsByCategory(
-    PromptCategory category, {
-    int count = 5,
-    String? currentContent,
-  }) async {
-    return generateContextualPrompts(
-      currentContent: currentContent,
-      count: count,
-      preferredCategories: [category],
-    );
   }
 
   void dispose() {
