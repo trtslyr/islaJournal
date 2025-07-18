@@ -251,7 +251,7 @@ CREATE VIRTUAL TABLE files_fts USING fts5(
 - [ ] Basic AI features (text analysis, suggestions)
 - [ ] Offline inference pipeline
 - [ ] Memory optimization for mobile devices
-- [ ] Graceful degradation when model unavailable
+- [ ] Graceful degradation when model unavailable.
 
 ### Phase 3: Advanced AI Features
 **Goal**: Sophisticated AI-powered journaling

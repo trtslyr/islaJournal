@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/journal_provider.dart';
 import '../providers/ai_provider.dart';
+import '../providers/layout_provider.dart';
 import '../widgets/file_tree_widget.dart';
 import '../widgets/editor_widget.dart';
+import '../widgets/ai_chat_panel.dart';
+import '../widgets/resize_handle.dart';
 import '../widgets/search_widget.dart';
 import '../screens/settings_screen.dart';
 import '../core/theme/app_theme.dart';
+import '../models/journal_file.dart';
 
+/// Main home screen with 3-panel IDE-like layout
+/// Left: File tree | Middle: Editor | Right: AI Chat
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -22,17 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeProvider();
-  }
-
-  void _initializeProvider() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final journalProvider = Provider.of<JournalProvider>(context, listen: false);
-      final aiProvider = Provider.of<AIProvider>(context, listen: false);
-      
-      await journalProvider.initialize();
-      await aiProvider.initialize();
-    });
+    _initializeProviders();
   }
 
   @override
@@ -41,190 +37,233 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  /// Initialize the journal and AI providers
+  void _initializeProviders() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+      final aiProvider = Provider.of<AIProvider>(context, listen: false);
+      
+      await journalProvider.initialize();
+      await aiProvider.initialize();
+      
+      // Automatically select the profile file so AI is ready to use
+      final profileFile = await journalProvider.getProfileFile();
+      if (profileFile != null) {
+        journalProvider.selectFile(profileFile.id);
+        // Also ensure it's marked as recently opened
+        await journalProvider.getFile(profileFile.id);
+      }
+    });
+  }
+
+  /// Toggle search mode
+  void _toggleSearch() {
+    setState(() {
+      _isSearching = !_isSearching;
+      if (!_isSearching) {
+        _searchController.clear();
+        final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+        journalProvider.clearSearch();
+      }
+    });
+  }
+
+  /// Create new file
+  void _createNewFile() {
+    final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+    _showCreateFileDialog(journalProvider);
+  }
+
+  /// Create new folder
+  void _createNewFolder() {
+    final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+    _showCreateFolderDialog(journalProvider);
+  }
+
+  /// Navigate to settings
+  void _showSettings() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => const SettingsScreen(),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Isla Journal'),
-        actions: [
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                _isSearching = !_isSearching;
-                if (!_isSearching) {
-                  _searchController.clear();
-                  context.read<JournalProvider>().clearSearch();
-                }
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showCreateDialog(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => _showSettings(context),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (_isSearching)
-            Container(
-              padding: const EdgeInsets.all(16.0),
-              color: AppTheme.darkerCream,
-              child: SearchWidget(
-                controller: _searchController,
-                onSearch: (query) {
-                  context.read<JournalProvider>().searchFiles(query);
-                },
-              ),
-            ),
-          Expanded(
-            child: Row(
-              children: [
-                // Left sidebar - File tree
-                Container(
-                  width: 300,
-                  decoration: BoxDecoration(
-                    color: AppTheme.darkerCream,
-                    border: Border(
-                      right: BorderSide(
-                        color: AppTheme.warmBrown.withOpacity(0.2),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: const FileTreeWidget(),
-                ),
-                // Right panel - Editor
-                Expanded(
-                  child: Consumer<JournalProvider>(
-                    builder: (context, provider, child) {
-                      if (_isSearching && provider.searchQuery.isNotEmpty) {
-                        return _buildSearchResults(provider);
-                      }
-                      
-                      if (provider.selectedFileId != null) {
-                        return const EditorWidget();
-                      }
-                      
-                      return _buildWelcomeScreen(provider);
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildSearchResults(JournalProvider provider) {
-    if (provider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
 
-    if (provider.searchResults.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.search_off,
-              size: 64,
-              color: AppTheme.mediumGray,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No results found for "${provider.searchQuery}"',
-              style: const TextStyle(
+
+  /// Build the main body with 3-panel layout
+  Widget _buildBody() {
+    return Consumer<JournalProvider>(
+      builder: (context, journalProvider, child) {
+        if (journalProvider.isLoading) {
+          return const Center(
+            child: Text(
+              'loading...',
+              style: TextStyle(
                 fontFamily: 'JetBrainsMono',
-                fontSize: 19.2,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.darkText,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Try adjusting your search terms',
-              style: const TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 16.0,
-                fontWeight: FontWeight.w400,
+                fontSize: 14.0,
                 color: AppTheme.mediumGray,
               ),
             ),
-          ],
-        ),
-      );
-    }
+          );
+        }
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Search Results (${provider.searchResults.length})',
-            style: const TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 19.2,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.darkText,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView.builder(
-              itemCount: provider.searchResults.length,
-              itemBuilder: (context, index) {
-                final file = provider.searchResults[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: const Icon(Icons.description),
-                    title: Text(
-                      file.name,
-                      style: const TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 16.0,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.darkText,
+        return Consumer<LayoutProvider>(
+          builder: (context, layoutProvider, child) {
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final screenWidth = constraints.maxWidth;
+                
+                return Row(
+                  children: [
+                    // Left Panel - File Tree
+                    if (layoutProvider.isFileTreeVisible) ...[
+                      SizedBox(
+                        width: layoutProvider.fileTreeWidth,
+                        child: _buildFileTreePanel(),
                       ),
-                    ),
-                    subtitle: Text(
-                      '${file.wordCount} words • ${file.updatedAt.toString().split(' ')[0]}',
-                      style: const TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12.8,
-                        fontWeight: FontWeight.w400,
-                        color: AppTheme.mediumGray,
+                      // Resize handle for file tree
+                      ResizeHandle(
+                        onResize: (delta) {
+                          final newWidth = layoutProvider.fileTreeWidth + delta;
+                          layoutProvider.setFileTreeWidth(newWidth, screenWidth);
+                        },
                       ),
+                    ],
+                    
+                    // Middle Panel - Editor (always visible)
+                    Expanded(
+                      child: _buildEditorPanel(),
                     ),
-                    trailing: Text(
-                      provider.getFolderPath(file.folderId),
-                      style: const TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12.8,
-                        fontWeight: FontWeight.w400,
-                        color: AppTheme.mediumGray,
+                    
+                    // Right Panel - AI Chat
+                    if (layoutProvider.isAIChatVisible) ...[
+                      // Resize handle for AI chat
+                      ResizeHandle(
+                        onResize: (delta) {
+                          final newWidth = layoutProvider.aiChatWidth - delta;
+                          layoutProvider.setAIChatWidth(newWidth, screenWidth);
+                        },
                       ),
-                    ),
-                    onTap: () {
-                      provider.selectFile(file.id);
-                      setState(() {
-                        _isSearching = false;
-                        _searchController.clear();
-                      });
-                      provider.clearSearch();
-                    },
-                  ),
+                      SizedBox(
+                        width: layoutProvider.aiChatWidth,
+                        child: const AIChatPanel(),
+                      ),
+                    ],
+                  ],
                 );
               },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Build the file tree panel
+  Widget _buildFileTreePanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.creamBeige,
+        border: Border(
+          right: BorderSide(
+            color: AppTheme.warmBrown.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+                     // Panel toolbar
+           Container(
+             height: 40,
+             padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+             decoration: BoxDecoration(
+               color: AppTheme.darkerCream,
+               border: Border(
+                 bottom: BorderSide(
+                   color: AppTheme.warmBrown.withOpacity(0.2),
+                   width: 1,
+                 ),
+               ),
+             ),
+             child: Row(
+               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+               children: [
+                 // Add folder
+                 TextButton(
+                   onPressed: _createNewFolder,
+                   style: TextButton.styleFrom(
+                     overlayColor: Colors.transparent,
+                   ),
+                   child: const Text(
+                     '+folder',
+                     style: TextStyle(
+                       fontFamily: 'JetBrainsMono',
+                       fontSize: 12.0,
+                       fontWeight: FontWeight.w400,
+                       color: AppTheme.warmBrown,
+                     ),
+                   ),
+                 ),
+                 // Add file
+                 TextButton(
+                   onPressed: _createNewFile,
+                   style: TextButton.styleFrom(
+                     overlayColor: Colors.transparent,
+                   ),
+                   child: const Text(
+                     '+entry',
+                     style: TextStyle(
+                       fontFamily: 'JetBrainsMono',
+                       fontSize: 12.0,
+                       fontWeight: FontWeight.w400,
+                       color: AppTheme.warmBrown,
+                     ),
+                   ),
+                 ),
+               ],
+             ),
+           ),
+          
+          // Content area
+          Expanded(
+            child: _isSearching ? _buildSearchContent() : _buildFileTreeContent(),
+          ),
+          
+          // Settings at the bottom
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+            decoration: BoxDecoration(
+              color: AppTheme.darkerCream,
+              border: Border(
+                top: BorderSide(
+                  color: AppTheme.warmBrown.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: GestureDetector(
+              onTap: _showSettings,
+              child: const Text(
+                'settings',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12.0,
+                  fontWeight: FontWeight.w400,
+                  color: AppTheme.mediumGray,
+                ),
+              ),
             ),
           ),
         ],
@@ -232,215 +271,431 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildWelcomeScreen(JournalProvider provider) {
-    return Padding(
-      padding: const EdgeInsets.all(32.0),
+  /// Build the search content
+  Widget _buildSearchContent() {
+    return Column(
+      children: [
+        // Search input
+        Container(
+          padding: const EdgeInsets.all(16.0),
+          child: SearchWidget(
+            controller: _searchController,
+            onSearch: (query) {
+              final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+              journalProvider.searchFiles(query);
+            },
+            autofocus: true,
+          ),
+        ),
+        // Search results
+        Expanded(
+          child: _buildSearchResults(),
+        ),
+      ],
+    );
+  }
+
+  /// Build the file tree content
+  Widget _buildFileTreeContent() {
+    return const FileTreeWidget(
+      showHeader: false,
+      sortByLastOpened: true,
+    );
+  }
+
+  /// Build the editor panel
+  Widget _buildEditorPanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.creamBeige,
+        border: Border(
+          left: BorderSide(
+            color: AppTheme.warmBrown.withOpacity(0.2),
+            width: 1,
+          ),
+          right: BorderSide(
+            color: AppTheme.warmBrown.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+      ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.auto_stories,
-            size: 96,
-            color: AppTheme.warmBrown,
+                 children: [
+           // Panel toolbar
+           Container(
+             height: 40,
+             padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+             decoration: BoxDecoration(
+               color: AppTheme.darkerCream,
+               border: Border(
+                 bottom: BorderSide(
+                   color: AppTheme.warmBrown.withOpacity(0.2),
+                   width: 1,
+                 ),
+               ),
+             ),
+             child: Consumer<JournalProvider>(
+               builder: (context, provider, child) {
+                 final selectedFile = provider.selectedFileId != null 
+                     ? provider.files.where((f) => f.id == provider.selectedFileId).firstOrNull 
+                     : null;
+                 
+                 if (selectedFile == null) {
+                   return Row(
+                     children: [
+                       // File tree toggle (far left)
+                       Consumer<LayoutProvider>(
+                         builder: (context, layoutProvider, child) {
+                           return TextButton(
+                             onPressed: layoutProvider.toggleFileTree,
+                             style: TextButton.styleFrom(
+                               overlayColor: Colors.transparent,
+                             ),
+                             child: Text(
+                               '≡',
+                               style: const TextStyle(
+                                 fontFamily: 'JetBrainsMono',
+                                 fontSize: 16.0,
+                                 fontWeight: FontWeight.w600,
+                                 color: AppTheme.warmBrown,
+                               ),
+                             ),
+                           );
+                         },
+                       ),
+                       const Expanded(
+                         child: Center(
+                           child: Text(
+                             'no file selected',
+                             style: TextStyle(
+                               fontFamily: 'JetBrainsMono',
+                               fontSize: 14.0,
+                               color: AppTheme.mediumGray,
+                             ),
+                           ),
+                         ),
+                       ),
+                       // AI chat toggle (far right)
+                       Consumer<LayoutProvider>(
+                         builder: (context, layoutProvider, child) {
+                           return TextButton(
+                             onPressed: layoutProvider.toggleAIChat,
+                             style: TextButton.styleFrom(
+                               overlayColor: Colors.transparent,
+                             ),
+                             child: Text(
+                               '✦',
+                               style: const TextStyle(
+                                 fontFamily: 'JetBrainsMono',
+                                 fontSize: 16.0,
+                                 fontWeight: FontWeight.w600,
+                                 color: AppTheme.warmBrown,
+                               ),
+                             ),
+                           );
+                         },
+                       ),
+                     ],
+                   );
+                 }
+                 
+                 return Row(
+                   children: [
+                     // File tree toggle (far left)
+                     Consumer<LayoutProvider>(
+                       builder: (context, layoutProvider, child) {
+                         return TextButton(
+                           onPressed: layoutProvider.toggleFileTree,
+                           style: TextButton.styleFrom(
+                             overlayColor: Colors.transparent,
+                           ),
+                           child: Text(
+                             '≡',
+                             style: const TextStyle(
+                               fontFamily: 'JetBrainsMono',
+                               fontSize: 16.0,
+                               fontWeight: FontWeight.w600,
+                               color: AppTheme.warmBrown,
+                             ),
+                           ),
+                         );
+                       },
+                     ),
+                     Expanded(
+                       child: Row(
+                         children: [
+                           const SizedBox(width: 8),
+                           Flexible(
+                             child: GestureDetector(
+                               onDoubleTap: () => _showEditFileDialog(context, selectedFile, provider),
+                               child: Text(
+                                 selectedFile.name,
+                                 style: const TextStyle(
+                                   fontFamily: 'JetBrainsMono',
+                                   fontSize: 14.0,
+                                   fontWeight: FontWeight.w500,
+                                   color: AppTheme.darkText,
+                                 ),
+                                 overflow: TextOverflow.ellipsis,
+                               ),
+                             ),
+                           ),
+                           const SizedBox(width: 4),
+                           GestureDetector(
+                             onTap: () => _showEditFileDialog(context, selectedFile, provider),
+                             child: const Text(
+                               '✎',
+                               style: TextStyle(
+                                 fontFamily: 'JetBrainsMono',
+                                 fontSize: 12.0,
+                                 color: AppTheme.mediumGray,
+                               ),
+                             ),
+                           ),
+                           const Spacer(),
+                           if (provider.hasUnsavedChanges(selectedFile.id))
+                             const Text(
+                               'unsaved',
+                               style: TextStyle(
+                                 fontFamily: 'JetBrainsMono',
+                                 fontSize: 12.0,
+                                 color: AppTheme.mediumGray,
+                               ),
+                             ),
+                         ],
+                       ),
+                     ),
+                     const SizedBox(width: 4),
+                     // AI chat toggle (far right)
+                     Consumer<LayoutProvider>(
+                       builder: (context, layoutProvider, child) {
+                         return TextButton(
+                           onPressed: layoutProvider.toggleAIChat,
+                           style: TextButton.styleFrom(
+                             overlayColor: Colors.transparent,
+                           ),
+                           child: Text(
+                             '✦',
+                             style: const TextStyle(
+                               fontFamily: 'JetBrainsMono',
+                               fontSize: 16.0,
+                               fontWeight: FontWeight.w600,
+                               color: AppTheme.warmBrown,
+                             ),
+                           ),
+                         );
+                       },
+                     ),
+                   ],
+                 );
+               },
+             ),
+           ),
+          
+          // Editor content
+          const Expanded(
+            child: EditorWidget(),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Welcome to Isla Journal',
-            style: const TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 32.0,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.darkText,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Your private, offline journaling companion',
-            style: const TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 19.2,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.mediumGray,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
-          if (provider.recentFiles.isNotEmpty) ...[
-            Text(
-              'Recent Files',
-              style: const TextStyle(
+        ],
+      ),
+    );
+  }
+
+  /// Build search results list
+  Widget _buildSearchResults() {
+    return Consumer<JournalProvider>(
+      builder: (context, journalProvider, child) {
+        if (journalProvider.searchQuery.isEmpty) {
+          return const Center(
+            child: Text(
+              'type to search entries',
+              style: TextStyle(
                 fontFamily: 'JetBrainsMono',
-                fontSize: 19.2,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.darkText,
+                fontSize: 14.0,
+                color: AppTheme.mediumGray,
               ),
             ),
-            const SizedBox(height: 16),
-            ...provider.recentFiles.take(5).map((file) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
+          );
+        }
+
+        if (journalProvider.searchResults.isEmpty) {
+          return const Center(
+            child: Text(
+              'no results',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 14.0,
+                color: AppTheme.mediumGray,
+              ),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(8.0),
+          itemCount: journalProvider.searchResults.length,
+          itemBuilder: (context, index) {
+            final file = journalProvider.searchResults[index];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 1.0),
+              color: AppTheme.darkerCream,
               child: ListTile(
-                leading: const Icon(Icons.description),
+                leading: const Text(
+                  '•',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 14.0,
+                    color: AppTheme.mediumGray,
+                  ),
+                ),
                 title: Text(
                   file.name,
                   style: const TextStyle(
                     fontFamily: 'JetBrainsMono',
-                    fontSize: 16.0,
+                    fontSize: 14.0,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.darkText,
                   ),
                 ),
                 subtitle: Text(
-                  '${file.wordCount} words • ${file.lastOpened?.toString().split(' ')[0] ?? 'Never'}',
+                  '${file.wordCount}w',
                   style: const TextStyle(
                     fontFamily: 'JetBrainsMono',
-                    fontSize: 12.8,
-                    fontWeight: FontWeight.w400,
+                    fontSize: 12.0,
                     color: AppTheme.mediumGray,
                   ),
                 ),
-                onTap: () => provider.selectFile(file.id),
+                onTap: () {
+                  journalProvider.selectFile(file.id);
+                  _toggleSearch(); // Close search after selecting
+                },
               ),
-            )),
-          ] else ...[
-            Text(
-              'Start by creating your first journal entry',
-              style: const TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 16.0,
-                fontWeight: FontWeight.w400,
-                color: AppTheme.mediumGray,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => _showCreateDialog(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Create New Entry'),
-            ),
-          ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Show create file dialog
+  void _showCreateFileDialog(JournalProvider provider) {
+    final nameController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      barrierColor: Colors.transparent,
+      builder: (context) => AlertDialog(
+        title: const Text('create file'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'name',
+            hintText: 'my journal entry',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isNotEmpty) {
+                await provider.createFile(name, '');
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('create'),
+          ),
         ],
       ),
     );
   }
 
-  void _showCreateDialog(BuildContext context) {
+  /// Show create folder dialog
+  void _showCreateFolderDialog(JournalProvider provider) {
+    final nameController = TextEditingController();
+    
     showDialog(
       context: context,
-      builder: (context) => CreateFileDialog(),
-    );
-  }
-
-  void _showSettings(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const SettingsScreen(),
-      ),
-    );
-  }
-}
-
-class CreateFileDialog extends StatefulWidget {
-  const CreateFileDialog({super.key});
-
-  @override
-  State<CreateFileDialog> createState() => _CreateFileDialogState();
-}
-
-class _CreateFileDialogState extends State<CreateFileDialog> {
-  final _nameController = TextEditingController();
-  final _contentController = TextEditingController();
-  String? _selectedFolderId;
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _contentController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Create New Entry'),
-      content: SizedBox(
-        width: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'File Name',
-                hintText: 'My Journal Entry',
-              ),
-              autofocus: true,
-            ),
-            const SizedBox(height: 16),
-            Consumer<JournalProvider>(
-              builder: (context, provider, child) {
-                return DropdownButtonFormField<String>(
-                  value: _selectedFolderId,
-                  decoration: const InputDecoration(
-                    labelText: 'Folder',
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('Root'),
-                    ),
-                    ...provider.folders.map((folder) => DropdownMenuItem<String>(
-                      value: folder.id,
-                      child: Text(folder.name),
-                    )).toList(),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedFolderId = value;
-                    });
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _contentController,
-              decoration: const InputDecoration(
-                labelText: 'Initial Content (optional)',
-                hintText: 'Start writing...',
-              ),
-              maxLines: 3,
-            ),
-          ],
+      barrierColor: Colors.transparent,
+      builder: (context) => AlertDialog(
+        title: const Text('create folder'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'name',
+            hintText: 'my folder',
+          ),
+          autofocus: true,
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            final name = _nameController.text.trim();
-            if (name.isNotEmpty) {
-              final provider = Provider.of<JournalProvider>(context, listen: false);
-              final fileId = await provider.createFile(
-                name,
-                _contentController.text,
-                folderId: _selectedFolderId,
-              );
-              
-              if (fileId != null) {
-                provider.selectFile(fileId);
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isNotEmpty) {
+                await provider.createFolder(name);
                 Navigator.of(context).pop();
               }
-            }
-          },
-          child: const Text('Create'),
+            },
+            child: const Text('create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditFileDialog(BuildContext context, JournalFile file, JournalProvider provider) {
+    final nameController = TextEditingController(text: file.name);
+    final isProfileFile = file.id == 'profile_special_file';
+    
+    showDialog(
+      context: context,
+      barrierColor: Colors.transparent,
+      builder: (context) => AlertDialog(
+        title: Text(
+          isProfileFile ? 'Edit Name' : 'Rename File',
+          style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 14),
         ),
-      ],
+        content: TextField(
+          controller: nameController,
+          decoration: InputDecoration(
+            labelText: isProfileFile ? 'Your name' : 'File name',
+            hintText: isProfileFile ? 'Enter your name' : 'Enter file name',
+          ),
+          style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isNotEmpty && name != file.name) {
+                await provider.updateFile(file.copyWith(name: name));
+                Navigator.of(context).pop();
+              } else if (name.isEmpty) {
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text(
+              'Save',
+              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

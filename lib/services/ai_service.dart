@@ -358,10 +358,13 @@ class AIService {
     try {
       final messages = <Message>[];
       
-      if (systemPrompt != null) {
-        messages.add(Message(Role.system, systemPrompt));
-      }
+      // Add a default system prompt if none provided
+      final defaultSystemPrompt = systemPrompt ?? '''You are a helpful friend who has read someone's journal. 
+Respond naturally and directly to their questions. 
+Keep responses concise and focused on their journal content.
+Never mention that you are an AI or language model.''';
       
+      messages.add(Message(Role.system, defaultSystemPrompt));
       messages.add(Message(Role.user, prompt));
 
       final request = OpenAiRequest(
@@ -371,7 +374,7 @@ class AIService {
         modelPath: _currentModelPath!,
         temperature: temperature,
         topP: topP,
-        contextSize: 2048,
+        contextSize: _getContextSize(_currentModelId),
         frequencyPenalty: 0.0,
         presencePenalty: 1.1,
         logger: (log) {
@@ -395,6 +398,21 @@ class AIService {
       return await completer.future;
     } catch (e) {
       throw Exception('Failed to generate text: $e');
+    }
+  }
+
+  // Get appropriate context size based on model
+  int _getContextSize(String? modelId) {
+    // Model-specific context limits (conservative to leave room for response)
+    switch (modelId) {
+      case 'llama-3.2-1b':
+        return 100000; // 100K tokens
+      case 'llama-3.2-3b':
+        return 120000; // 120K tokens
+      case 'llama-3.1-8b':
+        return 120000; // 120K tokens
+      default:
+        return 100000; // Default safe limit
     }
   }
 

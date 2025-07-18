@@ -4,6 +4,7 @@ import '../providers/ai_provider.dart';
 import '../services/ai_service.dart';
 import '../core/theme/app_theme.dart';
 
+/// Settings screen for managing AI models and app preferences
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -16,8 +17,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: const Text(
+          'settings',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 16.0,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         backgroundColor: AppTheme.darkerCream,
+        leading: TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text(
+            'back',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
       ),
       body: Consumer<AIProvider>(
         builder: (context, aiProvider, child) {
@@ -36,21 +55,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// AI Models section with model management
   Widget _buildAISection(AIProvider aiProvider) {
-    return Card(
-      child: Padding(
+    return Container(
         padding: const EdgeInsets.all(16.0),
+      color: AppTheme.darkerCream,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Section header
             Row(
               children: [
-                const Icon(Icons.psychology, color: AppTheme.warmBrown),
+              const Text(
+                '🤖',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
+                  color: AppTheme.warmBrown,
+                ),
+              ),
                 const SizedBox(width: 8),
-                Text(
-                  'AI Models',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              const Text(
+                'ai models',
+                style: TextStyle(
                     fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -58,576 +87,569 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
             
-            // Current model status
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.darkerCream,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    aiProvider.isModelLoaded ? Icons.check_circle : Icons.circle_outlined,
-                    color: aiProvider.isModelLoaded ? Colors.green : AppTheme.mediumGray,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      aiProvider.isModelLoaded 
-                        ? 'AI Ready: ${aiProvider.availableModels[aiProvider.currentModelId]?.name ?? 'Unknown'}'
-                        : 'No AI model loaded',
-                      style: const TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
+            // Current model status indicator
+            _buildCurrentModelStatus(aiProvider),
             const SizedBox(height: 16),
             
-            // Available models
-            Text(
-              'Available Models',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontFamily: 'JetBrainsMono',
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
+            // Available models list
+            _buildAvailableModelsList(aiProvider),
             
-            ...aiProvider.availableModels.entries.map((entry) {
-              final modelId = entry.key;
-              final modelInfo = entry.value;
-              final status = aiProvider.modelStatuses[modelId] ?? ModelStatus.notDownloaded;
-              
-              return _buildModelCard(aiProvider, modelId, modelInfo, status);
-            }).toList(),
-            
-            if (aiProvider.error != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.error, color: Colors.red.shade600),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        aiProvider.error!,
-                        style: TextStyle(
-                          fontFamily: 'JetBrainsMono',
-                          color: Colors.red.shade800,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => aiProvider.clearError(),
-                      child: const Text('Dismiss'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            // Error display
+            if (aiProvider.error != null) _buildErrorDisplay(aiProvider),
           ],
-        ),
       ),
     );
   }
 
+  /// Current model status indicator
+  Widget _buildCurrentModelStatus(AIProvider aiProvider) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      color: AppTheme.creamBeige,
+      child: Row(
+        children: [
+          Text(
+            aiProvider.isModelLoaded ? '✓' : '○',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 16.0,
+              color: aiProvider.isModelLoaded ? AppTheme.warmBrown : AppTheme.mediumGray,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              aiProvider.isModelLoaded 
+                ? 'ai ready: ${aiProvider.availableModels[aiProvider.currentModelId]?.name ?? 'unknown'}'
+                : 'no ai model loaded',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 14.0,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Available models list
+  Widget _buildAvailableModelsList(AIProvider aiProvider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'available models',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 14.0,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        
+        ...aiProvider.availableModels.entries.map((entry) {
+          final modelId = entry.key;
+          final modelInfo = entry.value;
+          final status = aiProvider.modelStatuses[modelId] ?? ModelStatus.notDownloaded;
+          
+          return _buildModelCard(aiProvider, modelId, modelInfo, status);
+        }).toList(),
+      ],
+    );
+  }
+
+  /// Error display widget
+  Widget _buildErrorDisplay(AIProvider aiProvider) {
+    return Column(
+      children: [
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: AppTheme.creamBeige,
+          child: Row(
+            children: [
+              const Text(
+                '!',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
+                  color: AppTheme.warningRed,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  aiProvider.error!,
+                  style: const TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 14.0,
+                    color: AppTheme.warningRed,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => aiProvider.clearError(),
+                child: const Text(
+                  'dismiss',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 14.0,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Individual model card with download/load controls
   Widget _buildModelCard(AIProvider aiProvider, String modelId, AIModelInfo modelInfo, ModelStatus status) {
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
+      color: AppTheme.creamBeige,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Model name and size
             Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        modelInfo.name,
-                        style: const TextStyle(
-                          fontFamily: 'JetBrainsMono',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _getModelDescription(modelInfo),
-                        style: const TextStyle(
-                          fontFamily: 'JetBrainsMono',
-                          fontSize: 14,
-                          color: AppTheme.mediumGray,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    modelInfo.name,
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontWeight: FontWeight.w600,
+                    fontSize: 14.0,
+                    ),
                   ),
                 ),
-                _buildModelStatusBadge(status),
+                _buildModelSizeBadge(modelInfo.size),
               ],
             ),
+            const SizedBox(height: 8),
             
-            const SizedBox(height: 12),
+            // Model status and controls
+            _buildModelControls(aiProvider, modelId, modelInfo, status),
             
-            // Download progress
-            if (status == ModelStatus.downloading && aiProvider.currentDownload != null) ...[
-              LinearProgressIndicator(
-                value: aiProvider.currentDownload!.percentage / 100,
-                backgroundColor: AppTheme.darkerCream,
-                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                aiProvider.currentDownload!.status,
-                style: const TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 12,
-                  color: AppTheme.mediumGray,
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            
-            // Action buttons
-            Row(
-              children: [
-                if (status == ModelStatus.notDownloaded) ...[
-                  ElevatedButton.icon(
-                    onPressed: () => aiProvider.downloadModel(modelId),
-                    icon: const Icon(Icons.download, size: 16),
-                    label: const Text('Download'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.warmBrown,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: () => _showManualDownloadDialog(modelId, modelInfo),
-                    child: const Text('Manual Download'),
-                  ),
-                ],
-                
-                if (status == ModelStatus.downloading) ...[
-                  ElevatedButton.icon(
-                    onPressed: () => aiProvider.cancelDownload(),
-                    icon: const Icon(Icons.cancel, size: 16),
-                    label: const Text('Cancel'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-                
-                if (status == ModelStatus.downloaded) ...[
-                  ElevatedButton.icon(
-                    onPressed: () => aiProvider.loadModel(modelId),
-                    icon: const Icon(Icons.play_arrow, size: 16),
-                    label: const Text('Load'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: () => _showDeleteConfirmation(aiProvider, modelId, modelInfo.name),
-                    icon: const Icon(Icons.delete, size: 16),
-                    label: const Text('Delete'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.red,
-                    ),
-                  ),
-                ],
-                
-                if (status == ModelStatus.loaded) ...[
-                  ElevatedButton.icon(
-                    onPressed: () => aiProvider.unloadModel(),
-                    icon: const Icon(Icons.stop, size: 16),
-                    label: const Text('Unload'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'Active',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.green.shade800,
-                      ),
-                    ),
-                  ),
-                ],
-                
-                if (status == ModelStatus.error) ...[
-                  ElevatedButton.icon(
-                    onPressed: () => aiProvider.downloadModel(modelId),
-                    icon: const Icon(Icons.refresh, size: 16),
-                    label: const Text('Retry'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.warmBrown,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            // Download progress (if downloading)
+            if (status == ModelStatus.downloading) 
+              _buildDownloadProgress(aiProvider, modelId),
           ],
-        ),
       ),
     );
   }
 
-  Widget _buildModelStatusBadge(ModelStatus status) {
-    Color color;
-    String text;
-    IconData icon;
+  /// Model size badge
+  Widget _buildModelSizeBadge(AIModelSize size) {
+    String sizeText;
     
-    switch (status) {
-      case ModelStatus.notDownloaded:
-        color = AppTheme.mediumGray;
-        text = 'Not Downloaded';
-        icon = Icons.cloud_download;
+    switch (size) {
+      case AIModelSize.small:
+        sizeText = 'small (~800mb)';
         break;
-      case ModelStatus.downloading:
-        color = Colors.blue;
-        text = 'Downloading';
-        icon = Icons.download;
+      case AIModelSize.medium:
+        sizeText = 'medium (~2gb)';
         break;
-      case ModelStatus.downloaded:
-        color = Colors.green;
-        text = 'Downloaded';
-        icon = Icons.check_circle;
-        break;
-      case ModelStatus.loaded:
-        color = Colors.green;
-        text = 'Loaded';
-        icon = Icons.check_circle;
-        break;
-      case ModelStatus.error:
-        color = Colors.red;
-        text = 'Error';
-        icon = Icons.error;
+      case AIModelSize.large:
+        sizeText = 'large (~4.5gb)';
         break;
     }
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppTheme.warmBrown.withOpacity(0.3)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 4),
-          Text(
-            text,
+      child: Text(
+        sizeText,
+        style: const TextStyle(
+          fontFamily: 'JetBrainsMono',
+          fontSize: 10.0,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  /// Model control buttons based on status
+  Widget _buildModelControls(AIProvider aiProvider, String modelId, AIModelInfo modelInfo, ModelStatus status) {
+    return Row(
+      children: [
+        _buildStatusIndicator(status),
+        const Spacer(),
+        
+        // Action buttons based on status
+        if (status == ModelStatus.notDownloaded) ...[
+          TextButton(
+            onPressed: aiProvider.isGenerating ? null : () => aiProvider.downloadModel(modelId),
+            child: const Text(
+              'download',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+        ] else if (status == ModelStatus.downloading) ...[
+          const Text(
+            'downloading...',
             style: TextStyle(
               fontFamily: 'JetBrainsMono',
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: color,
+              fontSize: 12.0,
+              color: AppTheme.mediumGray,
             ),
           ),
+        ] else if (status == ModelStatus.downloaded) ...[
+          TextButton(
+            onPressed: aiProvider.isGenerating ? null : () => aiProvider.loadModel(modelId),
+            child: const Text(
+              'load',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildDeleteButton(aiProvider, modelId),
+        ] else if (status == ModelStatus.loaded) ...[
+          TextButton(
+            onPressed: aiProvider.isGenerating ? null : () => aiProvider.unloadModel(),
+            child: const Text(
+              'unload',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildDeleteButton(aiProvider, modelId),
         ],
+      ],
+    );
+  }
+
+  /// Status indicator with text
+  Widget _buildStatusIndicator(ModelStatus status) {
+    String icon;
+    String text;
+    Color color;
+    
+    switch (status) {
+      case ModelStatus.notDownloaded:
+        icon = '↓';
+        text = 'not downloaded';
+        color = AppTheme.mediumGray;
+        break;
+      case ModelStatus.downloading:
+        icon = '↓';
+        text = 'downloading';
+        color = AppTheme.warmBrown;
+        break;
+      case ModelStatus.downloaded:
+        icon = '✓';
+        text = 'downloaded';
+        color = AppTheme.warmBrown;
+        break;
+      case ModelStatus.loaded:
+        icon = '●';
+        text = 'loaded';
+        color = AppTheme.warmBrown;
+        break;
+      case ModelStatus.error:
+        icon = '!';
+        text = 'error';
+        color = AppTheme.warningRed;
+        break;
+    }
+    
+    return Row(
+      children: [
+        Text(
+          icon,
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 14.0,
+            color: color,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 12.0,
+            color: color,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Delete button for downloaded models
+  Widget _buildDeleteButton(AIProvider aiProvider, String modelId) {
+    return TextButton(
+      onPressed: aiProvider.isGenerating ? null : () => _showDeleteConfirmation(aiProvider, modelId),
+      child: const Text(
+        'delete',
+        style: TextStyle(
+          fontFamily: 'JetBrainsMono',
+          fontSize: 12.0,
+          fontWeight: FontWeight.w400,
+          color: AppTheme.warningRed,
+        ),
       ),
     );
   }
 
-  Widget _buildStorageSection(AIProvider aiProvider) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  /// Download progress indicator
+  Widget _buildDownloadProgress(AIProvider aiProvider, String modelId) {
+    final progress = aiProvider.currentDownload;
+    if (progress == null || progress.percentage == 0) return const SizedBox.shrink();
+    
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        Row(
           children: [
-            Row(
-              children: [
-                const Icon(Icons.storage, color: AppTheme.warmBrown),
-                const SizedBox(width: 8),
-                Text(
-                  'Storage',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontFamily: 'JetBrainsMono',
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            FutureBuilder<String>(
-              future: aiProvider.getStorageUsageFormatted(),
-              builder: (context, snapshot) {
-                return ListTile(
-                  leading: const Icon(Icons.folder, color: AppTheme.mediumGray),
-                  title: const Text(
-                    'AI Models Storage',
-                    style: TextStyle(fontFamily: 'JetBrainsMono'),
-                  ),
-                  subtitle: Text(
-                    snapshot.data ?? 'Calculating...',
-                    style: const TextStyle(fontFamily: 'JetBrainsMono'),
-                  ),
-                  trailing: TextButton(
-                    onPressed: () => _showStorageManagement(aiProvider),
-                    child: const Text('Manage'),
-                  ),
-                );
-              },
-            ),
-            
-            ListTile(
-              leading: const Icon(Icons.info, color: AppTheme.mediumGray),
-              title: const Text(
-                'Downloaded Models',
-                style: TextStyle(fontFamily: 'JetBrainsMono'),
-              ),
-              subtitle: Text(
-                '${aiProvider.downloadedModelsCount} of ${aiProvider.availableModels.length} models',
-                style: const TextStyle(fontFamily: 'JetBrainsMono'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAboutSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.info, color: AppTheme.warmBrown),
-                const SizedBox(width: 8),
-                Text(
-                  'About',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontFamily: 'JetBrainsMono',
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            const ListTile(
-              leading: Icon(Icons.auto_stories, color: AppTheme.mediumGray),
-              title: Text(
-                'Isla Journal',
-                style: TextStyle(fontFamily: 'JetBrainsMono'),
-              ),
-              subtitle: Text(
-                'Your private, offline journaling companion',
-                style: TextStyle(fontFamily: 'JetBrainsMono'),
-              ),
-            ),
-            
-            const ListTile(
-              leading: Icon(Icons.privacy_tip, color: AppTheme.mediumGray),
-              title: Text(
-                'Privacy First',
-                style: TextStyle(fontFamily: 'JetBrainsMono'),
-              ),
-              subtitle: Text(
-                'All your data and AI processing stays on your device',
-                style: TextStyle(fontFamily: 'JetBrainsMono'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getModelDescription(AIModelInfo modelInfo) {
-    final sizeText = _formatBytes(modelInfo.fileSizeBytes);
-    final sizeDesc = switch (modelInfo.size) {
-      AIModelSize.small => 'Fast, efficient for basic features',
-      AIModelSize.medium => 'Balanced performance and quality',
-      AIModelSize.large => 'Best quality, requires more resources',
-    };
-    return '$sizeText • $sizeDesc';
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
-
-  void _showManualDownloadDialog(String modelId, AIModelInfo modelInfo) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Manual Download - ${modelInfo.name}',
-          style: const TextStyle(fontFamily: 'JetBrainsMono'),
-        ),
-        content: SizedBox(
-          width: 500,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'If automatic download fails, you can download manually:',
-                style: TextStyle(fontFamily: 'JetBrainsMono'),
-              ),
-              const SizedBox(height: 16),
-              
-              Container(
-                padding: const EdgeInsets.all(12),
+            Expanded(
+              child: Container(
+                height: 4,
                 decoration: BoxDecoration(
                   color: AppTheme.darkerCream,
-                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.warmBrown.withOpacity(0.3)),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '1. Download from:',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      modelInfo.downloadUrl,
-                      style: const TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12,
-                        color: AppTheme.mediumGray,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '2. Save as: ${modelInfo.fileName}',
-                      style: const TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      '3. Place in your models directory',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'The app will automatically detect it',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12,
-                        color: AppTheme.mediumGray,
-                      ),
-                    ),
-                  ],
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: progress.percentage / 100,
+                  child: Container(
+                    color: AppTheme.warmBrown,
+                  ),
                 ),
               ),
-            ],
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '${progress.percentage.toStringAsFixed(1)}%',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${_formatBytes(progress.downloaded)} / ${_formatBytes(progress.total)}',
+          style: const TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 10.0,
+            color: AppTheme.mediumGray,
           ),
         ),
-        actions: [
+      ],
+    );
+  }
+
+  /// Storage management section
+  Widget _buildStorageSection(AIProvider aiProvider) {
+    return Container(
+        padding: const EdgeInsets.all(16.0),
+      color: AppTheme.darkerCream,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          const Row(
+              children: [
+              Text(
+                '💾',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
+                  color: AppTheme.warmBrown,
+                ),
+              ),
+              SizedBox(width: 8),
+                Text(
+                'storage',
+                style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+            'downloaded models: ${aiProvider.downloadedModelsCount}',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+              ),
+            ),
+            const SizedBox(height: 8),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
+              onPressed: () => _showStorageManagement(aiProvider),
+            child: const Text(
+              'storage details',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 14.0,
+                fontWeight: FontWeight.w400,
+              ),
+              ),
+            ),
+          ],
       ),
     );
   }
 
-  void _showDeleteConfirmation(AIProvider aiProvider, String modelId, String modelName) {
+  /// About section
+  Widget _buildAboutSection() {
+    return Container(
+        padding: const EdgeInsets.all(16.0),
+      color: AppTheme.darkerCream,
+      child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+              Text(
+                'ℹ',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
+                  color: AppTheme.warmBrown,
+                ),
+              ),
+              SizedBox(width: 8),
+                Text(
+                'about',
+                style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          SizedBox(height: 16),
+          Text(
+            'isla journal',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+              fontSize: 16.0,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          SizedBox(height: 8),
+          Text(
+            'a private, ai-enhanced journaling app with local model support.',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+                color: AppTheme.mediumGray,
+              ),
+            ),
+          SizedBox(height: 16),
+          Text(
+            'version: 2.0.0 (phase 2)',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+                color: AppTheme.mediumGray,
+              ),
+            ),
+          ],
+      ),
+    );
+  }
+
+  /// Show delete confirmation dialog
+  void _showDeleteConfirmation(AIProvider aiProvider, String modelId) {
+    final modelInfo = aiProvider.availableModels[modelId];
+    if (modelInfo == null) return;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          'Delete Model',
-          style: const TextStyle(fontFamily: 'JetBrainsMono'),
+        title: const Text(
+          'delete model',
+          style: TextStyle(fontFamily: 'JetBrainsMono'),
         ),
-        content: Text(
-          'Are you sure you want to delete "$modelName"?\n\nThis will permanently remove the model file from your device.',
-          style: const TextStyle(fontFamily: 'JetBrainsMono'),
-        ),
+                 content: Text(
+          'delete ${modelInfo.name}?\n\nthis will free up storage space but you\'ll need to download it again to use it.',
+           style: const TextStyle(fontFamily: 'JetBrainsMono'),
+         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              aiProvider.deleteModel(modelId);
-              Navigator.of(context).pop();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+            child: const Text(
+              'cancel',
+              style: TextStyle(fontFamily: 'JetBrainsMono'),
             ),
-            child: const Text('Delete'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              aiProvider.deleteModel(modelId);
+            },
+            child: const Text(
+              'delete',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                color: AppTheme.warningRed,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
+  /// Show storage management dialog
   void _showStorageManagement(AIProvider aiProvider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text(
-          'Storage Management',
+          'storage management',
           style: TextStyle(fontFamily: 'JetBrainsMono'),
         ),
         content: const Text(
-          'Storage management features:\n\n• View detailed storage usage\n• Clean up temporary files\n• Manage model cache\n\nThese features will be available in a future update.',
+          'storage features:\n\n• view detailed storage usage\n• clean up temporary files\n• manage model cache\n\nthese features will be available in a future update.',
           style: TextStyle(fontFamily: 'JetBrainsMono'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            child: const Text(
+              'close',
+              style: TextStyle(fontFamily: 'JetBrainsMono'),
+            ),
           ),
         ],
       ),
     );
+  }
+
+  /// Format bytes to human readable format
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '${bytes}b';
+    if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)}kb';
+    if (bytes < 1073741824) return '${(bytes / 1048576).toStringAsFixed(1)}mb';
+    return '${(bytes / 1073741824).toStringAsFixed(1)}gb';
   }
 } 

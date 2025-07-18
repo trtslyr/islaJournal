@@ -15,6 +15,7 @@ class JournalProvider with ChangeNotifier {
   String? _selectedFileId;
   bool _isLoading = false;
   String _searchQuery = '';
+  Set<String> _unsavedFileIds = {};
 
   // Getters
   List<JournalFolder> get folders => _folders;
@@ -25,6 +26,9 @@ class JournalProvider with ChangeNotifier {
   String? get selectedFileId => _selectedFileId;
   bool get isLoading => _isLoading;
   String get searchQuery => _searchQuery;
+  
+  // Check if a file has unsaved changes
+  bool hasUnsavedChanges(String fileId) => _unsavedFileIds.contains(fileId);
 
   // Get files in current folder
   List<JournalFile> get currentFolderFiles {
@@ -43,6 +47,7 @@ class JournalProvider with ChangeNotifier {
 
   // Initialize provider
   Future<void> initialize() async {
+    await _dbService.ensureProfileFileExists(); // Ensure profile file exists
     await loadFolders();
     await loadFiles();
     await loadRecentFiles();
@@ -151,10 +156,23 @@ class JournalProvider with ChangeNotifier {
   Future<void> updateFile(JournalFile file) async {
     try {
       await _dbService.updateFile(file);
+      _unsavedFileIds.remove(file.id); // File is now saved
       await loadFiles();
     } catch (e) {
       debugPrint('Error updating file: $e');
     }
+  }
+
+  // Mark a file as having unsaved changes
+  void markFileAsUnsaved(String fileId) {
+    _unsavedFileIds.add(fileId);
+    notifyListeners();
+  }
+
+  // Mark a file as saved
+  void markFileAsSaved(String fileId) {
+    _unsavedFileIds.remove(fileId);
+    notifyListeners();
   }
 
   Future<void> deleteFile(String id) async {
@@ -225,6 +243,21 @@ class JournalProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('Error loading recent files: $e');
     }
+  }
+
+  /// Get the special profile file for AI context
+  Future<JournalFile?> getProfileFile() async {
+    try {
+      return await _dbService.getProfileFile();
+    } catch (e) {
+      debugPrint('Error getting profile file: $e');
+      return null;
+    }
+  }
+
+  /// Check if a file is the special profile file
+  bool isProfileFile(String fileId) {
+    return fileId == 'profile_special_file';
   }
 
   // Utility methods

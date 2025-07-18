@@ -89,7 +89,7 @@ lib/
 
 - **Framework**: Flutter
 - **Database**: SQLite with FTS5 search
-- **Rich Text**: Flutter Quill
+- **Rich Text**: Simple text editor
 - **State Management**: Provider
 - **Storage**: Local file system + SQLite
 - **Typography**: JetBrains Mono font

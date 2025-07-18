@@ -25,30 +25,32 @@ class _SearchWidgetState extends State<SearchWidget> {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.darkerCream,
-        borderRadius: BorderRadius.circular(8.0),
         border: Border.all(
-          color: AppTheme.warmBrown.withOpacity(0.2),
+          color: AppTheme.warmBrown.withOpacity(0.3),
         ),
       ),
       child: TextField(
         controller: widget.controller,
+        autofocus: widget.autofocus,
         decoration: InputDecoration(
-          hintText: widget.hintText ?? 'Search your journal entries...',
+          hintText: widget.hintText ?? 'search entries...',
           hintStyle: const TextStyle(
             fontFamily: 'JetBrainsMono',
             color: AppTheme.mediumGray,
-            fontSize: 16.0,
+            fontSize: 14.0,
             fontWeight: FontWeight.w400,
           ),
-          prefixIcon: Icon(
+          prefixIcon: const Icon(
             Icons.search,
             color: AppTheme.warmBrown,
+            size: 18,
           ),
           suffixIcon: widget.controller.text.isNotEmpty
               ? IconButton(
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.clear,
                     color: AppTheme.mediumGray,
+                    size: 18,
                   ),
                   onPressed: () {
                     widget.controller.clear();
@@ -59,14 +61,14 @@ class _SearchWidgetState extends State<SearchWidget> {
               : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16.0,
+            horizontal: 12.0,
             vertical: 12.0,
           ),
         ),
         style: const TextStyle(
           fontFamily: 'JetBrainsMono',
           color: AppTheme.darkText,
-          fontSize: 16.0,
+          fontSize: 14.0,
           fontWeight: FontWeight.w400,
         ),
         onChanged: (value) {
@@ -98,46 +100,30 @@ class SearchResultsWidget extends StatelessWidget {
     if (isLoading) {
       return const Center(
         child: Padding(
-          padding: EdgeInsets.all(32.0),
-          child: CircularProgressIndicator(),
+          padding: EdgeInsets.all(24.0),
+          child: Text(
+            'searching...',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+              color: AppTheme.mediumGray,
+            ),
+          ),
         ),
       );
     }
 
     if (results.isEmpty) {
-      return Center(
+      return const Center(
         child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.search_off,
-                size: 48,
-                color: AppTheme.mediumGray,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'No results found',
-                style: const TextStyle(
+          padding: EdgeInsets.all(24.0),
+          child: Text(
+            'no results',
+            style: TextStyle(
                   fontFamily: 'JetBrainsMono',
-                  fontSize: 18.0,
-                  fontWeight: FontWeight.w600,
+              fontSize: 14.0,
                   color: AppTheme.mediumGray,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Try different keywords or check your spelling',
-                style: const TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 16.0,
-                  fontWeight: FontWeight.w400,
-                  color: AppTheme.mediumGray,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
           ),
         ),
       );
@@ -147,18 +133,23 @@ class SearchResultsWidget extends StatelessWidget {
       itemCount: results.length,
       itemBuilder: (context, index) {
         final result = results[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 1.0),
+          color: AppTheme.darkerCream,
           child: ListTile(
-            leading: Icon(
-              Icons.description,
+            leading: const Text(
+              '•',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 16.0,
               color: AppTheme.warmBrown,
+              ),
             ),
             title: Text(
               result.title,
               style: const TextStyle(
                 fontFamily: 'JetBrainsMono',
-                fontSize: 18.0,
+                fontSize: 14.0,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.darkText,
               ),
@@ -171,7 +162,7 @@ class SearchResultsWidget extends StatelessWidget {
                     result.snippet,
                     style: const TextStyle(
                       fontFamily: 'JetBrainsMono',
-                      fontSize: 16.0,
+                      fontSize: 12.0,
                       fontWeight: FontWeight.w400,
                       color: AppTheme.darkText,
                     ),
@@ -180,10 +171,10 @@ class SearchResultsWidget extends StatelessWidget {
                   ),
                 const SizedBox(height: 4),
                 Text(
-                  '${result.wordCount} words • ${result.folderPath}',
+                  '${result.wordCount}w • ${result.folderPath}',
                   style: const TextStyle(
                     fontFamily: 'JetBrainsMono',
-                    fontSize: 12.8,
+                    fontSize: 10.0,
                     fontWeight: FontWeight.w400,
                     color: AppTheme.mediumGray,
                   ),
@@ -194,7 +185,7 @@ class SearchResultsWidget extends StatelessWidget {
               result.lastModified,
               style: const TextStyle(
                 fontFamily: 'JetBrainsMono',
-                fontSize: 12.8,
+                fontSize: 10.0,
                 fontWeight: FontWeight.w400,
                 color: AppTheme.mediumGray,
               ),
@@ -246,31 +237,32 @@ class SearchBar extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.darkerCream,
-        borderRadius: BorderRadius.circular(8.0),
         border: Border.all(
-          color: AppTheme.warmBrown.withOpacity(0.2),
+          color: AppTheme.warmBrown.withOpacity(0.3),
         ),
       ),
       child: TextField(
         controller: controller,
         autofocus: autofocus,
         decoration: InputDecoration(
-          hintText: hintText ?? 'Search...',
+          hintText: hintText ?? 'search...',
           hintStyle: const TextStyle(
             fontFamily: 'JetBrainsMono',
             color: AppTheme.mediumGray,
-            fontSize: 16.0,
+            fontSize: 14.0,
             fontWeight: FontWeight.w400,
           ),
-          prefixIcon: Icon(
+          prefixIcon: const Icon(
             Icons.search,
             color: AppTheme.warmBrown,
+            size: 18,
           ),
           suffixIcon: controller.text.isNotEmpty
               ? IconButton(
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.clear,
                     color: AppTheme.mediumGray,
+                    size: 18,
                   ),
                   onPressed: () {
                     controller.clear();
@@ -281,14 +273,14 @@ class SearchBar extends StatelessWidget {
               : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16.0,
+            horizontal: 12.0,
             vertical: 12.0,
           ),
         ),
         style: const TextStyle(
           fontFamily: 'JetBrainsMono',
           color: AppTheme.darkText,
-          fontSize: 16.0,
+          fontSize: 14.0,
           fontWeight: FontWeight.w400,
         ),
         onChanged: (value) {
