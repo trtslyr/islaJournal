@@ -8,6 +8,7 @@ class JournalFolder {
   final DateTime updatedAt;
   final List<String> childFolderIds;
   final List<String> fileIds;
+  final bool isPinned;  // Whether this folder is pinned to the top
 
   JournalFolder({
     String? id,
@@ -17,6 +18,7 @@ class JournalFolder {
     DateTime? updatedAt,
     List<String>? childFolderIds,
     List<String>? fileIds,
+    this.isPinned = false,  // Add default value
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
@@ -29,6 +31,7 @@ class JournalFolder {
     DateTime? updatedAt,
     List<String>? childFolderIds,
     List<String>? fileIds,
+    bool? isPinned,  // Add isPinned to copyWith
   }) {
     return JournalFolder(
       id: id,
@@ -38,6 +41,7 @@ class JournalFolder {
       updatedAt: updatedAt ?? DateTime.now(),
       childFolderIds: childFolderIds ?? this.childFolderIds,
       fileIds: fileIds ?? this.fileIds,
+      isPinned: isPinned ?? this.isPinned,
     );
   }
 
@@ -48,6 +52,7 @@ class JournalFolder {
       'parent_id': parentId,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'is_pinned': isPinned ? 1 : 0,  // Add isPinned to database map
     };
   }
 
@@ -58,6 +63,7 @@ class JournalFolder {
       parentId: map['parent_id'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
+      isPinned: (map['is_pinned'] as int? ?? 0) == 1,  // Add isPinned from database map
     );
   }
 

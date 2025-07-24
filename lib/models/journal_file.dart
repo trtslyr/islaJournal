@@ -10,6 +10,10 @@ class JournalFile {
   final DateTime? lastOpened;
   final int wordCount;
   final String content;
+  final DateTime? journalDate;  // Date extracted from content/filename for chronological sorting
+  final bool isPinned;  // Whether this file is pinned to the top
+  final String? summary;  // AI-generated summary for token-efficient context
+  final String? keywords; // Comma-separated keywords for efficient retrieval
 
   JournalFile({
     String? id,
@@ -21,6 +25,10 @@ class JournalFile {
     this.lastOpened,
     this.wordCount = 0,
     this.content = '',
+    this.journalDate,
+    this.isPinned = false,  // Add default value
+    this.summary,
+    this.keywords,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
@@ -33,6 +41,10 @@ class JournalFile {
     DateTime? lastOpened,
     int? wordCount,
     String? content,
+    DateTime? journalDate,
+    bool? isPinned,  // Add isPinned to copyWith
+    String? summary,
+    String? keywords,
   }) {
     return JournalFile(
       id: id,
@@ -44,6 +56,10 @@ class JournalFile {
       lastOpened: lastOpened ?? this.lastOpened,
       wordCount: wordCount ?? this.wordCount,
       content: content ?? this.content,
+      journalDate: journalDate ?? this.journalDate,
+      isPinned: isPinned ?? this.isPinned,
+      summary: summary ?? this.summary,
+      keywords: keywords ?? this.keywords,
     );
   }
 
@@ -57,6 +73,10 @@ class JournalFile {
       'updated_at': updatedAt.toIso8601String(),
       'last_opened': lastOpened?.toIso8601String(),
       'word_count': wordCount,
+      'journal_date': journalDate?.toIso8601String(),
+      'is_pinned': isPinned ? 1 : 0,  // Add isPinned to database map
+      'summary': summary,
+      'keywords': keywords,
     };
   }
 
@@ -72,6 +92,12 @@ class JournalFile {
           ? DateTime.parse(map['last_opened'] as String)
           : null,
       wordCount: map['word_count'] as int? ?? 0,
+      journalDate: map['journal_date'] != null
+          ? DateTime.parse(map['journal_date'] as String)
+          : null,
+      isPinned: (map['is_pinned'] as int? ?? 0) == 1,  // Add isPinned from database map
+      summary: map['summary'] as String?,
+      keywords: map['keywords'] as String?,
     );
   }
 
@@ -96,7 +122,7 @@ class JournalFile {
 
   @override
   String toString() {
-    return 'JournalFile(id: $id, name: $name, folderId: $folderId, filePath: $filePath, createdAt: $createdAt, updatedAt: $updatedAt, wordCount: $wordCount)';
+    return 'JournalFile(id: $id, name: $name, folderId: $folderId, filePath: $filePath, createdAt: $createdAt, updatedAt: $updatedAt, wordCount: $wordCount, journalDate: $journalDate)';
   }
 
   @override

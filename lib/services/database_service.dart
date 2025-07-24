@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/journal_file.dart';
 import '../models/journal_folder.dart';
+import '../services/date_parsing_service.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -25,7 +28,7 @@ class DatabaseService {
     
     return await openDatabase(
       path,
-      version: 5, // Increment version for context settings
+      version: 10, // Increment version to add summary and keywords fields
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -56,6 +59,9 @@ class DatabaseService {
         last_opened TEXT,
         word_count INTEGER DEFAULT 0,
         embedding TEXT,
+        journal_date TEXT,
+        summary TEXT,
+        keywords TEXT,
         FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE SET NULL
       )
     ''');
@@ -96,23 +102,54 @@ class DatabaseService {
       )
     ''');
 
-    // Create default folders
-    await _createDefaultFolders(db);
+    // Create import functionality tables
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS file_embeddings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        embedding BLOB NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
+      )
+    ''');
+    
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS file_insights (
+        file_id TEXT PRIMARY KEY,
+        word_count INTEGER,
+        tags TEXT,
+        date TEXT,
+        has_personal_content INTEGER,
+        has_work_content INTEGER,
+        sentiment TEXT,
+        original_path TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
+      )
+    ''');
+    
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS import_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        original_path TEXT NOT NULL,
+        imported_file_id TEXT NOT NULL,
+        imported_at TEXT NOT NULL,
+        FOREIGN KEY (imported_file_id) REFERENCES files (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Don't create default folders - only create year folders as needed during import
+    // await _createDefaultFolders(db);
+    
+    // Create special profile file
+    await _createProfileFile(db);
   }
 
   Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Add embedding column to existing files table
-      await db.execute('ALTER TABLE files ADD COLUMN embedding TEXT');
-      print('Database upgraded: Added embedding column');
-    }
-    if (oldVersion < 3) {
-      // Version 3 upgrade: user profile table was added but is now deprecated
-      // No longer needed as profile uses file system instead
-      print('Database upgraded: Profile now uses file system');
-    }
-    if (oldVersion < 4) {
-      // Version 4 upgrade: Add conversations tables
+      // Version 2 upgrade: Add conversations table
       await db.execute('''
         CREATE TABLE conversations (
           id TEXT PRIMARY KEY,
@@ -135,12 +172,463 @@ class DatabaseService {
         )
       ''');
       
-      print('Database upgraded: Added conversations tables');
+      print('Database upgraded: Added conversations and messages tables');
     }
-    if (oldVersion < 5) {
-      // Version 5 upgrade: Add context settings to conversations
-      await db.execute('ALTER TABLE conversations ADD COLUMN context_settings TEXT DEFAULT NULL');
-      print('Database upgraded: Added context settings to conversations');
+    
+    if (oldVersion < 4) {
+      // Version 4 upgrade: Add context settings to conversations
+      try {
+        await db.execute('ALTER TABLE conversations ADD COLUMN context_settings TEXT DEFAULT NULL');
+        print('Database upgraded: Added context settings to conversations');
+      } catch (e) {
+        print('Database upgrade: context_settings column already exists');
+      }
+    }
+    if (oldVersion < 6) {
+      // Version 6 upgrade: Add import functionality tables
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS file_embeddings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          file_id TEXT NOT NULL,
+          chunk_index INTEGER NOT NULL,
+          content TEXT NOT NULL,
+          embedding BLOB NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
+        )
+      ''');
+      
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS file_insights (
+          file_id TEXT PRIMARY KEY,
+          word_count INTEGER,
+          tags TEXT,
+          date TEXT,
+          has_personal_content INTEGER,
+          has_work_content INTEGER,
+          sentiment TEXT,
+          original_path TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
+        )
+      ''');
+      
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS import_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          original_path TEXT NOT NULL,
+          file_id TEXT NOT NULL,
+          imported_at TEXT NOT NULL,
+          FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
+        )
+      ''');
+      
+      print('Database upgraded: Added import functionality tables');
+    }
+    
+    if (oldVersion < 7) {
+      // Version 7 upgrade: Fix file_embeddings table schema
+      try {
+        // Drop the existing table if it exists with wrong schema
+        await db.execute('DROP TABLE IF EXISTS file_embeddings');
+        
+        // Recreate with correct schema
+        await db.execute('''
+          CREATE TABLE file_embeddings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_id TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            embedding BLOB NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
+          )
+        ''');
+        
+        print('Database upgraded: Fixed file_embeddings table schema');
+      } catch (e) {
+        print('Error fixing file_embeddings table: $e');
+      }
+    }
+    
+    if (oldVersion < 8) {
+      // Version 8 upgrade: Add journal_date field for chronological sorting
+      try {
+        await db.execute('ALTER TABLE files ADD COLUMN journal_date TEXT');
+        print('Database upgraded: Added journal_date field for chronological sorting');
+        
+        // Backfill journal dates for existing files
+        await _backfillJournalDates(db);
+        print('Database upgraded: Backfilled journal dates for existing files');
+      } catch (e) {
+        print('Error adding journal_date field: $e');
+      }
+    }
+    
+    if (oldVersion < 9) {
+      // Version 9 upgrade: Ensure journal_date field exists and backfill dates
+      try {
+        // Check if journal_date column exists
+        final result = await db.rawQuery("PRAGMA table_info(files)");
+        final hasJournalDate = result.any((column) => column['name'] == 'journal_date');
+        
+        if (!hasJournalDate) {
+          await db.execute('ALTER TABLE files ADD COLUMN journal_date TEXT');
+          print('Database upgraded v9: Added journal_date field');
+        } else {
+          print('Database upgraded v9: journal_date field already exists');
+        }
+        
+        // Always run backfill to ensure existing files have dates
+        await _backfillJournalDates(db);
+        print('Database upgraded v9: Backfilled journal dates for existing files');
+      } catch (e) {
+        print('Error in v9 upgrade: $e');
+      }
+    }
+
+    if (oldVersion < 10) {
+      // Version 10 upgrade: Add summary and keywords fields for optimized context
+      try {
+        final result = await db.rawQuery("PRAGMA table_info(files)");
+        final hasSummary = result.any((column) => column['name'] == 'summary');
+        final hasKeywords = result.any((column) => column['name'] == 'keywords');
+        
+        if (!hasSummary) {
+          await db.execute('ALTER TABLE files ADD COLUMN summary TEXT');
+          print('Database upgraded v10: Added summary field');
+        }
+        
+        if (!hasKeywords) {
+          await db.execute('ALTER TABLE files ADD COLUMN keywords TEXT');
+          print('Database upgraded v10: Added keywords field');
+        }
+        
+        print('Database upgraded v10: Ready for optimized context system');
+      } catch (e) {
+        print('Error in v10 upgrade: $e');
+      }
+    }
+  }
+
+  /// Backfill journal dates for existing files that don't have them
+  Future<void> _backfillJournalDates(Database db) async {
+    try {
+      print('🔄 Starting journal date backfill for existing files...');
+      
+      // Get all files that don't have journal_date set
+      final files = await db.query(
+        'files',
+        where: 'journal_date IS NULL OR journal_date = ""',
+      );
+      
+      print('📋 Found ${files.length} files without journal dates');
+      
+      for (final fileMap in files) {
+        final fileId = fileMap['id'] as String;
+        final fileName = fileMap['name'] as String;
+        final filePath = fileMap['file_path'] as String?;
+        
+        print('  📅 Processing file: $fileName');
+        
+        String? content;
+        try {
+          // Try to read file content
+          if (filePath != null && filePath.isNotEmpty) {
+            final file = File(filePath);
+            if (await file.exists()) {
+              content = await file.readAsString();
+            }
+          }
+        } catch (e) {
+          print('    ⚠️ Could not read file content: $e');
+        }
+        
+        // Extract date using our universal date parsing service
+        final extractedDate = DateParsingService.extractDate(
+          filename: fileName,
+          frontMatter: content != null ? _extractFrontMatter(content) : null,
+          content: content ?? '',
+        );
+        
+        if (extractedDate != null) {
+          // Update the file with the extracted date
+          await db.update(
+            'files',
+            {'journal_date': extractedDate.toIso8601String()},
+            where: 'id = ?',
+            whereArgs: [fileId],
+          );
+          print('    ✅ Set journal date: $extractedDate');
+        } else {
+          print('    ⚠️ No date found, keeping null');
+        }
+      }
+      
+      print('🎉 Journal date backfill completed');
+    } catch (e) {
+      print('🔴 Error during journal date backfill: $e');
+    }
+  }
+  
+  /// Extract YAML front matter from content for date parsing
+  String? _extractFrontMatter(String content) {
+    if (content.startsWith('---')) {
+      final endIndex = content.indexOf('---', 3);
+      if (endIndex != -1) {
+        return content.substring(3, endIndex);
+      }
+    }
+    return null;
+  }
+
+  /// Manually trigger journal date backfill for all files (can be called from UI)
+  Future<void> refreshJournalDatesForAllFiles() async {
+    final db = await database;
+    
+    print('🔄 Manual refresh: Starting journal date update for ALL files...');
+    
+    // Get all files (not just ones without dates, to allow re-parsing)
+    final files = await db.query('files');
+    
+    print('📋 Refreshing journal dates for ${files.length} files');
+    
+    for (final fileMap in files) {
+      final fileId = fileMap['id'] as String;
+      final fileName = fileMap['name'] as String;
+      final filePath = fileMap['file_path'] as String?;
+      
+      print('  📅 Processing file: $fileName');
+      
+      String? content;
+      try {
+        // Try to read file content
+        if (filePath != null && filePath.isNotEmpty) {
+          final file = File(filePath);
+          if (await file.exists()) {
+            content = await file.readAsString();
+          }
+        }
+      } catch (e) {
+        print('    ⚠️ Could not read file content: $e');
+      }
+      
+      // Extract date using our universal date parsing service
+      final extractedDate = DateParsingService.extractDate(
+        filename: fileName,
+        frontMatter: content != null ? _extractFrontMatter(content) : null,
+        content: content ?? '',
+      );
+      
+      if (extractedDate != null) {
+        // Update the file with the extracted date
+        await db.update(
+          'files',
+          {'journal_date': extractedDate.toIso8601String()},
+          where: 'id = ?',
+          whereArgs: [fileId],
+        );
+        print('    ✅ Set journal date: $extractedDate');
+      } else {
+        // Explicitly set journal_date to null when no date is found
+        await db.update(
+          'files',
+          {'journal_date': null},
+          where: 'id = ?',
+          whereArgs: [fileId],
+        );
+        print('    ⚠️ No date found, set journal_date to null');
+      }
+    }
+    
+    print('🎉 Manual journal date refresh completed');
+  }
+
+  /// Delete all user data - files, conversations, and clear file system
+  /// Preserves the profile file but resets its content to default
+  Future<void> deleteAllData() async {
+    try {
+      print('🗑️ Starting complete data deletion...');
+      
+      final db = await database;
+      const profileId = 'profile_special_file';
+      
+      // Get all file paths before deleting from database, EXCLUDING profile file
+      final files = await db.query('files');
+      final filePaths = files
+          .where((file) => file['id'] != profileId) // Skip profile file
+          .map((file) => file['file_path'] as String?)
+          .where((path) => path != null && path.isNotEmpty)
+          .cast<String>()
+          .toList();
+      
+      print('📁 Found ${filePaths.length} files to delete from filesystem (excluding profile)');
+      
+      // Delete physical files from filesystem (EXCLUDING profile file)
+      for (final filePath in filePaths) {
+        try {
+          final file = File(filePath);
+          if (await file.exists()) {
+            await file.delete();
+            print('  🗑️ Deleted file: $filePath');
+          }
+        } catch (e) {
+          print('  ⚠️ Error deleting file $filePath: $e');
+        }
+      }
+      
+      // Don't delete the entire directory, just clean up the contents we deleted
+      print('📁 Preserved journal_files directory and profile file');
+      
+      // Clear all database tables EXCEPT preserve profile file
+      await db.transaction((txn) async {
+        // Delete in order to respect foreign key constraints
+        await txn.delete('conversation_messages');
+        await txn.delete('conversations');
+        await txn.delete('file_embeddings');
+        await txn.delete('import_history');
+        await txn.delete('file_insights');
+        
+        // Delete all files EXCEPT the profile file
+        await txn.delete('files', where: 'id != ?', whereArgs: [profileId]);
+        
+        // Delete all FTS entries EXCEPT the profile file
+        await txn.delete('files_fts', where: 'file_id != ?', whereArgs: [profileId]);
+        
+        await txn.delete('folders');
+        
+        print('🗃️ Cleared all database tables (preserved profile file)');
+      });
+      
+      // Reset profile file content to default template
+      await _resetProfileFileContent(db);
+      
+      print('📁 Skipped recreating default folders');
+      
+      print('✅ Complete data deletion finished successfully');
+    } catch (e) {
+      print('🔴 Error during complete data deletion: $e');
+      rethrow;
+    }
+  }
+
+  /// Reset the profile file content to default template
+  Future<void> _resetProfileFileContent(Database db) async {
+    try {
+      const profileId = 'profile_special_file';
+      final defaultProfileContent = '''# [Your Name Here]
+
+*This becomes your display name in the file tree*
+
+## Mission Statement
+*What is your core purpose? Your "why"?*
+
+Write your personal mission statement here...
+
+---
+
+## My Roles
+*What are the key roles you play in life? (4-8 roles)*
+
+• 
+• 
+• 
+• 
+• 
+• 
+
+---
+
+## Core Values
+*What principles guide your decisions?*
+
+• 
+• 
+• 
+• 
+
+---
+
+## What Drives Me  
+*What energizes and motivates you?*
+
+• 
+• 
+• 
+• 
+
+---
+
+## 5-Year Vision
+*Where do you see yourself in 5 years?*
+
+Write your long-term vision here...
+
+## This Year's Focus
+*What are your main objectives for this year?*
+
+• 
+• 
+• 
+
+## This Month
+*What specific goals are you working on right now?*
+
+• 
+• 
+• 
+
+---
+
+*This information helps the AI understand your context and provide more personalized responses.*
+''';
+
+      // Get current profile file to get its file path
+      final profileResult = await db.query(
+        'files',
+        where: 'id = ?',
+        whereArgs: [profileId],
+      );
+
+      if (profileResult.isNotEmpty) {
+        final profileData = profileResult.first;
+        final filePath = profileData['file_path'] as String;
+        
+        // Update the physical file with default content
+        final file = File(filePath);
+        await file.writeAsString(defaultProfileContent);
+        
+        // Update database with default content and reset word count
+        await db.update(
+          'files',
+          {
+            'word_count': JournalFile.calculateWordCount(defaultProfileContent),
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [profileId],
+        );
+        
+        // Update search index
+        await db.update(
+          'files_fts',
+          {
+            'title': 'Profile',
+            'content': defaultProfileContent,
+          },
+          where: 'file_id = ?',
+          whereArgs: [profileId],
+        );
+        
+        print('✅ Reset profile file content to default template');
+      } else {
+        // Profile file doesn't exist, recreate it
+        await _createProfileFile(db);
+        print('✅ Recreated profile file with default content');
+      }
+    } catch (e) {
+      print('⚠️ Error resetting profile file content: $e');
+      // Don't throw error - just log it so data deletion can continue
     }
   }
 
@@ -165,15 +653,71 @@ class DatabaseService {
 
   Future<void> _createProfileFile(Database db) async {
     final documentsDir = await getApplicationDocumentsDirectory();
-    final profileContent = '''# Profile
+    final profileContent = '''# [Your Name Here]
 
-Who are you? What are your goals, mission, focus areas?
+*This becomes your display name in the file tree*
 
-This information helps the AI understand your context and provide more personalized responses.
+## Mission Statement
+*What is your core purpose? Your "why"?*
+
+Write your personal mission statement here...
 
 ---
 
-<!-- Edit this file to add your personal information -->
+## My Roles
+*What are the key roles you play in life? (4-8 roles)*
+
+• 
+• 
+• 
+• 
+• 
+• 
+
+---
+
+## Core Values
+*What principles guide your decisions?*
+
+• 
+• 
+• 
+• 
+
+---
+
+## What Drives Me  
+*What energizes and motivates you?*
+
+• 
+• 
+• 
+• 
+
+---
+
+## 5-Year Vision
+*Where do you see yourself in 5 years?*
+
+Write your long-term vision here...
+
+## This Year's Focus
+*What are your main objectives for this year?*
+
+• 
+• 
+• 
+
+## This Month
+*What specific goals are you working on right now?*
+
+• 
+• 
+• 
+
+---
+
+*This information helps the AI understand your context and provide more personalized responses.*
 ''';
     
     // Create profile file with specific ID
@@ -282,9 +826,11 @@ This information helps the AI understand your context and provide more personali
   }
 
   // File operations
-  Future<String> createFile(String name, String content, {String? folderId}) async {
+  Future<String> createFile(String name, String content, {String? folderId, DateTime? journalDate}) async {
     final db = await database;
     final documentsDir = await getApplicationDocumentsDirectory();
+    
+    debugPrint('🔄 DatabaseService: Creating file "$name" in folder: ${folderId ?? "root"}');
     
     // Create database entry first to get the ID
     final journalFile = JournalFile(
@@ -293,24 +839,29 @@ This information helps the AI understand your context and provide more personali
       filePath: '', // Will be set after creating the path
       content: content,
       wordCount: JournalFile.calculateWordCount(content),
+      journalDate: journalDate,
     );
     
     final filePath = join(documentsDir.path, 'journal_files', '${journalFile.id}.md');
+    debugPrint('📁 File path: $filePath');
     
     // Ensure the directory exists
     final fileDir = Directory(dirname(filePath));
     if (!await fileDir.exists()) {
       await fileDir.create(recursive: true);
+      debugPrint('📁 Created directory: ${fileDir.path}');
     }
     
     // Write content to file
     final file = File(filePath);
     await file.writeAsString(content);
+    debugPrint('💾 Written content to file: ${content.length} characters');
     
     // Update the file path in the journal file
     final updatedJournalFile = journalFile.copyWith(filePath: filePath);
     
     await db.insert('files', updatedJournalFile.toMap());
+    debugPrint('📊 Inserted file into database');
     
     // Update search index
     await db.insert('files_fts', {
@@ -318,8 +869,9 @@ This information helps the AI understand your context and provide more personali
       'title': name,
       'content': content,
     });
+    debugPrint('🔍 Updated search index');
     
-
+    debugPrint('✅ DatabaseService: File created successfully with ID: ${updatedJournalFile.id}');
     
     return updatedJournalFile.id;
   }
@@ -329,18 +881,16 @@ This information helps the AI understand your context and provide more personali
     final List<Map<String, dynamic>> maps;
     
     if (folderId == null) {
-      // Get all files
+      // Get all files, let file tree handle sorting
       maps = await db.query(
         'files',
-        orderBy: 'updated_at DESC',
       );
     } else {
-      // Get files in specific folder
+      // Get files in specific folder, let file tree handle sorting
       maps = await db.query(
         'files',
         where: 'folder_id = ?',
         whereArgs: [folderId],
-        orderBy: 'updated_at DESC',
       );
     }
     
@@ -387,8 +937,75 @@ This information helps the AI understand your context and provide more personali
       where: 'file_id = ?',
       whereArgs: [file.id],
     );
-    
+  }
 
+  /// Update summary and keywords for a file (optimized context system)
+  Future<void> updateFileSummary(String fileId, String? summary, String? keywords) async {
+    final db = await database;
+    await db.update(
+      'files',
+      {
+        'summary': summary,
+        'keywords': keywords,
+      },
+      where: 'id = ?',
+      whereArgs: [fileId],
+    );
+  }
+
+  /// Clear all summaries from all files (for regeneration)
+  Future<void> clearAllSummaries() async {
+    final db = await database;
+    await db.update(
+      'files',
+      {
+        'summary': null,
+        'keywords': null,
+      },
+    );
+    print('   Cleared summaries for all files');
+  }
+
+  /// Get files that need summaries (substantial content but no summary yet)
+  Future<List<JournalFile>> getFilesNeedingSummary({int minWordCount = 50}) async {
+    final db = await database;
+    final maps = await db.query(
+      'files',
+      where: 'word_count >= ? AND (summary IS NULL OR summary = "")',
+      whereArgs: [minWordCount],
+      orderBy: 'updated_at DESC',
+    );
+    
+    final files = <JournalFile>[];
+    for (final map in maps) {
+      final file = JournalFile.fromMap(map);
+      // Read content from file system
+      final fileContent = await File(file.filePath).readAsString();
+      files.add(file.copyWith(content: fileContent));
+    }
+    
+    return files;
+  }
+
+  /// Get all files before a specific date (for smart summary selection)
+  Future<List<JournalFile>> getFilesBeforeDate(DateTime beforeDate) async {
+    final db = await database;
+    final maps = await db.query(
+      'files',
+      where: 'updated_at < ?',
+      whereArgs: [beforeDate.toIso8601String()],
+      orderBy: 'updated_at DESC',
+    );
+    
+    final files = <JournalFile>[];
+    for (final map in maps) {
+      final file = JournalFile.fromMap(map);
+      // Read content from file system
+      final fileContent = await File(file.filePath).readAsString();
+      files.add(file.copyWith(content: fileContent));
+    }
+    
+    return files;
   }
 
 
@@ -773,5 +1390,108 @@ This information helps the AI understand your context and provide more personali
       final db = await database;
       await _createProfileFile(db);
     }
+  }
+
+  /// Reset only the profile file content to the new template (keeps all other data)
+  Future<void> resetProfileToNewTemplate() async {
+    try {
+      final db = await database;
+      await _resetProfileFileContent(db);
+      print('✅ Profile file has been reset to the new introspection template');
+    } catch (e) {
+      print('❌ Error resetting profile file: $e');
+      rethrow;
+    }
+  }
+
+  // Import functionality methods
+  Future<void> trackImport(String originalPath, String fileId) async {
+    final db = await database;
+    await db.insert('import_history', {
+      'original_path': originalPath,
+      'imported_file_id': fileId,
+      'imported_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<bool> isImportedFile(String fileId) async {
+    final db = await database;
+    final result = await db.query(
+      'import_history',
+      where: 'imported_file_id = ?',
+      whereArgs: [fileId],
+    );
+    return result.isNotEmpty;
+  }
+
+  Future<void> storeChunkedEmbedding(String fileId, int chunkIndex, String content, List<double> embedding) async {
+    final db = await database;
+    await db.insert('file_embeddings', {
+      'file_id': fileId,
+      'chunk_index': chunkIndex,
+      'content': content,
+      'embedding': Float32List.fromList(embedding).buffer.asUint8List(),
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> storeInsights(String fileId, Map<String, dynamic> insights) async {
+    final db = await database;
+    await db.insert('file_insights', {
+      'file_id': fileId,
+      'word_count': insights['word_count'],
+      'tags': insights['tags'] is List ? (insights['tags'] as List).join(',') : '',
+      'date': insights['date'],
+      'has_personal_content': insights['has_personal_content'] ? 1 : 0,
+      'has_work_content': insights['has_work_content'] ? 1 : 0,
+      'sentiment': insights['sentiment'],
+      'original_path': insights['original_path'],
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<Map<String, dynamic>> getFileInsights(String fileId) async {
+    final db = await database;
+    final results = await db.query(
+      'file_insights',
+      where: 'file_id = ?',
+      whereArgs: [fileId],
+    );
+    
+    if (results.isNotEmpty) {
+      return results.first;
+    }
+    
+    return {};
+  }
+
+  Future<List<Map<String, dynamic>>> getFileEmbeddings(String fileId) async {
+    final db = await database;
+    return await db.query(
+      'file_embeddings',
+      where: 'file_id = ?',
+      whereArgs: [fileId],
+      orderBy: 'chunk_index ASC',
+    );
+  }
+
+  /// Debug method: Get count of embeddings in the database
+  Future<int> getEmbeddingCount() async {
+    final db = await database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM file_embeddings');
+    return result.first['count'] as int;
+  }
+
+  /// Debug method: Get sample of embeddings for debugging
+  Future<List<Map<String, dynamic>>> getEmbeddingSample({int limit = 5}) async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT fe.file_id, fe.chunk_index, f.name, LENGTH(fe.content) as content_length,
+             LENGTH(fe.embedding) as embedding_size
+      FROM file_embeddings fe
+      JOIN files f ON fe.file_id = f.id
+      ORDER BY fe.created_at DESC
+      LIMIT ?
+    ''', [limit]);
   }
 }

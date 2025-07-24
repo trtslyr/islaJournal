@@ -10,5 +10,34 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- File access permissions for file picker -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-only</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+	<key>com.apple.security.files.pictures.read-only</key>
+	<true/>
+	<key>com.apple.security.files.music.read-only</key>
+	<true/>
+	<key>com.apple.security.files.movies.read-only</key>
+	<true/>
+	<!-- Allow access to common document locations -->
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+	<array>
+		<string>Desktop/</string>
+		<string>Documents/</string>
+		<string>Downloads/</string>
+	</array>
+	<!-- Additional permissions for file picker -->
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+	<key>com.apple.security.files.bookmarks.document-scope</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.executable</key>
+	<false/>
 </dict>
 </plist>

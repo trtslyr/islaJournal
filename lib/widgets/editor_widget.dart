@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/journal_provider.dart';
 import '../models/journal_file.dart';
 import '../core/theme/app_theme.dart';
+import '../services/validation_service.dart';
 
 class EditorWidget extends StatefulWidget {
   const EditorWidget({super.key});
@@ -240,22 +241,49 @@ class _EditorWidgetState extends State<EditorWidget> {
     if (_currentFile == null) return;
     
     final nameController = TextEditingController(text: _currentFile!.name);
+    final isProfileFile = _currentFile!.id == 'profile_special_file';
+    String? errorMessage;
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(
-          'Edit Name',
-          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 14),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(
+            isProfileFile ? 'Edit Name' : 'Rename File',
+            style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 14),
         ),
-        content: TextField(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
           controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'Your name',
-            hintText: 'Enter your name',
+                decoration: InputDecoration(
+                  labelText: isProfileFile ? 'Your name' : 'File name',
+                  hintText: isProfileFile ? 'Enter your name' : 'Enter file name',
+                  errorText: errorMessage,
           ),
           style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
           autofocus: true,
+                onChanged: (value) {
+                  setState(() {
+                    if (!isProfileFile) {
+                      errorMessage = ValidationService.validateName(value.trim(), isFolder: false);
+                      if (errorMessage == null && value.trim() != _currentFile!.name) {
+                        // Check for duplicates (exclude current file)
+                        final provider = Provider.of<JournalProvider>(context, listen: false);
+                        final existingNames = provider.files
+                            .where((f) => f.folderId == _currentFile!.folderId && f.id != _currentFile!.id)
+                            .map((f) => f.name)
+                            .toList();
+                        if (ValidationService.isFileNameDuplicate(value.trim(), existingNames)) {
+                          errorMessage = 'A file with this name already exists';
+                        }
+                      }
+                    }
+                  });
+                },
+              ),
+            ],
         ),
         actions: [
           TextButton(
@@ -266,22 +294,23 @@ class _EditorWidgetState extends State<EditorWidget> {
             ),
           ),
           TextButton(
-            onPressed: () async {
+              onPressed: (isProfileFile || errorMessage == null) && 
+                         nameController.text.trim().isNotEmpty && 
+                         nameController.text.trim() != _currentFile!.name
+                  ? () async {
               final name = nameController.text.trim();
-              if (name.isNotEmpty && name != _currentFile!.name) {
                 final provider = Provider.of<JournalProvider>(context, listen: false);
                 await provider.updateFile(_currentFile!.copyWith(name: name));
                 Navigator.of(context).pop();
-              } else if (name.isEmpty) {
-                Navigator.of(context).pop();
               }
-            },
+                  : null,
             child: const Text(
               'Save',
               style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
             ),
           ),
         ],
+        ),
       ),
     );
   }

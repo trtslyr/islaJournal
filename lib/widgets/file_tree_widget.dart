@@ -4,13 +4,16 @@ import 'package:provider/provider.dart';
 import '../providers/journal_provider.dart';
 import '../models/journal_folder.dart';
 import '../models/journal_file.dart';
+import '../models/file_sort_option.dart';
 import '../core/theme/app_theme.dart';
+import '../services/validation_service.dart';
+import '../services/database_service.dart';
+
 
 class FileTreeWidget extends StatefulWidget {
   final bool showHeader; // Parameter to control header visibility
-  final bool sortByLastOpened; // Parameter to control sorting by last opened date
   
-  const FileTreeWidget({super.key, this.showHeader = true, this.sortByLastOpened = false});
+  const FileTreeWidget({super.key, this.showHeader = true});
 
   @override
   State<FileTreeWidget> createState() => _FileTreeWidgetState();
@@ -21,6 +24,16 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
 
   @override
   Widget build(BuildContext context) {
+    return Focus(
+      onKey: (node, event) {
+        final handled = _handleKeyPress(event, context);
+        return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+      },
+      child: _buildFileTree(context),
+    );
+  }
+
+  Widget _buildFileTree(BuildContext context) {
     return Consumer<JournalProvider>(
       builder: (context, provider, child) {
         if (provider.isLoading) {
@@ -92,18 +105,67 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                   ],
                 ),
               ),
+            // Sorting controls - always show
+            _buildSortingControls(provider),
+            // Profile file - fixed at top
+            ..._buildProfileSection(provider),
             // File tree
             Expanded(
-              child: ListView(
-                children: [
-                  // Profile file pinned at top
-                  ..._buildProfileSection(provider),
-                  // Root folders
-                  ...provider.rootFolders.map((folder) => _buildFolderTile(folder, provider)),
-                  // Root files - sorted by last opened if requested (excluding profile)
-                  ..._getSortedFiles(provider.files.where((file) => file.folderId == null && !provider.isProfileFile(file.id)).toList())
-                    .map((file) => _buildFileTile(file, provider)),
-                ],
+              child: DragTarget<JournalFile>(
+                onWillAccept: (data) => data != null && data.folderId != null,
+                onAccept: (file) => _moveFileToRoot(file, provider),
+                builder: (context, candidateData, rejectedData) {
+                  final isHighlighted = candidateData.isNotEmpty;
+                  
+                  return Container(
+                    decoration: isHighlighted
+                        ? BoxDecoration(
+                            color: AppTheme.warmBrown.withOpacity(0.05),
+                            border: Border.all(
+                              color: AppTheme.warmBrown.withOpacity(0.3),
+                              width: 2,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                          )
+                        : null,
+                    child: ListView(
+                      children: [
+                        // Root folders
+                        ...provider.rootFolders.map((folder) => _buildFolderTile(folder, provider)),
+                        // Root files with drop zones for reordering (excluding profile)
+                        ..._buildRootFilesWithDropZones(
+                          _getSortedFiles(provider.files.where((file) => file.folderId == null && !provider.isProfileFile(file.id)).toList(), provider),
+                          provider,
+                        ),
+                        // Empty space at the bottom for dropping
+                        if (isHighlighted)
+                          Container(
+                            height: 60,
+                            margin: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: AppTheme.warmBrown.withOpacity(0.5),
+                                width: 2,
+                                style: BorderStyle.solid,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'Drop here to move to root',
+                                style: TextStyle(
+                                  fontFamily: 'JetBrainsMono',
+                                  fontSize: 12,
+                                  color: AppTheme.mediumGray,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -112,29 +174,221 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     );
   }
 
-  /// Sort files by last opened date if sortByLastOpened is true
-  List<JournalFile> _getSortedFiles(List<JournalFile> files) {
-    if (!widget.sortByLastOpened) {
-      return files;
-    }
+  /// Get sorted files from the provider
+  List<JournalFile> _getSortedFiles(List<JournalFile> files, JournalProvider provider) {
+    return provider.getSortedFiles(files);
+  }
+
+  /// Build sorting and filtering controls
+  Widget _buildSortingControls(JournalProvider provider) {
+    final selectedCount = provider.selectedFileIds.length;
     
-    // Sort by last opened date (most recent first), then by updated date for files never opened
-    files.sort((a, b) {
-      final aDate = a.lastOpened ?? a.updatedAt;
-      final bDate = b.lastOpened ?? b.updatedAt;
-      return bDate.compareTo(aDate); // Most recent first
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: AppTheme.darkerCream,
+        border: Border(
+          bottom: BorderSide(
+            color: AppTheme.warmBrown.withOpacity(0.1),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Sort dropdown
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _showSortMenu(context, provider),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: AppTheme.warmBrown.withOpacity(0.3),
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        provider.sortOption.shortDisplayName,
+                        style: const TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 11.0,
+                          color: AppTheme.darkText,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_drop_down,
+                      size: 16,
+                      color: AppTheme.mediumGray,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Selection counter
+          if (selectedCount > 1) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.warmBrown,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$selectedCount',
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 10.0,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: () => provider.clearFileSelection(),
+                    child: const Icon(
+                      Icons.clear,
+                      size: 12,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Show sorting menu
+  void _showSortMenu(BuildContext context, JournalProvider provider) {
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final position = renderBox.localToGlobal(Offset.zero);
+    
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx + 16,
+        position.dy + 100,
+        position.dx + 200,
+        position.dy + 200,
+      ),
+             items: <PopupMenuEntry<Object?>>[
+         // Sort options
+         const PopupMenuItem<String>(
+           enabled: false,
+           child: Text(
+             'Sort by:',
+             style: TextStyle(
+               fontFamily: 'JetBrainsMono',
+               fontSize: 12,
+               fontWeight: FontWeight.w600,
+               color: AppTheme.mediumGray,
+             ),
+           ),
+         ),
+         ...FileSortType.values.map((sortType) {
+           final option = FileSortOption(sortType: sortType, filterType: provider.sortOption.filterType);
+           return PopupMenuItem<FileSortOption>(
+             value: option,
+             child: Row(
+               children: [
+                 Icon(
+                   provider.sortOption.sortType == sortType ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                   size: 16,
+                   color: AppTheme.warmBrown,
+                 ),
+                 const SizedBox(width: 8),
+                 Text(
+                   option.sortDisplayName,
+                   style: const TextStyle(
+                     fontFamily: 'JetBrainsMono',
+                     fontSize: 12,
+                   ),
+                 ),
+               ],
+             ),
+           );
+         }).cast<PopupMenuEntry<Object?>>(),
+         const PopupMenuDivider(),
+         // Filter options
+         const PopupMenuItem<String>(
+           enabled: false,
+           child: Text(
+             'Show:',
+             style: TextStyle(
+               fontFamily: 'JetBrainsMono',
+               fontSize: 12,
+               fontWeight: FontWeight.w600,
+               color: AppTheme.mediumGray,
+             ),
+           ),
+         ),
+         ...FileFilterType.values.map((filterType) {
+           final option = FileSortOption(sortType: provider.sortOption.sortType, filterType: filterType);
+           return PopupMenuItem<FileSortOption>(
+             value: option,
+             child: Row(
+               children: [
+                 Icon(
+                   provider.sortOption.filterType == filterType ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                   size: 16,
+                   color: AppTheme.warmBrown,
+                 ),
+                 const SizedBox(width: 8),
+                 Text(
+                   option.filterDisplayName,
+                   style: const TextStyle(
+                     fontFamily: 'JetBrainsMono',
+                     fontSize: 12,
+                   ),
+                 ),
+               ],
+             ),
+           );
+         }).cast<PopupMenuEntry<Object?>>(),
+       ],
+    ).then((selectedOption) {
+      if (selectedOption != null && selectedOption is FileSortOption) {
+        provider.setSortOption(selectedOption);
+      }
     });
-    
-    return files;
   }
 
   /// Get profile name for display in header
   String _getProfileName(JournalProvider provider) {
     final profileFile = provider.files.where((file) => provider.isProfileFile(file.id)).firstOrNull;
-    return profileFile?.name ?? 'files';
+    if (profileFile == null) return 'files';
+    
+    // Extract name from the first line of the profile content
+    final lines = profileFile.content.split('\n');
+    if (lines.isNotEmpty) {
+      final firstLine = lines.first.trim();
+      if (firstLine.startsWith('# ')) {
+        final extractedName = firstLine.substring(2).trim();
+        if (extractedName.isNotEmpty && extractedName != '[Your Name Here]') {
+          return extractedName;
+        }
+      }
+    }
+    
+    // Fallback to stored name or 'files'
+    return profileFile.name ?? 'files';
   }
 
-  /// Build profile section - pinned at top
+  /// Build profile section - fixed at top with darker styling
   List<Widget> _buildProfileSection(JournalProvider provider) {
     final profileFile = provider.files.where((file) => provider.isProfileFile(file.id)).firstOrNull;
     
@@ -143,14 +397,89 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     }
     
     return [
-      _buildProfileTile(profileFile, provider),
-      // Add a subtle separator after profile
       Container(
-        height: 1,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        decoration: BoxDecoration(
+          color: AppTheme.darkerCream,
+          border: Border(
+            bottom: BorderSide(
         color: AppTheme.warmBrown.withOpacity(0.1),
+              width: 1,
+            ),
+          ),
+        ),
+        child: _buildProfileTile(profileFile, provider),
       ),
     ];
+  }
+
+  /// Handle keyboard shortcuts
+  bool _handleKeyPress(RawKeyEvent event, BuildContext context) {
+    if (event is RawKeyDownEvent) {
+      final provider = Provider.of<JournalProvider>(context, listen: false);
+      final isCtrlPressed = event.logicalKey == LogicalKeyboardKey.controlLeft ||
+                           event.logicalKey == LogicalKeyboardKey.controlRight;
+      final isMetaPressed = event.logicalKey == LogicalKeyboardKey.metaLeft ||
+                           event.logicalKey == LogicalKeyboardKey.metaRight;
+      final isModifierPressed = isCtrlPressed || isMetaPressed;
+
+      // Ctrl+A / Cmd+A: Select all files
+      if (isModifierPressed && event.logicalKey == LogicalKeyboardKey.keyA) {
+        final currentFiles = provider.files
+            .where((file) => file.folderId == provider.selectedFolderId && !provider.isProfileFile(file.id))
+            .toList();
+        
+        provider.clearFileSelection();
+        for (final file in currentFiles) {
+          provider.toggleFileSelection(file.id);
+        }
+        return true;
+      }
+
+      // Escape: Clear selection
+      if (event.logicalKey == LogicalKeyboardKey.escape) {
+        provider.clearFileSelection();
+        return true;
+      }
+
+      // Delete: Delete selected files
+      if (event.logicalKey == LogicalKeyboardKey.delete && provider.selectedFileIds.isNotEmpty) {
+        if (provider.selectedFileIds.length == 1) {
+          final fileId = provider.selectedFileIds.first;
+          final file = provider.files.firstWhere((f) => f.id == fileId);
+          _showDeleteFileDialog(context, file);
+        } else {
+          _showDeleteMultipleFilesDialog(context, provider.selectedFileIds);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Handle file tap with keyboard modifier support
+  void _handleFileTap(String fileId, JournalProvider provider) {
+    // Check for keyboard modifiers
+    final isShiftPressed = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+                          RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftRight);
+    final isCtrlPressed = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                         RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlRight);
+    final isMetaPressed = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.metaLeft) ||
+                         RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.metaRight);
+    
+    final isMultiSelectModifier = isCtrlPressed || isMetaPressed; // Ctrl on Windows/Linux, Cmd on Mac
+    
+    if (isShiftPressed && provider.selectedFileIds.isNotEmpty) {
+      // Range selection: select from last selected to this file
+      final lastSelectedId = provider.selectedFileIds.last;
+      provider.selectFileRange(lastSelectedId, fileId);
+    } else if (isMultiSelectModifier) {
+      // Toggle selection: add/remove from multi-selection
+      provider.toggleFileSelection(fileId);
+    } else {
+      // Normal selection: clear others and select this file
+      provider.selectFile(fileId);
+    }
   }
 
   /// Format date for display
@@ -175,54 +504,74 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     final isExpanded = _expandedFolders.contains(folder.id);
     final subfolders = provider.folders.where((f) => f.parentId == folder.id).toList();
     final folderFiles = provider.files.where((f) => f.folderId == folder.id).toList();
-    final sortedFiles = _getSortedFiles(folderFiles);
+    final sortedFiles = _getSortedFiles(folderFiles, provider);
     final hasChildren = subfolders.isNotEmpty || sortedFiles.isNotEmpty;
 
     return Column(
       children: [
-        _HoverableTile(
-          leading: Text(
-            hasChildren
-                ? (isExpanded ? '▼' : '▶')
-                : '•',
-            style: const TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 12.0,
-              color: AppTheme.warmBrown,
-            ),
-          ),
-          title: Text(
-            folder.name,
-            style: const TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 14.0,
-              fontWeight: FontWeight.w400,
-              color: AppTheme.darkText,
-            ),
-          ),
-          trailing: hasChildren
-              ? Text(
-                  '${subfolders.length + sortedFiles.length}',
+        DragTarget<JournalFile>(
+          onWillAccept: (data) => data != null && data.folderId != folder.id,
+          onAccept: (file) => _moveFileToFolder(file, folder, provider),
+          builder: (context, candidateData, rejectedData) {
+            final isHighlighted = candidateData.isNotEmpty;
+            
+            return Container(
+              decoration: isHighlighted
+                  ? BoxDecoration(
+                      color: AppTheme.warmBrown.withOpacity(0.1),
+                      border: Border.all(
+                        color: AppTheme.warmBrown.withOpacity(0.5),
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    )
+                  : null,
+              child: _HoverableTile(
+                leading: Text(
+                  hasChildren
+                      ? (isExpanded ? '▼' : '▶')
+                      : '•',
                   style: const TextStyle(
                     fontFamily: 'JetBrainsMono',
                     fontSize: 12.0,
-                    color: AppTheme.mediumGray,
+                    color: AppTheme.warmBrown,
                   ),
-                )
-              : null,
-          onTap: () {
-            if (hasChildren) {
-              setState(() {
-                if (isExpanded) {
-                  _expandedFolders.remove(folder.id);
-                } else {
-                  _expandedFolders.add(folder.id);
-                }
-              });
-            }
-            provider.selectFolder(folder.id);
+                ),
+                title: Text(
+                  folder.name,
+                  style: const TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 14.0,
+                    fontWeight: FontWeight.w400,
+                    color: AppTheme.darkText,
+                  ),
+                ),
+                trailing: hasChildren
+                    ? Text(
+                        '${subfolders.length + sortedFiles.length}',
+                        style: const TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 12.0,
+                          color: AppTheme.mediumGray,
+                        ),
+                      )
+                    : null,
+                onTap: () {
+                  if (hasChildren) {
+                    setState(() {
+                      if (isExpanded) {
+                        _expandedFolders.remove(folder.id);
+                      } else {
+                        _expandedFolders.add(folder.id);
+                      }
+                    });
+                  }
+                  provider.selectFolder(folder.id);
+                },
+                onContextMenu: (context) => _showFolderContextMenu(context, folder),
+              ),
+            );
           },
-          onContextMenu: (context) => _showFolderContextMenu(context, folder),
         ),
         if (isExpanded && hasChildren)
           Container(
@@ -239,51 +588,80 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   }
 
   Widget _buildFileTile(JournalFile file, JournalProvider provider) {
-    final isSelected = provider.selectedFileId == file.id;
+    final isSelected = provider.isFileSelected(file.id);
+    final isMainSelected = provider.selectedFileId == file.id;
     
-    return _HoverableTile(
-      leading: const Text(
-        '•',
-        style: TextStyle(
-          fontFamily: 'JetBrainsMono',
-          fontSize: 12.0,
-          color: AppTheme.mediumGray,
+    return Draggable<JournalFile>(
+      data: file,
+      feedback: Material(
+        elevation: 4.0,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.creamBeige,
+            border: Border.all(color: AppTheme.warmBrown.withOpacity(0.3)),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '•',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12.0,
+                  color: AppTheme.mediumGray,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                file.name,
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.darkText,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      title: Text(
-        file.name,
-        style: TextStyle(
-          fontFamily: 'JetBrainsMono',
-          fontSize: 14.0,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-          color: isSelected ? AppTheme.warmBrown : AppTheme.darkText,
+      childWhenDragging: Opacity(
+        opacity: 0.5,
+        child: _HoverableTile(
+          leading: const Text(
+            '•',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              color: AppTheme.mediumGray,
+            ),
+          ),
+          title: Text(
+            file.name,
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+              fontWeight: isMainSelected ? FontWeight.w600 : (isSelected ? FontWeight.w500 : FontWeight.w400),
+              color: isMainSelected ? AppTheme.warmBrown : (isSelected ? AppTheme.darkerBrown : AppTheme.darkText),
+            ),
+          ),
+          subtitle: Text(
+            _formatDate(file.lastOpened),
+            style: const TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              fontWeight: FontWeight.w400,
+              color: AppTheme.mediumGray,
+            ),
+          ),
+          isSelected: isSelected,
+          onTap: () => _handleFileTap(file.id, provider),
+          onContextMenu: (context) => _showFileContextMenu(context, file),
         ),
       ),
-      subtitle: Text(
-        _formatDate(file.lastOpened),
-        style: const TextStyle(
-          fontFamily: 'JetBrainsMono',
-          fontSize: 12.0,
-          fontWeight: FontWeight.w400,
-          color: AppTheme.mediumGray,
-        ),
-      ),
-      isSelected: isSelected,
-      onTap: () => provider.selectFile(file.id),
-      onContextMenu: (context) => _showFileContextMenu(context, file),
-    );
-  }
-
-  Widget _buildProfileTile(JournalFile file, JournalProvider provider) {
-    final isSelected = provider.selectedFileId == file.id;
-    
-    return Container(
-      decoration: BoxDecoration(
-        color: isSelected
-            ? AppTheme.warmBrown.withOpacity(0.1)
-            : null,
-      ),
-      child: ListTile(
+      child: _HoverableTile(
         leading: const Text(
           '•',
           style: TextStyle(
@@ -297,12 +675,63 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
           style: TextStyle(
             fontFamily: 'JetBrainsMono',
             fontSize: 14.0,
+            fontWeight: isMainSelected ? FontWeight.w600 : (isSelected ? FontWeight.w500 : FontWeight.w400),
+            color: isMainSelected ? AppTheme.warmBrown : (isSelected ? AppTheme.darkerBrown : AppTheme.darkText),
+          ),
+        ),
+        subtitle: Text(
+          _formatDate(file.lastOpened),
+          style: const TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 12.0,
+            fontWeight: FontWeight.w400,
+            color: AppTheme.mediumGray,
+          ),
+        ),
+        isSelected: isSelected,
+        onTap: () => _handleFileTap(file.id, provider),
+        onContextMenu: (context) => _showFileContextMenu(context, file),
+      ),
+    );
+  }
+
+  Widget _buildProfileTile(JournalFile file, JournalProvider provider) {
+    final isSelected = provider.selectedFileId == file.id;
+    
+    // Extract display name from profile content
+    String displayName = file.name;
+    final lines = file.content.split('\n');
+    if (lines.isNotEmpty) {
+      final firstLine = lines.first.trim();
+      if (firstLine.startsWith('# ')) {
+        final extractedName = firstLine.substring(2).trim();
+        if (extractedName.isNotEmpty && extractedName != '[Your Name Here]') {
+          displayName = extractedName;
+        }
+      }
+    }
+    
+    return _HoverableTile(
+        leading: const Text(
+          '•',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 12.0,
+            color: AppTheme.mediumGray,
+          ),
+        ),
+        title: Text(
+        displayName,
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 14.0,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
             color: isSelected ? AppTheme.warmBrown : AppTheme.darkText,
           ),
         ),
+      isSelected: isSelected,
         onTap: () => provider.selectFile(file.id),
-      ),
+      onContextMenu: (context) => _showProfileContextMenu(context, file),
     );
   }
 
@@ -368,6 +797,10 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   }
 
   void _showFileContextMenu(BuildContext context, JournalFile file) {
+    final provider = Provider.of<JournalProvider>(context, listen: false);
+    final selectedCount = provider.selectedFileIds.length;
+    final isMultiSelect = selectedCount > 1;
+    
     final RenderBox button = context.findRenderObject()! as RenderBox;
     final RenderBox overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
     final buttonPosition = button.localToGlobal(Offset.zero, ancestor: overlay);
@@ -400,27 +833,40 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildMenuItem('rename', () {
-                        Navigator.of(context).pop();
-                        _showRenameFileDialog(context, file);
-                      }),
-                      _buildMenuItem('duplicate', () {
-                        Navigator.of(context).pop();
-                        _duplicateFile(file);
-                      }),
-                      _buildMenuItem('move to...', () {
-                        Navigator.of(context).pop();
-                        _showMoveFileDialog(context, file);
-                      }),
-                      _buildMenuItem('properties', () {
-                        Navigator.of(context).pop();
-                        _showFileProperties(context, file);
-                      }),
-                      Container(height: 1, color: AppTheme.warmBrown.withOpacity(0.3)),
-                      _buildMenuItem('delete', () {
-                        Navigator.of(context).pop();
-                        _showDeleteFileDialog(context, file);
-                      }),
+                      if (isMultiSelect) ...[
+                        _buildMenuItem('$selectedCount files selected', () {}),
+                        Container(height: 1, color: AppTheme.warmBrown.withOpacity(0.3)),
+                        _buildMenuItem('delete selected', () {
+                          Navigator.of(context).pop();
+                          _showDeleteMultipleFilesDialog(context, provider.selectedFileIds);
+                        }),
+                        _buildMenuItem('clear selection', () {
+                          Navigator.of(context).pop();
+                          provider.clearFileSelection();
+                        }),
+                      ] else ...[
+                        _buildMenuItem('rename', () {
+                          Navigator.of(context).pop();
+                          _showRenameFileDialog(context, file);
+                        }),
+                        _buildMenuItem('duplicate', () {
+                          Navigator.of(context).pop();
+                          _duplicateFile(file);
+                        }),
+                        _buildMenuItem('move to...', () {
+                          Navigator.of(context).pop();
+                          _showMoveFileDialog(context, file);
+                        }),
+                        _buildMenuItem('properties', () {
+                          Navigator.of(context).pop();
+                          _showFileProperties(context, file);
+                        }),
+                        Container(height: 1, color: AppTheme.warmBrown.withOpacity(0.3)),
+                        _buildMenuItem('delete', () {
+                          Navigator.of(context).pop();
+                          _showDeleteFileDialog(context, file);
+                        }),
+                      ],
                     ],
                   ),
                 ),
@@ -465,6 +911,11 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      _buildMenuItem('reset to new template', () {
+                        Navigator.of(context).pop();
+                        _resetProfileTemplate(context);
+                      }),
+                      Container(height: 1, color: AppTheme.warmBrown.withOpacity(0.3)),
                       _buildMenuItem('properties', () {
                         Navigator.of(context).pop();
                         _showFileProperties(context, file);
@@ -498,151 +949,257 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     );
   }
 
+
+
   void _showCreateFolderDialog(BuildContext context) {
     final nameController = TextEditingController();
+    String? errorMessage;
     
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
-      builder: (context) => AlertDialog(
-        title: const Text('create folder'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'name',
-            hintText: 'my folder',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('create folder'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'name',
+                  hintText: 'my folder',
+                  errorText: errorMessage,
+                ),
+                autofocus: true,
+                onChanged: (value) {
+                  setState(() {
+                    errorMessage = ValidationService.validateName(value.trim(), isFolder: true);
+                    if (errorMessage == null) {
+                      // Check for duplicates
+                      final provider = Provider.of<JournalProvider>(context, listen: false);
+                      final existingNames = provider.folders
+                          .where((f) => f.parentId == provider.selectedFolderId)
+                          .map((f) => f.name)
+                          .toList();
+                      if (ValidationService.isFolderNameDuplicate(value.trim(), existingNames)) {
+                        errorMessage = 'A folder with this name already exists';
+                      }
+                    }
+                  });
+                },
+              ),
+            ],
           ),
-          autofocus: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('cancel'),
+            ),
+            TextButton(
+              onPressed: errorMessage == null && nameController.text.trim().isNotEmpty
+                  ? () async {
+                      final name = nameController.text.trim();
+                      final provider = Provider.of<JournalProvider>(context, listen: false);
+                      await provider.createFolder(name);
+                      Navigator.of(context).pop();
+                    }
+                  : null,
+              child: const Text('create'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty) {
-                final provider = Provider.of<JournalProvider>(context, listen: false);
-                await provider.createFolder(name);
-                Navigator.of(context).pop();
-              }
-            },
-            child: const Text('create'),
-          ),
-        ],
       ),
     );
   }
 
   void _showCreateFileDialog(BuildContext context) {
     final nameController = TextEditingController();
+    String? errorMessage;
     
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
-      builder: (context) => AlertDialog(
-        title: const Text('create file'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'name',
-            hintText: 'my journal entry',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('create file'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'name',
+                  hintText: 'my journal entry',
+                  errorText: errorMessage,
+                ),
+                autofocus: true,
+                onChanged: (value) {
+                  setState(() {
+                    errorMessage = ValidationService.validateName(value.trim(), isFolder: false);
+                    if (errorMessage == null) {
+                      // Check for duplicates in root level (where new files are created)
+                      final provider = Provider.of<JournalProvider>(context, listen: false);
+                      final existingNames = provider.files
+                          .where((f) => f.folderId == null)
+                          .map((f) => f.name)
+                          .toList();
+                      if (ValidationService.isFileNameDuplicate(value.trim(), existingNames)) {
+                        errorMessage = 'A file with this name already exists';
+                      }
+                    }
+                  });
+                },
+              ),
+            ],
           ),
-          autofocus: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('cancel'),
+            ),
+            TextButton(
+              onPressed: errorMessage == null && nameController.text.trim().isNotEmpty
+                  ? () async {
+                      final name = nameController.text.trim();
+                      final provider = Provider.of<JournalProvider>(context, listen: false);
+                      final fileId = await provider.createFile(name, '');
+                      if (fileId != null) {
+                        provider.selectFile(fileId);
+                      }
+                      Navigator.of(context).pop();
+                    }
+                  : null,
+              child: const Text('create'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty) {
-                final provider = Provider.of<JournalProvider>(context, listen: false);
-                final fileId = await provider.createFile(name, '');
-                if (fileId != null) {
-                  provider.selectFile(fileId);
-                }
-                Navigator.of(context).pop();
-              }
-            },
-            child: const Text('create'),
-          ),
-        ],
       ),
     );
   }
 
   void _showRenameFolderDialog(BuildContext context, JournalFolder folder) {
     final nameController = TextEditingController(text: folder.name);
+    String? errorMessage;
     
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
-      builder: (context) => AlertDialog(
-        title: const Text('rename folder'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'name',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('rename folder'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'name',
+                  errorText: errorMessage,
+                ),
+                autofocus: true,
+                onChanged: (value) {
+                  setState(() {
+                    errorMessage = ValidationService.validateName(value.trim(), isFolder: true);
+                    if (errorMessage == null && value.trim() != folder.name) {
+                      // Check for duplicates (exclude current folder)
+                      final provider = Provider.of<JournalProvider>(context, listen: false);
+                      final existingNames = provider.folders
+                          .where((f) => f.parentId == folder.parentId && f.id != folder.id)
+                          .map((f) => f.name)
+                          .toList();
+                      if (ValidationService.isFolderNameDuplicate(value.trim(), existingNames)) {
+                        errorMessage = 'A folder with this name already exists';
+                      }
+                    }
+                  });
+                },
+              ),
+            ],
           ),
-          autofocus: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('cancel'),
+            ),
+            TextButton(
+              onPressed: errorMessage == null && 
+                         nameController.text.trim().isNotEmpty && 
+                         nameController.text.trim() != folder.name
+                  ? () async {
+                      final name = nameController.text.trim();
+                      final provider = Provider.of<JournalProvider>(context, listen: false);
+                      await provider.updateFolder(folder.copyWith(name: name));
+                      Navigator.of(context).pop();
+                    }
+                  : null,
+              child: const Text('rename'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty && name != folder.name) {
-                final provider = Provider.of<JournalProvider>(context, listen: false);
-                await provider.updateFolder(folder.copyWith(name: name));
-                Navigator.of(context).pop();
-              }
-            },
-            child: const Text('rename'),
-          ),
-        ],
       ),
     );
   }
 
   void _showRenameFileDialog(BuildContext context, JournalFile file) {
     final nameController = TextEditingController(text: file.name);
+    String? errorMessage;
     
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
-      builder: (context) => AlertDialog(
-        title: const Text('rename file'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'name',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('rename file'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'name',
+                  errorText: errorMessage,
+                ),
+                autofocus: true,
+                onChanged: (value) {
+                  setState(() {
+                    errorMessage = ValidationService.validateName(value.trim(), isFolder: false);
+                    if (errorMessage == null && value.trim() != file.name) {
+                      // Check for duplicates (exclude current file)
+                      final provider = Provider.of<JournalProvider>(context, listen: false);
+                      final existingNames = provider.files
+                          .where((f) => f.folderId == file.folderId && f.id != file.id)
+                          .map((f) => f.name)
+                          .toList();
+                      if (ValidationService.isFileNameDuplicate(value.trim(), existingNames)) {
+                        errorMessage = 'A file with this name already exists';
+                      }
+                    }
+                  });
+                },
+              ),
+            ],
           ),
-          autofocus: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('cancel'),
+            ),
+            TextButton(
+              onPressed: errorMessage == null && 
+                         nameController.text.trim().isNotEmpty && 
+                         nameController.text.trim() != file.name
+                  ? () async {
+                      final name = nameController.text.trim();
+                      final provider = Provider.of<JournalProvider>(context, listen: false);
+                      await provider.updateFile(file.copyWith(name: name));
+                      Navigator.of(context).pop();
+                    }
+                  : null,
+              child: const Text('rename'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty && name != file.name) {
-                final provider = Provider.of<JournalProvider>(context, listen: false);
-                await provider.updateFile(file.copyWith(name: name));
-                Navigator.of(context).pop();
-              }
-            },
-            child: const Text('rename'),
-          ),
-        ],
       ),
     );
   }
@@ -704,7 +1261,8 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     final provider = Provider.of<JournalProvider>(context, listen: false);
     final originalFile = await provider.getFile(file.id);
     if (originalFile != null) {
-      await provider.createFile('${file.name}_copy', originalFile.content, folderId: file.folderId);
+      // Don't pass folderId - let the system automatically assign to year folder
+      await provider.createFile('${file.name}_copy', originalFile.content);
     }
   }
 
@@ -747,54 +1305,442 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   }
 
   void _showFileProperties(BuildContext context, JournalFile file) {
+    final provider = Provider.of<JournalProvider>(context, listen: false);
+    final folder = file.folderId != null ? provider.getFolderById(file.folderId!) : null;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('file properties'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('name: ${file.name}'),
-            Text('created: ${file.createdAt.day}/${file.createdAt.month}/${file.createdAt.year}'),
-            Text('modified: ${file.updatedAt.day}/${file.updatedAt.month}/${file.updatedAt.year}'),
-            Text('last opened: ${_formatDate(file.lastOpened)}'),
-          ],
+        title: const Text(
+          'File Properties',
+          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 16),
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildPropertyRow('Name:', file.name),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Location:', folder?.name ?? 'Root'),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Size:', file.displaySize),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Word Count:', '${file.wordCount} words'),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Created:', _formatDateTime(file.createdAt)),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Modified:', _formatDateTime(file.updatedAt)),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Last Opened:', file.lastOpened != null ? _formatDateTime(file.lastOpened!) : 'Never'),
+              const SizedBox(height: 8),
+              _buildPropertyRow('File Path:', file.filePath),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('close'),
+            child: const Text(
+              'Close',
+              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+            ),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildPropertyRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.darkText,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12,
+              color: AppTheme.mediumGray,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Move a file to a specific folder
+  void _moveFileToFolder(JournalFile file, JournalFolder folder, JournalProvider provider) async {
+    try {
+      await provider.updateFile(file.copyWith(folderId: folder.id));
+      
+      // Show success feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Moved "${file.name}" to "${folder.name}"',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: AppTheme.warmBrown,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Show error feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to move "${file.name}": ${e.toString()}',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Move a file to root (no folder)
+  void _moveFileToRoot(JournalFile file, JournalProvider provider) async {
+    try {
+      await provider.updateFile(file.copyWith(folderId: null));
+      
+      // Show success feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Moved "${file.name}" to root',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: AppTheme.warmBrown,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Show error feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to move "${file.name}": ${e.toString()}',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Reorder a file to a specific position in the root files list
+  void _reorderFileInRoot(JournalFile draggedFile, int newIndex, List<JournalFile> rootFiles, JournalProvider provider) async {
+    try {
+      // Show warning if user is reordering while last opened sorting is not active
+      if (provider.sortOption.sortType != FileSortType.lastOpened) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              '⚠️ Manual reordering may be overridden by current sorting. Switch to "Last Opened" sort for manual control.',
+              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'OK',
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
+      
+      // Remove the dragged file from the list to get the target position
+      final filteredFiles = rootFiles.where((f) => f.id != draggedFile.id).toList();
+      
+      // Calculate the new timestamp based on position
+      DateTime newTimestamp;
+      if (newIndex == 0) {
+        // Moving to first position - use time after the current first file
+        if (filteredFiles.isNotEmpty) {
+          newTimestamp = filteredFiles[0].lastOpened?.add(const Duration(seconds: 1)) ?? DateTime.now();
+        } else {
+          newTimestamp = DateTime.now();
+        }
+      } else if (newIndex >= filteredFiles.length) {
+        // Moving to last position - use time before the current last file
+        newTimestamp = filteredFiles.last.lastOpened?.subtract(const Duration(seconds: 1)) ?? DateTime.now().subtract(const Duration(seconds: 1));
+      } else {
+        // Moving between files - use time between the files at newIndex-1 and newIndex
+        final prevFile = filteredFiles[newIndex - 1];
+        final nextFile = filteredFiles[newIndex];
+        final prevTime = prevFile.lastOpened ?? DateTime.now();
+        final nextTime = nextFile.lastOpened ?? DateTime.now();
+        
+        // Calculate midpoint time
+        final midpointMs = (prevTime.millisecondsSinceEpoch + nextTime.millisecondsSinceEpoch) ~/ 2;
+        newTimestamp = DateTime.fromMillisecondsSinceEpoch(midpointMs);
+      }
+      
+      // Update the file with new timestamp
+      await provider.updateFile(draggedFile.copyWith(
+        folderId: null, // Ensure it stays in root
+        lastOpened: newTimestamp,
+      ));
+      
+      // Show success feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Reordered "${draggedFile.name}"',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: AppTheme.warmBrown,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      // Show error feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to reorder "${draggedFile.name}": ${e.toString()}',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Build a drop zone for reordering files
+  Widget _buildDropZone(int index, List<JournalFile> rootFiles, JournalProvider provider) {
+    return DragTarget<JournalFile>(
+      onWillAccept: (data) => data != null && data.folderId == null && rootFiles.any((f) => f.id == data.id),
+      onAccept: (file) => _reorderFileInRoot(file, index, rootFiles, provider),
+      builder: (context, candidateData, rejectedData) {
+        final isHighlighted = candidateData.isNotEmpty;
+        
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: isHighlighted ? 24 : 4,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          decoration: isHighlighted
+              ? BoxDecoration(
+                  color: AppTheme.warmBrown.withOpacity(0.1),
+                  border: Border.all(
+                    color: AppTheme.warmBrown.withOpacity(0.5),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                )
+              : null,
+          child: isHighlighted
+              ? const Center(
+                  child: Text(
+                    'Drop here to reorder',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 10,
+                      color: AppTheme.mediumGray,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                )
+              : null,
+        );
+      },
+    );
+  }
+
+  /// Build root files with drop zones for reordering
+  List<Widget> _buildRootFilesWithDropZones(List<JournalFile> rootFiles, JournalProvider provider) {
+    final List<Widget> widgets = [];
+    
+    // Add drop zone before first file
+    widgets.add(_buildDropZone(0, rootFiles, provider));
+    
+    // Add files with drop zones between them
+    for (int i = 0; i < rootFiles.length; i++) {
+      widgets.add(_buildFileTile(rootFiles[i], provider));
+      // Add drop zone after each file
+      widgets.add(_buildDropZone(i + 1, rootFiles, provider));
+    }
+    
+    return widgets;
+  }
+
   void _showFolderProperties(BuildContext context, JournalFolder folder) {
     final provider = Provider.of<JournalProvider>(context, listen: false);
-    final filesCount = provider.files.where((f) => f.folderId == folder.id).length;
-    final subfoldersCount = provider.folders.where((f) => f.parentId == folder.id).length;
+    final parentFolder = folder.parentId != null ? provider.getFolderById(folder.parentId!) : null;
+    final subfolders = provider.folders.where((f) => f.parentId == folder.id).toList();
+    final files = provider.files.where((f) => f.folderId == folder.id).toList();
+    final totalWords = files.fold(0, (sum, file) => sum + file.wordCount);
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('folder properties'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('name: ${folder.name}'),
-            Text('files: $filesCount'),
-            Text('subfolders: $subfoldersCount'),
-            Text('created: ${folder.createdAt.day}/${folder.createdAt.month}/${folder.createdAt.year}'),
-            Text('modified: ${folder.updatedAt.day}/${folder.updatedAt.month}/${folder.updatedAt.year}'),
-          ],
+        title: const Text(
+          'Folder Properties',
+          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 16),
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildPropertyRow('Name:', folder.name),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Location:', parentFolder?.name ?? 'Root'),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Subfolders:', '${subfolders.length}'),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Files:', '${files.length}'),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Total Words:', '$totalWords words'),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Created:', _formatDateTime(folder.createdAt)),
+              const SizedBox(height: 8),
+              _buildPropertyRow('Modified:', _formatDateTime(folder.updatedAt)),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('close'),
+            child: const Text(
+              'Close',
+              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _resetProfileTemplate(BuildContext context) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'Reset Profile Template',
+          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 14),
+        ),
+        content: const Text(
+          'This will replace your current profile with the new introspection template. This action cannot be undone.',
+          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                Navigator.of(context).pop();
+                await DatabaseService().resetProfileToNewTemplate();
+                final provider = Provider.of<JournalProvider>(context, listen: false);
+                await provider.loadFiles();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Profile has been reset to the new template!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error resetting profile: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              'Reset',
+              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteMultipleFilesDialog(BuildContext context, Set<String> fileIds) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Multiple Files'),
+        content: Text('Delete ${fileIds.length} selected files? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final provider = Provider.of<JournalProvider>(context, listen: false);
+              Navigator.of(context).pop();
+              
+              // Delete all selected files
+              for (final fileId in fileIds) {
+                await provider.deleteFile(fileId);
+              }
+              
+              // Clear selection after deletion
+              provider.clearFileSelection();
+            },
+            child: const Text('Delete All'),
           ),
         ],
       ),
@@ -847,6 +1793,8 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
       ),
     );
   }
+
+
 }
 
 class _HoverableTile extends StatefulWidget {
@@ -883,10 +1831,17 @@ class _HoverableTileState extends State<_HoverableTile> {
       child: Container(
         decoration: BoxDecoration(
           color: widget.isSelected
-              ? AppTheme.warmBrown.withOpacity(0.1)
+              ? AppTheme.warmBrown.withOpacity(0.15)
               : _isHovering
                   ? AppTheme.warmBrown.withOpacity(0.05)
                   : null,
+          border: widget.isSelected
+              ? Border.all(
+                  color: AppTheme.warmBrown.withOpacity(0.3),
+                  width: 1,
+                )
+              : null,
+          borderRadius: widget.isSelected ? BorderRadius.circular(4) : null,
         ),
         child: ListTile(
           leading: widget.leading,

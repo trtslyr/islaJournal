@@ -28,5 +28,15 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Isla Journal needs access to your documents to import markdown files into your journal.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Isla Journal needs access to your downloads to import markdown files into your journal.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Isla Journal needs access to your desktop to import markdown files into your journal.</string>
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-only</key>
+	<true/>
 </dict>
 </plist>

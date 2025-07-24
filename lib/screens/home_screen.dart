@@ -8,9 +8,11 @@ import '../widgets/editor_widget.dart';
 import '../widgets/ai_chat_panel.dart';
 import '../widgets/resize_handle.dart';
 import '../widgets/search_widget.dart';
+
 import '../screens/settings_screen.dart';
 import '../core/theme/app_theme.dart';
 import '../models/journal_file.dart';
+import '../services/validation_service.dart';
 
 /// Main home screen with 3-panel IDE-like layout
 /// Left: File tree | Middle: Editor | Right: AI Chat
@@ -45,14 +47,6 @@ class _HomeScreenState extends State<HomeScreen> {
       
       await journalProvider.initialize();
       await aiProvider.initialize();
-      
-      // Automatically select the profile file so AI is ready to use
-      final profileFile = await journalProvider.getProfileFile();
-      if (profileFile != null) {
-        journalProvider.selectFile(profileFile.id);
-        // Also ensure it's marked as recently opened
-        await journalProvider.getFile(profileFile.id);
-      }
     });
   }
 
@@ -90,6 +84,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -235,37 +231,38 @@ class _HomeScreenState extends State<HomeScreen> {
              ),
            ),
           
-          // Content area
-          Expanded(
-            child: _isSearching ? _buildSearchContent() : _buildFileTreeContent(),
-          ),
-          
-          // Settings at the bottom
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
-            decoration: BoxDecoration(
-              color: AppTheme.darkerCream,
-              border: Border(
-                top: BorderSide(
-                  color: AppTheme.warmBrown.withOpacity(0.2),
-                  width: 1,
-                ),
-              ),
-            ),
-            child: GestureDetector(
-              onTap: _showSettings,
-              child: const Text(
-                'settings',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 12.0,
-                  fontWeight: FontWeight.w400,
-                  color: AppTheme.mediumGray,
-                ),
+                  // Content area
+        Expanded(
+          child: _isSearching ? _buildSearchContent() : _buildFileTreeContent(),
+        ),
+
+        
+        // Settings at the bottom
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+          decoration: BoxDecoration(
+            color: AppTheme.darkerCream,
+            border: Border(
+              top: BorderSide(
+                color: AppTheme.warmBrown.withOpacity(0.2),
+                width: 1,
               ),
             ),
           ),
+          child: GestureDetector(
+            onTap: _showSettings,
+            child: const Text(
+              'settings',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+                fontWeight: FontWeight.w400,
+                color: AppTheme.mediumGray,
+              ),
+            ),
+          ),
+        ),
         ],
       ),
     );
@@ -297,9 +294,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Build the file tree content
   Widget _buildFileTreeContent() {
-    return const FileTreeWidget(
-      showHeader: false,
-      sortByLastOpened: true,
+    return Consumer<LayoutProvider>(
+      builder: (context, layoutProvider, child) {
+        return FileTreeWidget(
+          showHeader: false,
+        );
+      },
     );
   }
 
@@ -466,26 +466,26 @@ class _HomeScreenState extends State<HomeScreen> {
                        ),
                      ),
                      const SizedBox(width: 4),
-                     // AI chat toggle (far right)
-                     Consumer<LayoutProvider>(
-                       builder: (context, layoutProvider, child) {
-                         return TextButton(
-                           onPressed: layoutProvider.toggleAIChat,
-                           style: TextButton.styleFrom(
-                             overlayColor: Colors.transparent,
-                           ),
-                           child: Text(
-                             '✦',
-                             style: const TextStyle(
-                               fontFamily: 'JetBrainsMono',
-                               fontSize: 16.0,
-                               fontWeight: FontWeight.w600,
-                               color: AppTheme.warmBrown,
+                                            // AI chat toggle (far right)
+                       Consumer<LayoutProvider>(
+                         builder: (context, layoutProvider, child) {
+                           return TextButton(
+                             onPressed: layoutProvider.toggleAIChat,
+                             style: TextButton.styleFrom(
+                               overlayColor: Colors.transparent,
                              ),
-                           ),
-                         );
-                       },
-                     ),
+                             child: Text(
+                               '✦',
+                               style: const TextStyle(
+                                 fontFamily: 'JetBrainsMono',
+                                 fontSize: 16.0,
+                                 fontWeight: FontWeight.w600,
+                                 color: AppTheme.warmBrown,
+                               ),
+                             ),
+                           );
+                         },
+                       ),
                    ],
                  );
                },
@@ -579,36 +579,63 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Show create file dialog
   void _showCreateFileDialog(JournalProvider provider) {
     final nameController = TextEditingController();
+    String? errorMessage;
     
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
-      builder: (context) => AlertDialog(
-        title: const Text('create file'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'name',
-            hintText: 'my journal entry',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('create file'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'name',
+                  hintText: 'my journal entry',
+                  errorText: errorMessage,
+                ),
+                autofocus: true,
+                onChanged: (value) {
+                  setState(() {
+                    errorMessage = ValidationService.validateName(value.trim(), isFolder: false);
+                    if (errorMessage == null) {
+                      // Check for duplicates in root level (where new files are created)
+                      final existingNames = provider.files
+                          .where((f) => f.folderId == null)
+                          .map((f) => f.name)
+                          .toList();
+                      if (ValidationService.isFileNameDuplicate(value.trim(), existingNames)) {
+                        errorMessage = 'A file with this name already exists';
+                      }
+                    }
+                  });
+                },
+              ),
+            ],
           ),
-          autofocus: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('cancel'),
+            ),
+            TextButton(
+              onPressed: errorMessage == null && nameController.text.trim().isNotEmpty
+                  ? () async {
+                      final name = nameController.text.trim();
+                      final fileId = await provider.createFile(name, '');
+                      if (fileId != null) {
+                        provider.selectFile(fileId);
+                      }
+                      Navigator.of(context).pop();
+                    }
+                  : null,
+              child: const Text('create'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty) {
-                await provider.createFile(name, '');
-                Navigator.of(context).pop();
-              }
-            },
-            child: const Text('create'),
-          ),
-        ],
       ),
     );
   }
@@ -616,36 +643,60 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Show create folder dialog
   void _showCreateFolderDialog(JournalProvider provider) {
     final nameController = TextEditingController();
+    String? errorMessage;
     
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
-      builder: (context) => AlertDialog(
-        title: const Text('create folder'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            labelText: 'name',
-            hintText: 'my folder',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('create folder'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'name',
+                  hintText: 'my folder',
+                  errorText: errorMessage,
+                ),
+                autofocus: true,
+                onChanged: (value) {
+                  setState(() {
+                    errorMessage = ValidationService.validateName(value.trim(), isFolder: true);
+                    if (errorMessage == null) {
+                      // Check for duplicates
+                      final existingNames = provider.folders
+                          .where((f) => f.parentId == provider.selectedFolderId)
+                          .map((f) => f.name)
+                          .toList();
+                      if (ValidationService.isFolderNameDuplicate(value.trim(), existingNames)) {
+                        errorMessage = 'A folder with this name already exists';
+                      }
+                    }
+                  });
+                },
+              ),
+            ],
           ),
-          autofocus: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('cancel'),
+            ),
+            TextButton(
+              onPressed: errorMessage == null && nameController.text.trim().isNotEmpty
+                  ? () async {
+                      final name = nameController.text.trim();
+                      await provider.createFolder(name);
+                      Navigator.of(context).pop();
+                    }
+                  : null,
+              child: const Text('create'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty) {
-                await provider.createFolder(name);
-                Navigator.of(context).pop();
-              }
-            },
-            child: const Text('create'),
-          ),
-        ],
       ),
     );
   }

@@ -1,8 +1,12 @@
+import 'dart:io';
 import 'ai_service.dart';
 import 'database_service.dart';
 import 'embedding_service.dart';
 import '../models/journal_file.dart';
 import '../models/conversation_session.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+import 'dart:math' as math;
 import '../models/context_settings.dart';
 
 class JournalCompanionService {
@@ -14,15 +18,52 @@ class JournalCompanionService {
   final DatabaseService _dbService = DatabaseService();
   final EmbeddingService _embeddingService = EmbeddingService();
 
-  /// Main method: Generate insights using context based on conversation settings
-  Future<String> generateInsights(String query, {ConversationSession? conversation}) async {
+  /// Generate AI insights based on user query using embeddings-based context
+  Future<String> generateInsights({
+    required String userQuery,
+    ConversationSession? conversation,
+    required ContextSettings settings,
+  }) async {
+    print('=== GENERATEINSIGHTS METHOD CALLED ===');
+    print('USER QUERY: $userQuery');
+    
+    // Try multiple log approaches to see if any work
+    stderr.writeln('STDERR: generateInsights called with query: $userQuery');
+    
+    // Force flush stdout
+    stdout.writeln('STDOUT: generateInsights method entry');
+    
+    print('🚨🚨🚨 METHOD CALLED - START OF GENERATEINSIGHTS 🚨🚨🚨');
+    print('🚨🚨🚨 USER QUERY: $userQuery 🚨🚨🚨');
+    print('🚨🚨🚨 SETTINGS: ${settings.toString()} 🚨🚨🚨');
     try {
-      // Get context based on conversation settings
-      final contextSettings = conversation?.contextSettings ?? ContextSettings.general;
-      final contextFiles = await _getContextForSettings(query, contextSettings);
+      print('🚨🚨🚨 EMBEDDINGS SEARCH STARTING 🚨🚨🚨');
+      print('🧠 Generating insights with embeddings-based context...');
       
-      // Generate thoughtful response with conversation awareness
-      return await _generateResponse(query, contextFiles, conversation);
+      // Get user token setting
+      final userTokens = await _getUserTokenSetting();
+      print('   User token setting: $userTokens');
+      
+      // 1. CORE CONTEXT (Always included, minimal tokens)
+      final profileContent = await _getUserProfile(100); // REDUCED - profile should be very minimal
+      final conversationContext = _getConversationHistory(conversation, 300); // REDUCED - less context to avoid confusion
+      
+      // 2. CUSTOM CONTEXT (Use what's actually needed, not a fixed budget)
+      final customContext = await _getCustomContext(settings, userTokens); // Let it calculate its own needs
+      final customTokensUsed = _estimateTokens(customContext);
+      
+      // 3. EMBEDDINGS (Gets remaining tokens - scales with user setting!)
+      final remainingTokensForEmbeddings = userTokens - 400 - customTokensUsed; // 400 = profile(100) + conversation(300)
+      print('🚨🚨🚨 ABOUT TO SEARCH EMBEDDINGS 🚨🚨🚨');
+      final relevantEntries = await _getRelevantEntriesFromEmbeddings(userQuery, remainingTokensForEmbeddings);
+      
+      return await _generateCleanResponse(
+        userQuery: userQuery,
+        profileContent: profileContent,
+        relevantEntries: relevantEntries,
+        conversationContext: conversationContext,
+        customContext: customContext,
+      );
       
     } catch (e) {
       print('❌ Error generating insights: $e');
@@ -30,308 +71,365 @@ class JournalCompanionService {
     }
   }
 
-  /// Get context based on conversation settings with token limits
-  Future<List<JournalFile>> _getContextForSettings(String query, ContextSettings settings) async {
-    switch (settings.mode) {
-      case ContextMode.general:
-        return await _getGeneralContext(query, settings.maxTokens);
-      case ContextMode.timeframe:
-        return await _getTimeframeContext(settings, settings.maxTokens);
-      case ContextMode.custom:
-        return await _getCustomContext(settings, settings.maxTokens);
+  /// Get user's saved token setting from SharedPreferences
+  Future<int> _getUserTokenSetting() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final tokens = prefs.getDouble('context_token_usage') ?? 30000.0;
+      return tokens.toInt();
+    } catch (e) {
+      print('   Using default tokens (SharedPreferences error): $e');
+      return 30000; // Fallback to default
     }
   }
 
-  /// Get general context (current hybrid approach)
-  Future<List<JournalFile>> _getGeneralContext(String query, int maxTokens) async {
-    final contexts = await Future.wait([
-      _getRecentContext(maxTokens: maxTokens ~/ 3),           // 1/3 of tokens for recent
-      _getRelevantContext(query, maxTokens: maxTokens ~/ 3),  // 1/3 for relevant
-      _getLongTermContext(query, maxTokens: maxTokens ~/ 3),  // 1/3 for long-term
-    ]);
-    
-    return _mergeContexts(contexts[0], contexts[1], contexts[2]);
-  }
-
-  /// Get timeframe-based context
-  Future<List<JournalFile>> _getTimeframeContext(ContextSettings settings, int maxTokens) async {
-    final timeframeDays = settings.timeframeDays;
-    
-    DateTime? sinceDate;
-    if (timeframeDays != null) {
-      sinceDate = DateTime.now().subtract(Duration(days: timeframeDays));
-    }
-    
-    return await _dbService.getRecentFilesOrdered(
-      maxTokens: maxTokens,
-      sinceDate: sinceDate,
-    );
-  }
-
-  /// Get custom context from selected files
-  Future<List<JournalFile>> _getCustomContext(ContextSettings settings, int maxTokens) async {
-    if (settings.customFileIds.isEmpty) {
-      return [];
-    }
-    
-    final files = <JournalFile>[];
-    int totalTokens = 0;
-    
-    // Load files in order and respect token limit
-    for (final fileId in settings.customFileIds) {
-      final file = await _dbService.getFile(fileId);
-      if (file != null) {
-        final fileTokens = _estimateTokens(file.content ?? '');
-        if (totalTokens + fileTokens <= maxTokens) {
-          files.add(file);
-          totalTokens += fileTokens;
-        } else {
-          break; // Stop if we would exceed token limit
+  /// Get user profile content
+  Future<String> _getUserProfile(int tokenBudget) async {
+    try {
+      final profileFile = await _dbService.getProfileFile();
+      if (profileFile?.content?.isNotEmpty == true) {
+        final cleanProfile = _extractUserContentFromProfile(profileFile!.content!);
+        final profileTokens = _estimateTokens(cleanProfile);
+        
+        if (profileTokens <= tokenBudget) {
+          print('   ✅ Profile: ${profileTokens} tokens');
+          return cleanProfile;
         }
+        
+        // Truncate profile if too long
+        final truncatedProfile = _truncateToTokenBudget(cleanProfile, tokenBudget);
+        final finalTokens = _estimateTokens(truncatedProfile);
+        print('   ✅ Profile (truncated): ${finalTokens} tokens');
+        return truncatedProfile;
       }
+      
+      print('   ⚠️ No profile file found');
+      return 'No profile information available.';
+      
+    } catch (e) {
+      print('Error loading user profile: $e');
+      return 'Profile information unavailable.';
     }
-    
-    // Sort chronologically by date
-    files.sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
-    
-    return files;
   }
 
-  /// Get intelligent context across time periods (kept for backwards compatibility)
-  Future<List<JournalFile>> _getHybridContext(String query) async {
-    final contexts = await Future.wait([
-      _getRecentContext(),           // Last 30 days
-      _getRelevantContext(query),    // Semantic similarity
-      _getLongTermContext(query),    // Historical patterns
-    ]);
-    
-    return _mergeContexts(contexts[0], contexts[1], contexts[2]);
-  }
-
-  /// Recent context: Last 30 days for continuity
-  Future<List<JournalFile>> _getRecentContext({int? maxTokens}) async {
-    final cutoff = DateTime.now().subtract(Duration(days: 30));
-    return await _dbService.getRecentFilesOrdered(
-      maxTokens: maxTokens ?? 8000,  // Use provided maxTokens or default to 8K
-      sinceDate: cutoff,
-    );
-  }
-
-  /// Relevant context: Semantic similarity with strong recency bias
-  Future<List<JournalFile>> _getRelevantContext(String query, {int? maxTokens}) async {
-    final candidates = await _embeddingService.findSimilarFiles(query, topK: 10);
-    
-    // Apply STRONG recency bias to avoid getting stuck on old topics
-    final now = DateTime.now();
-    final scoredCandidates = candidates.map((file) {
-      final daysSinceUpdate = now.difference(file.updatedAt).inDays;
-      
-      // Heavily favor recent entries
-      double recencyBoost = 1.0;
-      if (daysSinceUpdate <= 3) {
-        recencyBoost = 5.0;  // Very recent gets huge boost
-      } else if (daysSinceUpdate <= 7) {
-        recencyBoost = 3.0;  // Recent gets big boost
-      } else if (daysSinceUpdate <= 30) {
-        recencyBoost = 1.5;  // Somewhat recent gets small boost
+  /// Get conversation history (last 10 exchanges)
+  String _getConversationHistory(ConversationSession? conversation, int tokenBudget) {
+    try {
+      if (conversation?.history.isEmpty != false) {
+        print('   ⚠️ No conversation history');
+        return '';
       }
       
-      return _ScoredFile(file, recencyBoost);
-    }).toList();
-    
-    // Sort by adjusted score
-    scoredCandidates.sort((a, b) => b.score.compareTo(a.score));
-    
-    // Apply token limit if provided
-    if (maxTokens != null) {
-      final filteredFiles = <JournalFile>[];
-      int totalTokens = 0;
+      print('   💬 Building conversation context...');
       
-      for (final candidate in scoredCandidates) {
-        final fileTokens = _estimateTokens(candidate.file.content ?? '');
-        if (totalTokens + fileTokens <= maxTokens) {
-          filteredFiles.add(candidate.file);
-          totalTokens += fileTokens;
+      // Get recent messages (last 3 exchanges = 6 messages max) - reduced to avoid confusion
+      final recentHistory = conversation!.history.reversed.take(6).toList().reversed.toList();
+      
+      final conversationLines = <String>[];
+      int usedTokens = 0;
+      
+      for (final message in recentHistory) {
+        final line = '${message.role == 'user' ? 'User' : 'Assistant'}: ${message.content}';
+        final lineTokens = _estimateTokens(line);
+        
+        if (usedTokens + lineTokens <= tokenBudget) {
+          conversationLines.insert(0, line);
+          usedTokens += lineTokens;
         } else {
           break;
         }
       }
       
-      return filteredFiles;
+      print('   ✅ Conversation truncated: ${usedTokens} tokens');
+      return conversationLines.join('\n');
+      
+    } catch (e) {
+      print('Error building conversation context: $e');
+      return 'No conversation context available.';
     }
-    
-    return scoredCandidates.take(3).map((sf) => sf.file).toList();
   }
 
-  /// Long-term context: Historical patterns and growth
-  Future<List<JournalFile>> _getLongTermContext(String query, {int? maxTokens}) async {
-    // Get older entries (3+ months ago) that are semantically similar
-    final threeMonthsAgo = DateTime.now().subtract(Duration(days: 90));
-    
-    // Find semantic matches from the older time period
-    final allSimilar = await _embeddingService.findSimilarFiles(query, topK: 20);
-    
-    // Filter for entries older than 3 months
-    final longTermCandidates = allSimilar.where((file) => 
-      file.updatedAt.isBefore(threeMonthsAgo)
-    ).toList();
-    
-    // Apply token limit if provided
-    if (maxTokens != null) {
-      final filteredFiles = <JournalFile>[];
-      int totalTokens = 0;
+  /// Get relevant entries using embeddings search
+  Future<String> _getRelevantEntriesFromEmbeddings(String userQuery, int tokenBudget) async {
+    try {
+      print('   🔍 Searching embeddings for relevant entries...');
+      print('   Query: "$userQuery"');
+      print('   Token budget: $tokenBudget');
       
-      for (final candidate in longTermCandidates) {
-        final fileTokens = _estimateTokens(candidate.content ?? '');
-        if (totalTokens + fileTokens <= maxTokens) {
-          filteredFiles.add(candidate);
-          totalTokens += fileTokens;
+      // First, check if any embeddings exist in the database
+      final embeddingCount = await _dbService.getEmbeddingCount();
+      print('   📊 Total embeddings in database: $embeddingCount');
+      
+      if (embeddingCount == 0) {
+        print('   ⚠️ No embeddings found in database - files need to be imported first');
+        return 'No relevant entries found. Import some journal files to enable AI search.';
+      }
+      
+      // Show sample of what embeddings exist
+      final sampleEmbeddings = await _dbService.getEmbeddingSample(limit: 3);
+      print('   📋 Sample embeddings:');
+      for (final sample in sampleEmbeddings) {
+        print('     - ${sample['name']}: chunk ${sample['chunk_index']}, ${sample['content_length']} chars, ${sample['embedding_size']} bytes');
+      }
+      
+      // Find most similar files using embeddings
+      final similarFiles = await _embeddingService.findSimilarFiles(userQuery, topK: 10);
+      print('   🎯 Found ${similarFiles.length} similar files from chunked embeddings');
+      
+      if (similarFiles.isEmpty) {
+        print('   ⚠️ Embedding search returned no results - similarity may be too low');
+        return 'No relevant entries found for your query.';
+      }
+      
+      final relevantEntries = <String>[];
+      int currentTokens = 0;
+      
+      print('   📄 Processing files:');
+      for (int i = 0; i < similarFiles.length && currentTokens < tokenBudget; i++) {
+        final file = similarFiles[i];
+        print('   📄 Processing file ${i + 1}/${similarFiles.length}: ${file.name}');
+        
+        // Get clean content
+        final cleanContent = _extractUserContentOnly(file.content);
+        final entryTokens = _estimateTokens(cleanContent);
+        
+        print('     📊 Content: ${cleanContent.length} chars, ~$entryTokens tokens');
+        
+        if (currentTokens + entryTokens <= tokenBudget && cleanContent.isNotEmpty) {
+          final entry = '**${file.name}** (${file.journalDate?.toString().split(' ')[0] ?? 'No date'}):\n$cleanContent';
+          relevantEntries.add(entry);
+          currentTokens += entryTokens;
+          print('     ✅ Added to context (total tokens: $currentTokens)');
         } else {
-          break;
+          print('     ⏭️ Skipped (would exceed token budget or empty content)');
         }
       }
       
-      return filteredFiles;
+      if (relevantEntries.isEmpty) {
+        print('   ⚠️ No entries had usable content after filtering');
+        return 'No relevant entries found for your query.';
+      }
+      
+      final result = relevantEntries.join('\n\n');
+      print('   🎯 Returning ${relevantEntries.length} relevant entries (~$currentTokens tokens)');
+      return result;
+      
+    } catch (e) {
+      print('   🔴 Error in embedding search: $e');
+      return 'Error searching for relevant entries: $e';
     }
-    
-    return longTermCandidates.take(2).toList();
   }
 
-  /// Smart merge: balance all three contexts with recent priority
-  List<JournalFile> _mergeContexts(
-    List<JournalFile> recent, 
-    List<JournalFile> relevant, 
-    List<JournalFile> longTerm
-  ) {
-    final seen = <String>{};
-    final merged = <JournalFile>[];
-    
-    // Add recent context FIRST (up to 3) - this breaks feedback loops
-    for (final file in recent.take(3)) {
-      if (!seen.contains(file.id)) {
-        merged.add(file);
-        seen.add(file.id);
+  /// Get custom context for selected files (NEEDS-BASED SYSTEM)
+  Future<String> _getCustomContext(ContextSettings settings, int maxTokenBudget) async {
+    try {
+      if (settings.selectedFileIds.isEmpty) {
+        return '';
       }
-    }
-    
-    // Add relevant entries only if they're not already included
-    for (final file in relevant.take(2)) {
-      if (!seen.contains(file.id) && merged.length < 5) {
-        merged.add(file);
-        seen.add(file.id);
+      
+      print('   📁 Loading ${settings.selectedFileIds.length} selected files (needs-based system)...');
+      
+      // Get profile file ID to avoid duplication
+      final profileFile = await _dbService.getProfileFile();
+      final profileFileId = profileFile?.id;
+      
+      final selectedFiles = <String>[];
+      int totalTokensNeeded = 0;
+      final maxReasonableLimit = (maxTokenBudget * 0.6).toInt(); // Don't let custom files dominate
+      
+      for (final fileId in settings.selectedFileIds) {
+        // Skip profile file to avoid duplication
+        if (fileId == profileFileId) {
+          print('   ⏭️ Skipping profile file - already loaded in main context');
+          continue;
+        }
+        
+        try {
+          final file = await _dbService.getFile(fileId);
+          if (file?.content?.isNotEmpty == true) {
+            // Clean the content
+            final cleanContent = _extractUserContentOnly(file!.content!);
+            if (cleanContent.trim().isEmpty) {
+              print('   ⏭️ Skipping ${file.name} - no user content after cleaning');
+              continue;
+            }
+            
+            final fileTokens = _estimateTokens(cleanContent);
+            
+            // Check if adding this file would exceed reasonable limits
+            if (totalTokensNeeded + fileTokens > maxReasonableLimit) {
+              print('   ⏹️ Stopping at ${file.name} - would exceed reasonable limit (${maxReasonableLimit} tokens)');
+              break;
+            }
+            
+            selectedFiles.add('${file.name}:\n$cleanContent');
+            totalTokensNeeded += fileTokens;
+            print('   ✅ Added ${file.name} (${fileTokens} tokens)');
+            
+          } else {
+            print('   ⏭️ Skipping ${file?.name ?? 'unknown'} - no content');
+          }
+        } catch (e) {
+          print('   ❌ Error loading file $fileId: $e');
+        }
       }
-    }
-    
-    // Add long-term perspective (up to 1)
-    for (final file in longTerm.take(1)) {
-      if (!seen.contains(file.id) && merged.length < 5) {
-        merged.add(file);
-        seen.add(file.id);
+      
+      if (selectedFiles.isNotEmpty) {
+        final result = selectedFiles.join('\n\n');
+        print('   ✅ Custom context: ${selectedFiles.length} files, ${totalTokensNeeded} tokens used');
+        return result;
       }
+      
+      return '';
+      
+    } catch (e) {
+      print('Error getting custom context: $e');
+      return '';
     }
-    
-    return merged;
   }
 
-  /// Generate thoughtful response with conversation awareness
-  Future<String> _generateResponse(String query, List<JournalFile> files, ConversationSession? conversation) async {
-    if (files.isEmpty) {
-      return "I don't see any journal entries that relate to your question.";
-    }
+  /// Generate a clean response using the AI service
+  Future<String> _generateCleanResponse({
+    required String userQuery,
+    required String profileContent,
+    required String relevantEntries,
+    required String conversationContext,
+    required String customContext,
+  }) async {
+      
+    final systemPrompt = '''You are their thoughtful journal analyst - like a close friend who maintains conversations through insights and questions. 
     
-    final prompt = await _buildPrompt(query, files, conversation);
-    
-    return await _aiService.generateText(
+
+CRITICAL: FOCUS ON THEIR CURRENT QUESTION FIRST
+- Their current question is the PRIORITY - answer it directly and completely
+- Use context only to SUPPORT your answer to their current question
+- Don't get sidetracked by unrelated context information
+- Stay laser-focused on what they're asking RIGHT NOW
+
+RESPONSE APPROACH:
+1. ANSWER THEIR CURRENT QUESTION FIRST (this is most important)
+2. Use journal entries only when they directly relate to their question
+3. Reference conversation history only if it helps answer their current question
+4. Ask follow-up questions related to what they just asked
+
+CONVERSATIONAL STYLE:
+- Use "you/your" exclusively - warm and personal
+- Be direct and focused - answer what they asked
+- Ask thoughtful follow-up questions about their current topic
+- Reference entries only when they're relevant to their question
+
+Your goal: Answer their current prompt thoroughly while using context only when it helps.''';
+
+    final prompt = '''CURRENT QUESTION: $userQuery
+
+SUPPORTING CONTEXT (use only if relevant to their question):
+${conversationContext.isNotEmpty ? 'Recent conversation:\n$conversationContext\n' : ''}
+${profileContent.isNotEmpty ? 'About them:\n$profileContent\n' : ''}
+${relevantEntries.isNotEmpty ? 'Relevant journal entries:\n$relevantEntries\n' : ''}
+${customContext.isNotEmpty ? 'Selected files:\n$customContext\n' : ''}
+
+Answer their current question above:''';
+
+    return await _generateCompleteResponse(prompt, systemPrompt);
+  }
+
+  /// Generate a complete response with natural completion
+  Future<String> _generateCompleteResponse(String prompt, String systemPrompt) async {
+    // Let AI complete naturally with no character limits
+    final response = await _aiService.generateTextNaturally(
       prompt,
-      maxTokens: 275, // Sweet spot: complete thoughts without rambling
-      temperature: 0.6, // Balanced: natural but focused
-      systemPrompt: '''You are a supportive friend who has read their journal over time.
-      
-      Respond naturally and directly to their CURRENT question. Follow their lead on topic changes.
-      Use the most recent journal entries as your primary source of truth.
-      Keep responses thoughtful but concise - 2-3 sentences typically.
-      Be warm and understanding, like a friend who really knows them.
-      
-      IMPORTANT: You have been provided background context about this person for personalization, but DO NOT reference or mention this background context unless they specifically ask about it.''',
+      // No safetyLimit - allow unlimited response length
+      temperature: 0.5, // LOWER - More focused and direct responses
+      systemPrompt: systemPrompt,
     );
-  }
-
-  /// Clean prompt with user question as primary focus - ONLY user journal data
-  Future<String> _buildPrompt(String query, List<JournalFile> files, ConversationSession? conversation) async {
-    final parts = <String>[];
     
-    // GET USER PROFILE FROM PROFILE FILE (but don't mention it)
-    final profileFile = await _dbService.getProfileFile();
-    if (profileFile != null && profileFile.content!.isNotEmpty) {
-      final cleanProfileContent = _extractUserContentOnly(profileFile.content!);
-      if (cleanProfileContent.trim().isNotEmpty) {
-        parts.add('[BACKGROUND CONTEXT - DO NOT MENTION OR REFERENCE]');
-        parts.add(cleanProfileContent);
-        parts.add('[END BACKGROUND CONTEXT]');
-        parts.add('');
-      }
-    }
-    
-    // START WITH CLEAR INSTRUCTION AND USER'S QUESTION
-    parts.add('ANSWER THIS QUESTION: $query');
-    parts.add('');
-    parts.add('Use the journal entries below as context to provide a thoughtful, personal answer based on the user\'s actual experiences and patterns.');
-    parts.add('');
-    
-    // NO CONVERSATION HISTORY - Only pure user journal data
-    parts.add('SUPPORTING CONTEXT FROM JOURNAL:');
-    
-    for (final file in files) {
-      parts.add('${file.name} (${_formatDate(file.updatedAt)}):');
-      // Only include pure user journal content - filter out any AI interactions
-      final cleanContent = _extractUserContentOnly(file.content!);
-      parts.add(cleanContent);
-      parts.add('');
-    }
-    
-    parts.add('---');
-    parts.add('Remember: Answer the question "$query" using insights from the journal entries above.');
-    
-    return parts.join('\n');
+    return response.trim();
   }
   
-  /// Extract only user-written content, removing AI interactions
+  /// Extract user content only (filter out template/AI content)
   String _extractUserContentOnly(String content) {
-    final lines = content.split('\n');
-    final userLines = <String>[];
+    if (content.trim().isEmpty) return '';
     
-    for (final line in lines) {
-      // Skip AI prompts and responses (including inline Q&A format)
-      if (line.startsWith('/') || 
-          line.startsWith('< ') ||          // User questions
-          line.startsWith('> ') ||          // AI responses
-          line.startsWith('🤖') || 
-          line.startsWith('⏳ thinking...') ||
-          line.contains('Processing:') ||
-          line.contains('Error:')) {
-        continue;
+    // Light filtering for journal content - only remove truly empty content
+    String cleanContent = content;
+    
+    // Remove excessive whitespace but preserve structure
+    cleanContent = cleanContent.replaceAll(RegExp(r'\n\s*\n\s*\n+'), '\n\n');
+    cleanContent = cleanContent.trim();
+    
+    return cleanContent;
+  }
+
+  /// Extract user content from profile file (aggressive template filtering)
+  String _extractUserContentFromProfile(String content) {
+    if (content.trim().isEmpty) return '';
+    
+    // Remove template indicators (ONLY for profile file)
+    final templatePatterns = [
+      r'\[Your Name Here\]',
+      r'\[your name here\]',
+      r'\*This becomes your display name.*?\*',
+      r'\*What is your core purpose.*?\*',
+      r'\*What are the key roles.*?\*',
+      r'\*What principles guide.*?\*',
+      r'\*What energizes and motivates.*?\*',
+      r'\*Where do you see yourself.*?\*',
+      r'\*What are your main objectives.*?\*',
+      r'\*What specific goals.*?\*',
+      r'Write your personal mission statement here\.\.\.',
+      r'This information helps the AI understand.*?\*',
+      r'## Mission Statement',
+      r'## My Roles',
+      r'## Core Values', 
+      r'## What Drives Me',
+      r'## 5-Year Vision',
+      r"## This Year's Focus",
+      r'## This Month',
+    ];
+    
+    String cleanContent = content;
+    
+    // Remove template patterns
+    for (final pattern in templatePatterns) {
+      cleanContent = cleanContent.replaceAll(RegExp(pattern, multiLine: true, caseSensitive: false), '');
+    }
+    
+    // Remove empty bullet points and placeholder text
+    cleanContent = cleanContent.replaceAll(RegExp(r'^•\s*$', multiLine: true), '');
+    cleanContent = cleanContent.replaceAll(RegExp(r'^\s*-\s*$', multiLine: true), '');
+    cleanContent = cleanContent.replaceAll(RegExp(r'---+', multiLine: true), '');
+    
+    // Clean up excessive whitespace
+    cleanContent = cleanContent.replaceAll(RegExp(r'\n\s*\n\s*\n+'), '\n\n');
+    cleanContent = cleanContent.trim();
+    
+    return cleanContent;
+  }
+
+  /// Truncate text to fit within token budget, stopping at sentence boundaries
+  String _truncateToTokenBudget(String text, int tokenBudget) {
+    if (_estimateTokens(text) <= tokenBudget) {
+      return text;
+    }
+
+    final sentences = text.split(RegExp(r'[.!?]+\s+'));
+    final result = <String>[];
+    int currentTokens = 0;
+
+    for (final sentence in sentences) {
+      final sentenceTokens = _estimateTokens(sentence + '. ');
+      if (currentTokens + sentenceTokens <= tokenBudget) {
+        result.add(sentence);
+        currentTokens += sentenceTokens;
+      } else {
+        break;
       }
-      userLines.add(line);
     }
-    
-    return userLines.join('\n').trim();
+
+    return result.isNotEmpty ? result.join('. ') + '.' : '';
   }
 
-  /// Format date for display
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
-  /// Generate embedding for a file (for backward compatibility)
-  Future<void> generateEmbeddingForFile(String fileId, String content) async {
-    try {
-      await _embeddingService.storeEmbedding(fileId, content);
-    } catch (e) {
-      print('Error generating embedding for file $fileId: $e');
-    }
-  }
-
-  /// Estimate token count for content
+  /// Estimate tokens in text (rough approximation)
   int _estimateTokens(String text) {
     if (text.trim().isEmpty) return 0;
     
@@ -347,12 +445,4 @@ class JournalCompanionService {
     
     return wordTokens + overhead;
   }
-}
-
-/// Helper class for scoring files with recency bias
-class _ScoredFile {
-  final JournalFile file;
-  final double score;
-  
-  _ScoredFile(this.file, this.score);
 }

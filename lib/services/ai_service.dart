@@ -387,8 +387,34 @@ Never mention that you are an AI or language model.''';
       final completer = Completer<String>();
 
       await fllamaChat(request, (response, openaiResponseJsonString, done) {
+        // Handle case where fllama doesn't extract response text properly
+        if (response.isEmpty && openaiResponseJsonString != null && openaiResponseJsonString.isNotEmpty) {
+          // Extract content from JSON response as fallback
+          try {
+            final jsonMatch = RegExp(r'"content":"([^"]*)"').firstMatch(openaiResponseJsonString);
+            if (jsonMatch != null) {
+              String extractedContent = jsonMatch.group(1) ?? '';
+              // Decode common escape sequences
+              extractedContent = extractedContent
+                  .replaceAll('\\n', '\n')
+                  .replaceAll('\\t', '\t')
+                  .replaceAll('\\"', '"')
+                  .replaceAll('\\\\', '\\');
+              
+              fullResponse = extractedContent;
+              _aiResponseController.add(extractedContent);
+            } else {
+              fullResponse = response; // Use empty response as fallback
+              _aiResponseController.add(response);
+            }
+          } catch (e) {
+            fullResponse = response;
+            _aiResponseController.add(response);
+          }
+        } else {
         fullResponse = response;
         _aiResponseController.add(response);
+        }
         
         if (done) {
           completer.complete(fullResponse);
@@ -399,6 +425,228 @@ Never mention that you are an AI or language model.''';
     } catch (e) {
       throw Exception('Failed to generate text: $e');
     }
+  }
+
+  /// Generate text response with natural completion (no artificial limits)
+  Future<String> generateTextNaturally(
+    String prompt, {
+    int? safetyLimit, // Made optional - null means no limit
+    double temperature = 0.7,
+    double topP = 0.9,
+    String? systemPrompt,
+  }) async {
+    if (_currentModelPath == null) {
+      throw Exception('No model loaded');
+    }
+
+    try {
+      final messages = <Message>[];
+      
+      // Add system prompt emphasizing natural completion
+      final defaultSystemPrompt = systemPrompt ?? '''You are a helpful friend who has read someone's journal. 
+Respond naturally and directly to their questions. 
+Answer completely but concisely - say what needs to be said, then stop naturally.
+Never mention that you are an AI or language model.''';
+      
+      messages.add(Message(Role.system, defaultSystemPrompt));
+      messages.add(Message(Role.user, prompt));
+
+      final request = OpenAiRequest(
+        maxTokens: 1024, // BALANCED - Direct but complete responses
+        messages: messages,
+        numGpuLayers: 99, // Auto-detect GPU support
+        modelPath: _currentModelPath!,
+        temperature: temperature,
+        topP: topP,
+        contextSize: _getContextSize(_currentModelId),
+        frequencyPenalty: 0.0,
+        presencePenalty: 1.1,
+        logger: (log) {
+          // ignore: avoid_print
+          print('[AI] $log');
+        },
+      );
+
+      String fullResponse = '';
+      final completer = Completer<String>();
+      bool shouldStop = false;
+
+      await fllamaChat(request, (response, openaiResponseJsonString, done) {
+        if (shouldStop) return; // Don't process more if we've decided to stop
+        
+        String currentResponse = response;
+        
+        // Handle case where fllama doesn't extract response text properly
+        if (response.isEmpty && openaiResponseJsonString != null && openaiResponseJsonString.isNotEmpty) {
+          // Extract content from JSON response as fallback
+          try {
+            final jsonMatch = RegExp(r'"content":"([^"]*)"').firstMatch(openaiResponseJsonString);
+            if (jsonMatch != null) {
+              currentResponse = jsonMatch.group(1) ?? '';
+              // Decode common escape sequences
+              currentResponse = currentResponse
+                  .replaceAll('\\n', '\n')
+                  .replaceAll('\\t', '\t')
+                  .replaceAll('\\"', '"')
+                  .replaceAll('\\\\', '\\');
+            }
+          } catch (e) {
+            // Use empty response as fallback
+          }
+        }
+        
+        fullResponse = currentResponse;
+        _aiResponseController.add(currentResponse);
+        
+        // Only check safety limit if one is provided
+        if (safetyLimit != null && currentResponse.length >= safetyLimit) {
+          // Safety stop - prevent runaway generation
+          shouldStop = true;
+          completer.complete(_stopAtSentenceBoundary(currentResponse, safetyLimit));
+          return;
+        }
+        
+        // Let AI complete naturally - no artificial early stopping
+        if (done && !shouldStop) {
+          completer.complete(fullResponse);
+        }
+      });
+
+      return await completer.future;
+    } catch (e) {
+      throw Exception('Failed to generate text: $e');
+    }
+  }
+
+  /// Generate text response with character-based smart stopping
+  Future<String> generateTextWithCharLimit(
+    String prompt, {
+    required int targetCharLimit,
+    required int maxCharLimit,
+    double temperature = 0.7,
+    double topP = 0.9,
+    String? systemPrompt,
+  }) async {
+    if (_currentModelPath == null) {
+      throw Exception('No model loaded');
+    }
+
+    try {
+      final messages = <Message>[];
+      
+      // Add a default system prompt if none provided
+      final defaultSystemPrompt = systemPrompt ?? '''You are a helpful friend who has read someone's journal. 
+Respond naturally and directly to their questions. 
+Keep responses concise and focused on their journal content.
+Never mention that you are an AI or language model.''';
+      
+      messages.add(Message(Role.system, defaultSystemPrompt));
+      messages.add(Message(Role.user, prompt));
+
+      final request = OpenAiRequest(
+        maxTokens: 2048, // High token limit, we'll control by character count instead
+        messages: messages,
+        numGpuLayers: 99, // Auto-detect GPU support
+        modelPath: _currentModelPath!,
+        temperature: temperature,
+        topP: topP,
+        contextSize: _getContextSize(_currentModelId),
+        frequencyPenalty: 0.0,
+        presencePenalty: 1.1,
+        logger: (log) {
+          // ignore: avoid_print
+          print('[AI] $log');
+        },
+      );
+
+      String fullResponse = '';
+      final completer = Completer<String>();
+      bool shouldStop = false;
+
+      await fllamaChat(request, (response, openaiResponseJsonString, done) {
+        if (shouldStop) return; // Don't process more if we've decided to stop
+        
+        String currentResponse = response;
+        
+        // Handle case where fllama doesn't extract response text properly
+        if (response.isEmpty && openaiResponseJsonString != null && openaiResponseJsonString.isNotEmpty) {
+          // Extract content from JSON response as fallback
+          try {
+            final jsonMatch = RegExp(r'"content":"([^"]*)"').firstMatch(openaiResponseJsonString);
+            if (jsonMatch != null) {
+              currentResponse = jsonMatch.group(1) ?? '';
+              // Decode common escape sequences
+              currentResponse = currentResponse
+                  .replaceAll('\\n', '\n')
+                  .replaceAll('\\t', '\t')
+                  .replaceAll('\\"', '"')
+                  .replaceAll('\\\\', '\\');
+            }
+          } catch (e) {
+            // Use empty response as fallback
+          }
+        }
+        
+        fullResponse = currentResponse;
+        _aiResponseController.add(currentResponse);
+        
+        // Check if we should stop based on character count
+        if (currentResponse.length >= maxCharLimit) {
+          // Hard stop - exceeded max limit
+          shouldStop = true;
+          completer.complete(_stopAtSentenceBoundary(currentResponse, maxCharLimit));
+          return;
+        } else if (currentResponse.length >= targetCharLimit && _endsWithCompleteSentence(currentResponse)) {
+          // Soft stop - reached target and found good stopping point
+          shouldStop = true;
+          completer.complete(currentResponse);
+          return;
+        }
+        
+        if (done && !shouldStop) {
+          completer.complete(fullResponse);
+        }
+      });
+
+      return await completer.future;
+    } catch (e) {
+      throw Exception('Failed to generate text: $e');
+    }
+  }
+
+  /// Check if text ends with a complete sentence
+  bool _endsWithCompleteSentence(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    
+    // Check for sentence-ending punctuation
+    return trimmed.endsWith('.') || 
+           trimmed.endsWith('!') || 
+           trimmed.endsWith('?') ||
+           trimmed.endsWith('."') ||
+           trimmed.endsWith('!"') ||
+           trimmed.endsWith('?"');
+  }
+
+  /// Stop response at the last complete sentence within the character limit
+  String _stopAtSentenceBoundary(String text, int maxChars) {
+    if (text.length <= maxChars) return text;
+    
+    // Find the last sentence boundary before the limit
+    final truncated = text.substring(0, maxChars);
+    final sentences = truncated.split(RegExp(r'[.!?](?=\s|$)'));
+    
+    if (sentences.length > 1) {
+      // Remove the last incomplete sentence and reconstruct
+      sentences.removeLast();
+      final result = sentences.join('.') + '.';
+      return result;
+    }
+    
+    // Fallback: just truncate at word boundary
+    final words = truncated.split(' ');
+    words.removeLast();
+    return words.join(' ') + '...';
   }
 
   // Get appropriate context size based on model
@@ -482,6 +730,46 @@ Each prompt should be on a new line and be thought-provoking.
     );
 
     return response.split('\n').where((line) => line.trim().isNotEmpty).toList();
+  }
+
+  /// Generate a concise summary of journal content for token-efficient context
+  Future<String> generateSummary(String content) async {
+    if (content.trim().isEmpty) return '';
+    
+    const systemPrompt = '''You are a journal summarizer. Create a 2-3 sentence summary of this journal entry.
+Focus on:
+- Key events and activities
+- Important emotions or insights
+- Main themes or topics
+
+Keep it concise but capture the essence. Do not mention that this is a journal or diary.''';
+
+    return await generateText(
+      content,
+      systemPrompt: systemPrompt,
+      maxTokens: 80,  // Keep summaries very concise
+      temperature: 0.3,
+    );
+  }
+
+  /// Extract keywords from journal content for efficient semantic retrieval
+  Future<String> generateKeywords(String content) async {
+    if (content.trim().isEmpty) return '';
+    
+    const systemPrompt = '''You are a keyword extractor. Extract 5-10 important keywords or short phrases from this text.
+Focus on:
+- People, places, activities
+- Emotions and themes
+- Important concepts or topics
+
+Return as a comma-separated list. No explanations, just the keywords.''';
+
+    return await generateText(
+      content,
+      systemPrompt: systemPrompt,
+      maxTokens: 50,  // Very short for keywords
+      temperature: 0.2,
+    );
   }
 
   Future<int> getStorageUsage() async {

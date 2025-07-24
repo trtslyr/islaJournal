@@ -205,4 +205,20 @@ class ConversationProvider with ChangeNotifier {
     // For now, just return the first conversations
     return sorted.take(limit).toList();
   }
+
+  // Update context settings for active conversation
+  Future<void> updateContextSettings(dynamic newSettings) async {
+    try {
+      if (_activeConversation != null) {
+        print('🔧 ConversationProvider: Updating context settings');
+        await _activeConversation!.updateContextSettings(newSettings);
+        print('🔧 Database update completed, notifying listeners');
+        notifyListeners();
+        print('🔧 Context settings update complete');
+      }
+    } catch (e) {
+      _error = 'Failed to update context settings: $e';
+      debugPrint('Error updating context settings: $e');
+    }
+  }
 } 

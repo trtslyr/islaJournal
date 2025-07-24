@@ -180,30 +180,141 @@ class EmbeddingService {
     await _dbService.storeEmbedding(fileId, embedding);
   }
 
-  // Find similar files using cosine similarity
+  // Find similar files using cosine similarity with chunked embeddings
   Future<List<JournalFile>> findSimilarFiles(String query, {int topK = 10}) async {
-    final queryEmbedding = await generateEmbedding(query);
+    print('🔍 SIMILARITY SEARCH DEBUG: Starting search for query: "$query"');
     
-    final filesWithEmbeddings = await _dbService.getFilesWithEmbeddings(
-      beforeDate: DateTime.now().subtract(Duration(days: 30))
-    );
+    final queryEmbedding = await generateEmbedding(query);
+    print('🔍 Query embedding: length=${queryEmbedding.length}, first 5 values=[${queryEmbedding.take(5).map((v) => v.toStringAsFixed(4)).join(', ')}]');
+    print('🔍 Query embedding sum: ${queryEmbedding.fold(0.0, (a, b) => a + b).toStringAsFixed(4)}');
+    
+    // Get all file chunks with embeddings from file_embeddings table
+    final db = await _dbService.database;
+    final chunkRows = await db.rawQuery('''
+      SELECT fe.file_id, fe.content, fe.embedding, f.name, f.file_path, f.folder_id, 
+             f.created_at, f.updated_at, f.last_opened, f.word_count, f.journal_date
+      FROM file_embeddings fe
+      JOIN files f ON fe.file_id = f.id
+      ORDER BY fe.file_id, fe.chunk_index
+    ''');
+    
+    if (chunkRows.isEmpty) {
+      print('   ⚠️ No chunked embeddings found in database');
+      return [];
+    }
+    
+    print('🔍 Found ${chunkRows.length} chunks to search');
+    
+    // Group chunks by file and calculate average similarity per file
+    final fileChunks = <String, List<Map<String, dynamic>>>{};
+    final fileInfos = <String, Map<String, dynamic>>{};
+    
+    for (final row in chunkRows) {
+      final fileId = row['file_id'] as String;
+      if (!fileChunks.containsKey(fileId)) {
+        fileChunks[fileId] = [];
+        fileInfos[fileId] = {
+          'name': row['name'],
+          'file_path': row['file_path'], 
+          'folder_id': row['folder_id'],
+          'created_at': row['created_at'],
+          'updated_at': row['updated_at'],
+          'last_opened': row['last_opened'],
+          'word_count': row['word_count'],
+          'journal_date': row['journal_date'],
+        };
+      }
+      fileChunks[fileId]!.add(row);
+    }
     
     final similarities = <_SimilarityResult>[];
+    int chunkCount = 0;
     
-    for (final file in filesWithEmbeddings) {
-      final embedding = _parseStoredEmbedding(file.toMap()['embedding']);
-      if (embedding.isNotEmpty) {
-        final similarity = _cosineSimilarity(queryEmbedding, embedding);
-        similarities.add(_SimilarityResult(file, similarity));
+    for (final fileId in fileChunks.keys) {
+      final chunks = fileChunks[fileId]!;
+      final fileInfo = fileInfos[fileId]!;
+      
+      // Calculate similarity for each chunk and take the best match
+      double maxSimilarity = -1.0;
+      String? bestChunkContent;
+      
+      print('🔍 Processing file "${fileInfo['name']}" with ${chunks.length} chunks');
+      
+      for (final chunk in chunks) {
+        chunkCount++;
+        final embedding = _parseChunkedEmbedding(chunk['embedding']);
+        
+        print('🔍 Chunk $chunkCount: parsed embedding length=${embedding.length}');
+        if (embedding.isNotEmpty) {
+          print('🔍 Chunk $chunkCount: first 5 values=[${embedding.take(5).map((v) => v.toStringAsFixed(4)).join(', ')}]');
+          print('🔍 Chunk $chunkCount: sum=${embedding.fold(0.0, (a, b) => a + b).toStringAsFixed(4)}');
+          
+          if (embedding.length != queryEmbedding.length) {
+            print('🔍 DIMENSION MISMATCH: query=${queryEmbedding.length}, chunk=${embedding.length}');
+            continue;
+          }
+          
+          final similarity = _cosineSimilarity(queryEmbedding, embedding);
+          final chunkPreview = chunk['content'].toString().substring(0, math.min(50, chunk['content'].toString().length));
+          print('🔍 Chunk $chunkCount similarity: ${similarity.toStringAsFixed(6)} for "$chunkPreview..."');
+          
+          if (similarity > maxSimilarity) {
+            maxSimilarity = similarity;
+            bestChunkContent = chunk['content'] as String?;
+          }
+        } else {
+          print('🔍 Chunk $chunkCount: EMPTY EMBEDDING!');
+        }
+      }
+      
+      print('🔍 File "${fileInfo['name']}" max similarity: ${maxSimilarity.toStringAsFixed(6)}');
+      
+      // Accept any similarity > -1.0 (essentially all results)
+      if (maxSimilarity > -1.0 && bestChunkContent != null) {
+        // Create JournalFile with the most relevant chunk content
+        final journalFile = JournalFile(
+          id: fileId,
+          name: fileInfo['name'] as String,
+          folderId: fileInfo['folder_id'] as String?,
+          filePath: fileInfo['file_path'] as String,
+          content: bestChunkContent, // Use the most relevant chunk
+          wordCount: fileInfo['word_count'] as int? ?? 0,
+          createdAt: DateTime.parse(fileInfo['created_at'] as String),
+          updatedAt: DateTime.parse(fileInfo['updated_at'] as String),
+          lastOpened: fileInfo['last_opened'] != null 
+              ? DateTime.parse(fileInfo['last_opened'] as String) 
+              : null,
+          journalDate: fileInfo['journal_date'] != null
+              ? DateTime.parse(fileInfo['journal_date'] as String)
+              : null,
+        );
+        
+        similarities.add(_SimilarityResult(journalFile, maxSimilarity));
       }
     }
     
     // Sort by similarity and return top K
     similarities.sort((a, b) => b.similarity.compareTo(a.similarity));
+    print('   Found ${similarities.length} files with chunked embeddings, returning top $topK');
     return similarities.take(topK).map((s) => s.file).toList();
   }
 
-  // Parse stored embedding from database
+  // Parse chunked embedding from binary storage (Float32List bytes)
+  List<double> _parseChunkedEmbedding(dynamic embeddingBytes) {
+    if (embeddingBytes == null) return [];
+    try {
+      if (embeddingBytes is Uint8List) {
+        final float32List = Float32List.view(embeddingBytes.buffer);
+        return float32List.cast<double>();
+      }
+      return [];
+    } catch (e) {
+      print('Error parsing chunked embedding: $e');
+      return [];
+    }
+  }
+
+  // Parse stored embedding from database (legacy comma-separated format)
   List<double> _parseStoredEmbedding(String? embeddingStr) {
     if (embeddingStr == null || embeddingStr.isEmpty) return [];
     try {
@@ -215,7 +326,10 @@ class EmbeddingService {
 
   // Calculate cosine similarity between two vectors
   double _cosineSimilarity(List<double> a, List<double> b) {
-    if (a.length != b.length) return 0.0;
+    if (a.length != b.length) {
+      print('🔍 COSINE: Length mismatch a=${a.length}, b=${b.length}');
+      return 0.0;
+    }
     
     double dot = 0.0;
     double normA = 0.0;
@@ -227,8 +341,17 @@ class EmbeddingService {
       normB += b[i] * b[i];
     }
     
-    final norm = math.sqrt(normA) * math.sqrt(normB);
-    return norm > 0 ? dot / norm : 0.0;
+    final sqrtNormA = math.sqrt(normA);
+    final sqrtNormB = math.sqrt(normB);
+    final norm = sqrtNormA * sqrtNormB;
+    
+    print('🔍 COSINE: dot=${dot.toStringAsFixed(6)}, normA=${normA.toStringAsFixed(6)}, normB=${normB.toStringAsFixed(6)}');
+    print('🔍 COSINE: sqrtNormA=${sqrtNormA.toStringAsFixed(6)}, sqrtNormB=${sqrtNormB.toStringAsFixed(6)}, norm=${norm.toStringAsFixed(6)}');
+    
+    final result = norm > 0 ? dot / norm : 0.0;
+    print('🔍 COSINE: final similarity=${result.toStringAsFixed(6)}');
+    
+    return result;
   }
 }
 

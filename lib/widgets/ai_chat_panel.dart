@@ -56,15 +56,19 @@ class _AIChatPanelState extends State<AIChatPanel> {
       // Load messages from conversation history
       _loadMessagesFromConversation(conversation);
       
+      if (mounted) {
       setState(() {
         _isInitialized = true;
       });
+      }
       print('✅ Conversation initialization complete');
     } catch (e) {
       print('🔴 Error initializing conversation: $e');
+      if (mounted) {
       setState(() {
         _isInitialized = true; // Still show UI even if initialization failed
       });
+      }
     }
   }
   
@@ -82,9 +86,11 @@ class _AIChatPanelState extends State<AIChatPanel> {
       timestamp: msg.timestamp,
     )).toList();
     
+    if (mounted) {
     setState(() {
       _messages = messages;
     });
+    }
     
     print('✅ Loaded ${_messages.length} messages into UI');
     
@@ -143,249 +149,163 @@ class _AIChatPanelState extends State<AIChatPanel> {
       ),
       child: Row(
         children: [
-          // Chat title dropdown on the left
-          Expanded(
-            child: Consumer<ConversationProvider>(
-              builder: (context, provider, child) {
-                final activeConversation = provider.activeConversation;
-                return PopupMenuButton<String>(
-                  onSelected: (conversationId) async {
-                    print('🔄 Switching to conversation: $conversationId');
-                    final conversation = provider.getConversationById(conversationId);
-                    if (conversation != null) {
-                      print('✅ Found conversation: ${conversation.title} with ${conversation.history.length} messages');
-                      print('📋 Context mode: ${conversation.contextSettings.mode}');
-                      await provider.setActiveConversation(conversation);
-                      _loadMessagesFromConversation(conversation);
-                    } else {
-                      print('❌ Conversation not found: $conversationId');
-                    }
-                  },
-                  itemBuilder: (context) {
-                    return provider.conversations.map((conversation) {
-                      final isActive = provider.activeConversation?.id == conversation.id;
-                      return PopupMenuItem<String>(
-                        value: conversation.id,
-                        child: Row(
-                          children: [
-                            if (isActive) const Icon(Icons.check_circle, size: 16, color: Colors.green),
-                            if (isActive) const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                conversation.title,
-                                style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-                              ),
-                            ),
-                            // Three dots menu
-                            PopupMenuButton<String>(
-                              onSelected: (action) async {
-                                switch (action) {
-                                  case 'rename':
-                                    await _showRenameDialog(conversation);
-                                    break;
-                                  case 'delete':
-                                    await _showDeleteConfirmation(conversation);
-                                    break;
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem<String>(
-                                  value: 'rename',
-                                  child: Text(
-                                    'Rename',
-                                    style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-                                  ),
-                                ),
-                                const PopupMenuItem<String>(
-                                  value: 'delete',
-                                  child: Text(
-                                    'Delete',
-                                    style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12, color: Colors.red),
-                                  ),
-                                ),
-                              ],
-                              child: const Padding(
-                                padding: EdgeInsets.all(4.0),
-                                child: Text(
-                                  '⋯',
-                                  style: TextStyle(
-                                    fontFamily: 'JetBrainsMono',
-                                    fontSize: 14.0,
-                                    color: AppTheme.mediumGray,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList();
-                  },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          activeConversation?.title ?? 'Chat',
-                          style: const TextStyle(
-                            fontFamily: 'JetBrainsMono',
-                            fontSize: 12.0,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.darkText,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Text(
-                        '▼',
-                        style: TextStyle(
-                          fontFamily: 'JetBrainsMono',
-                          fontSize: 10.0,
-                          color: AppTheme.mediumGray,
-                        ),
-                      ),
-                    ],
+          // Context files button
+          Consumer<ConversationProvider>(
+            builder: (context, conversationProvider, child) {
+              final activeConversation = conversationProvider.activeConversation;
+              final selectedCount = activeConversation?.contextSettings.selectedFileIds.length ?? 0;
+              
+              return TextButton.icon(
+                onPressed: () => _showFileContextSelector(conversationProvider),
+                icon: Icon(
+                  Icons.library_add,
+                  size: 16,
+                  color: selectedCount > 0 ? AppTheme.warmBrown : AppTheme.mediumGray,
+                ),
+                label: Text(
+                  selectedCount > 0 ? '$selectedCount files' : 'Context',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 12.0,
+                    color: selectedCount > 0 ? AppTheme.warmBrown : AppTheme.mediumGray,
+                    fontWeight: selectedCount > 0 ? FontWeight.w500 : FontWeight.w400,
                   ),
-                );
-              },
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              );
+            },
+          ),
+          
+          const Spacer(),
+          
+          // New chat button 
+          TextButton(
+            onPressed: _createNewChat,
+            style: TextButton.styleFrom(
+              overlayColor: Colors.transparent,
+              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+              minimumSize: Size.zero,
+            ),
+            child: const Text(
+              '+',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+                fontWeight: FontWeight.w400,
+                color: AppTheme.warmBrown,
+              ),
             ),
           ),
-          // Tool buttons on the right
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Context
-              PopupMenuButton<String>(
-                onSelected: (value) async {
-                  final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
-                  final activeConversation = conversationProvider.activeConversation;
-                  if (activeConversation == null) return;
-
-                  final currentSettings = activeConversation.contextSettings;
-                  
-                                       switch (value) {
-                       case 'general':
-                         print('🔧 Updating context to General mode');
-                         await activeConversation.updateContextSettings(ContextSettings.general);
-                         break;
-                       case 'timeframe':
-                         print('🔧 Updating context to Timeframe mode');
-                         await _showTimeframeSelector(activeConversation, currentSettings);
-                         break;
-                       case 'custom':
-                         print('🔧 Updating context to Custom mode');
-                         await _showCustomFileSelector(activeConversation, currentSettings);
-                         break;
-                     }
+          const SizedBox(width: 4),
+          
+          // Chat title dropdown positioned on the far right
+          Consumer<ConversationProvider>(
+            builder: (context, provider, child) {
+              final activeConversation = provider.activeConversation;
+              return PopupMenuButton<String>(
+                onSelected: (conversationId) async {
+                  print('🔄 Switching to conversation: $conversationId');
+                  final conversation = provider.getConversationById(conversationId);
+                  if (conversation != null) {
+                    print('✅ Found conversation: ${conversation.title} with ${conversation.history.length} messages');
+                    await provider.setActiveConversation(conversation);
+                    _loadMessagesFromConversation(conversation);
+                  } else {
+                    print('❌ Conversation not found: $conversationId');
+                  }
                 },
                 itemBuilder: (context) {
-                  final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
-                  final activeConversation = conversationProvider.activeConversation;
-                  final currentSettings = activeConversation?.contextSettings ?? ContextSettings.general;
-                  
-                  return [
-                    PopupMenuItem<String>(
-                      value: 'general',
+                  return provider.conversations.map((conversation) {
+                    final isActive = provider.activeConversation?.id == conversation.id;
+                    return PopupMenuItem<String>(
+                      value: conversation.id,
                       child: Row(
                         children: [
-                          if (currentSettings.mode == ContextMode.general) 
-                            const Icon(Icons.check_circle, size: 16, color: Colors.green),
-                          if (currentSettings.mode == ContextMode.general) 
-                            const SizedBox(width: 8),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('General Context', style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12)),
-                                Text('Recent + relevant + long-term', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'timeframe',
-                      child: Row(
-                        children: [
-                          if (currentSettings.mode == ContextMode.timeframe) 
-                            const Icon(Icons.check_circle, size: 16, color: Colors.green),
-                          if (currentSettings.mode == ContextMode.timeframe) 
-                            const SizedBox(width: 8),
+                          if (isActive) const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                          if (isActive) const SizedBox(width: 8),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Timeframe', style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12)),
-                                Text(
-                                  currentSettings.mode == ContextMode.timeframe
-                                      ? currentSettings.timeframe?.displayName ?? 'Select period'
-                                      : 'Select time period',
-                                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                            child: Text(
+                              conversation.title,
+                              style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+                            ),
+                          ),
+                          // Three dots menu
+                          PopupMenuButton<String>(
+                            onSelected: (action) async {
+                              switch (action) {
+                                case 'rename':
+                                  await _showRenameDialog(conversation);
+                                  break;
+                                case 'delete':
+                                  await _showDeleteConfirmation(conversation);
+                                  break;
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem<String>(
+                                value: 'rename',
+                                child: Text(
+                                  'Rename',
+                                  style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
                                 ),
-                              ],
+                              ),
+                              const PopupMenuItem<String>(
+                                value: 'delete',
+                                child: Text(
+                                  'Delete',
+                                  style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12, color: Colors.red),
+                                ),
+                              ),
+                            ],
+                            child: const Padding(
+                              padding: EdgeInsets.all(4.0),
+                              child: Text(
+                                '⋯',
+                                style: TextStyle(
+                                  fontFamily: 'JetBrainsMono',
+                                  fontSize: 14.0,
+                                  color: AppTheme.mediumGray,
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'custom',
-                      child: Row(
-                        children: [
-                          if (currentSettings.mode == ContextMode.custom) 
-                            const Icon(Icons.check_circle, size: 16, color: Colors.green),
-                          if (currentSettings.mode == ContextMode.custom) 
-                            const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Custom', style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12)),
-                                Text(
-                                  currentSettings.mode == ContextMode.custom
-                                      ? '${currentSettings.customFileIds.length} files selected'
-                                      : 'Select specific files',
-                                  style: const TextStyle(fontSize: 10, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ];
+                    );
+                  }).toList();
                 },
-                child: const Text(
-                  'context',
-                  style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.w400,
-                    color: AppTheme.warmBrown,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        activeConversation?.title ?? 'Chat',
+                        style: const TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 12.0,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.darkText,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      '▼',
+                      style: TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 10.0,
+                        color: AppTheme.mediumGray,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              // New chat on far right
-              TextButton(
-                onPressed: _createNewChat,
-                style: TextButton.styleFrom(
-                  overlayColor: Colors.transparent,
-                ),
-                child: const Text(
-                  '+',
-                  style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.w400,
-                    color: AppTheme.warmBrown,
-                  ),
-                ),
-              ),
-            ],
+              );
+            },
           ),
         ],
       ),
@@ -427,19 +347,6 @@ class _AIChatPanelState extends State<AIChatPanel> {
                   ),
                 ),
               ],
-            ),
-          );
-        }
-        
-        if (journalProvider.selectedFileId == null) {
-          return const Center(
-            child: Text(
-              'select a file to chat about it',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 14.0,
-                color: AppTheme.mediumGray,
-              ),
             ),
           );
         }
@@ -597,6 +504,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
     print('✅ Sending message: $message');
 
     // Add user message
+    if (mounted) {
     setState(() {
       _messages.add(ChatMessage(
         content: message,
@@ -605,6 +513,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
       ));
       _isProcessingAI = true;
     });
+    }
 
     _chatController.clear();
     _scrollToBottom();
@@ -613,16 +522,21 @@ class _AIChatPanelState extends State<AIChatPanel> {
       // Add user message to conversation
       await activeConversation.addUserMessage(message);
       
-      // Get AI response using existing JournalCompanionService
+      // Get AI response using new embeddings-based context system
+      print('=== AI CHAT: About to call generateInsights ===');
+      print('🔥🔥🔥 AI CHAT: About to call generateInsights for query: $message');
       final response = await JournalCompanionService().generateInsights(
-        message,
+        userQuery: message,
         conversation: activeConversation,
+        settings: activeConversation.contextSettings,
       );
+      print('🔥🔥🔥 AI CHAT: generateInsights returned: ${response.substring(0, 50)}...');
       
       // Add assistant response to conversation
       await activeConversation.addAssistantMessage(response);
       
       // Add AI response to chat
+      if (mounted) {
       setState(() {
         _messages.add(ChatMessage(
           content: response,
@@ -630,10 +544,12 @@ class _AIChatPanelState extends State<AIChatPanel> {
           timestamp: DateTime.now(),
         ));
       });
+      }
       
       _scrollToBottom();
     } catch (e) {
       // Handle error
+      if (mounted) {
       setState(() {
         _messages.add(ChatMessage(
           content: 'Error: ${e.toString()}',
@@ -641,10 +557,13 @@ class _AIChatPanelState extends State<AIChatPanel> {
           timestamp: DateTime.now(),
         ));
       });
+      }
     } finally {
+      if (mounted) {
       setState(() {
         _isProcessingAI = false;
       });
+      }
     }
   }
 
@@ -668,9 +587,11 @@ class _AIChatPanelState extends State<AIChatPanel> {
     
     await activeConversation.clear();
     
+    if (mounted) {
     setState(() {
       _messages.clear();
     });
+    }
   }
 
   Future<void> _createNewChat() async {
@@ -798,9 +719,11 @@ class _AIChatPanelState extends State<AIChatPanel> {
         _loadMessagesFromConversation(conversationProvider.activeConversation);
       } else {
         print('⚠️ No active conversation remaining, clearing messages');
+        if (mounted) {
         setState(() {
           _messages.clear();
         });
+        }
       }
     }
   }
@@ -868,199 +791,129 @@ class _AIChatPanelState extends State<AIChatPanel> {
     );
   }
 
-  Future<void> _showContextSettings() async {
-    final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+
+
+  Future<void> _showFileContextSelector(ConversationProvider conversationProvider) async {
+    final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+    final files = journalProvider.files;
     final activeConversation = conversationProvider.activeConversation;
     
     if (activeConversation == null) return;
-    
-    final currentSettings = activeConversation.contextSettings;
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Context Settings'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 400,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Current: ${currentSettings.description}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.warmBrown,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                
-                // General Context Option
-                ListTile(
-                  leading: Radio<ContextMode>(
-                    value: ContextMode.general,
-                    groupValue: currentSettings.mode,
-                    onChanged: (value) async {
-                      if (value != null) {
-                        await activeConversation.updateContextSettings(ContextSettings.general);
-                        Navigator.of(context).pop();
-                      }
-                    },
-                  ),
-                  title: const Text('General Context'),
-                  subtitle: const Text('Recent + relevant + long-term entries (intelligent selection)'),
-                ),
-                
-                // Timeframe Option
-                ListTile(
-                  leading: Radio<ContextMode>(
-                    value: ContextMode.timeframe,
-                    groupValue: currentSettings.mode,
-                    onChanged: (value) async {
-                      if (value != null) {
-                        await _showTimeframeSelector(activeConversation, currentSettings);
-                        Navigator.of(context).pop();
-                      }
-                    },
-                  ),
-                  title: const Text('Timeframe'),
-                  subtitle: Text(
-                    currentSettings.mode == ContextMode.timeframe
-                        ? 'Entries from ${currentSettings.timeframe?.displayName ?? 'Not set'}'
-                        : 'Entries from a specific time period'
-                  ),
-                ),
-                
-                // Custom Option
-                ListTile(
-                  leading: Radio<ContextMode>(
-                    value: ContextMode.custom,
-                    groupValue: currentSettings.mode,
-                    onChanged: (value) async {
-                      if (value != null) {
-                        await _showCustomFileSelector(activeConversation, currentSettings);
-                        Navigator.of(context).pop();
-                      }
-                    },
-                  ),
-                  title: const Text('Custom'),
-                  subtitle: Text(
-                    currentSettings.mode == ContextMode.custom
-                        ? '${currentSettings.customFileIds.length} files selected'
-                        : 'Select specific files for context'
-                  ),
-                ),
-                
-                const SizedBox(height: 16),
-                Text(
-                  'Token limit: ${currentSettings.maxTokens}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Future<void> _showTimeframeSelector(ConversationSession conversation, ContextSettings currentSettings) async {
-    final selectedTimeframe = await showDialog<TimeframeOption>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Timeframe'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: TimeframeOption.values.map((timeframe) => ListTile(
-            title: Text(timeframe.displayName),
-            onTap: () => Navigator.of(context).pop(timeframe),
-          )).toList(),
-        ),
-      ),
-    );
-    
-    if (selectedTimeframe != null) {
-      await conversation.updateContextSettings(
-        currentSettings.copyWith(
-          mode: ContextMode.timeframe,
-          timeframe: selectedTimeframe,
-        ),
-      );
+
+    // Use the same sorting as the file tree
+    final sortedFiles = journalProvider.getSortedFiles(files);
+
+    final selectedIds = List<String>.from(activeConversation.contextSettings.selectedFileIds);
+    final maxTokens = activeConversation.contextSettings.maxTokens;
+    final availableTokens = maxTokens - 1800; // Reserve for core context
+
+    int _estimateTokens(String text) {
+      return (text.length / 4).round(); // Rough estimate: 4 chars = 1 token
     }
-  }
-  
-  Future<void> _showCustomFileSelector(ConversationSession conversation, ContextSettings currentSettings) async {
-    final journalProvider = Provider.of<JournalProvider>(context, listen: false);
-    final files = journalProvider.files;
-    
-    final selectedIds = List<String>.from(currentSettings.customFileIds);
-    
+
+    int _calculateSelectedTokens(List<String> fileIds) {
+      int total = 0;
+      for (final id in fileIds) {
+        final file = sortedFiles.firstWhere((f) => f.id == id, orElse: () => sortedFiles.first);
+        if (file.content?.isNotEmpty == true) {
+          total += _estimateTokens(file.content!);
+        }
+      }
+      return total;
+    }
+
     final result = await showDialog<List<String>>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Select Files'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 400,
-            child: ListView.builder(
-              itemCount: files.length,
-              itemBuilder: (context, index) {
-                final file = files[index];
-                final isSelected = selectedIds.contains(file.id);
-                
-                return CheckboxListTile(
-                  title: Text(file.name),
-                  subtitle: Text(
-                    'Words: ${file.wordCount}',
+        builder: (context, setState) {
+          final selectedTokens = _calculateSelectedTokens(selectedIds);
+          final isOverLimit = selectedTokens > availableTokens;
+          
+          return AlertDialog(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Select Files for Context'),
+                const SizedBox(height: 4),
+                Text(
+                  'Token usage: $selectedTokens / $availableTokens',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isOverLimit ? Colors.red : Colors.grey[600],
+                    fontWeight: isOverLimit ? FontWeight.w500 : FontWeight.normal,
+                  ),
+                ),
+                if (isOverLimit)
+                  const Text(
+                    'Warning: Exceeds token limit!',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
+                      fontSize: 11,
+                      color: Colors.red,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  value: isSelected,
-                  onChanged: (value) {
-                    setState(() {
-                      if (value == true) {
-                        selectedIds.add(file.id);
-                      } else {
-                        selectedIds.remove(file.id);
-                      }
-                    });
-                  },
-                );
-              },
+              ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(null),
-              child: const Text('Cancel'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 400,
+              child: ListView.builder(
+                itemCount: sortedFiles.length,
+                itemBuilder: (context, index) {
+                  final file = sortedFiles[index];
+                  final isSelected = selectedIds.contains(file.id);
+                  final fileTokens = _estimateTokens(file.content ?? '');
+                  
+                  return CheckboxListTile(
+                    title: Text(file.name),
+                    subtitle: Text(
+                      'Words: ${file.wordCount} • Tokens: ~$fileTokens',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    value: isSelected,
+                    onChanged: (value) {
+                      setState(() {
+                        if (value == true) {
+                          selectedIds.add(file.id);
+                        } else {
+                          selectedIds.remove(file.id);
+                        }
+                      });
+                    },
+                  );
+                },
+              ),
             ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(selectedIds),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: isOverLimit 
+                  ? null  // Disable if over limit
+                  : () => Navigator.of(context).pop(selectedIds),
+                child: Text(
+                  'Save',
+                  style: TextStyle(
+                    color: isOverLimit ? Colors.grey : null,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
-    
+
     if (result != null) {
-      await conversation.updateContextSettings(
-        currentSettings.copyWith(
-          mode: ContextMode.custom,
-          customFileIds: result,
+      await conversationProvider.updateContextSettings(
+        activeConversation.contextSettings.copyWith(
+          selectedFileIds: result,
         ),
       );
     }

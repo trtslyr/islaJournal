@@ -30,17 +30,29 @@ class ConversationMessage {
 }
 
 class ConversationSession {
-  final String id;
-  String title;
-  final List<ConversationMessage> _history = [];
+  // Private fields
+  String _id;
+  String _title;
+  List<ConversationMessage> _history;
+  DateTime _createdAt;
+  DateTime _updatedAt;
+  ContextSettings _contextSettings = ContextSettings.empty;
   final DatabaseService _dbService = DatabaseService();
-  ContextSettings _contextSettings = ContextSettings.general;
-  
+
+  // Constructor
   ConversationSession({
-    required this.id,
-    required this.title,
+    String? id,
+    required String title,
+    List<ConversationMessage>? history,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     ContextSettings? contextSettings,
-  }) : _contextSettings = contextSettings ?? ContextSettings.general;
+  }) : _id = id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+       _title = title,
+       _history = history ?? [],
+       _createdAt = createdAt ?? DateTime.now(),
+       _updatedAt = updatedAt ?? DateTime.now(),
+       _contextSettings = contextSettings ?? ContextSettings.empty;
 
   // Factory constructor for creating a new conversation
   static Future<ConversationSession> create(String title) async {
@@ -83,7 +95,7 @@ class ConversationSession {
         contextSettings = ContextSettings.fromJson(contextMap);
       } catch (e) {
         // If parsing fails, use default
-        contextSettings = ContextSettings.general;
+        contextSettings = ContextSettings.empty;
       }
     }
     
@@ -136,7 +148,7 @@ class ConversationSession {
           contextSettings = ContextSettings.fromJson(contextMap);
         } catch (e) {
           // If parsing fails, use default
-          contextSettings = ContextSettings.general;
+          contextSettings = ContextSettings.empty;
         }
       }
       
@@ -158,7 +170,13 @@ class ConversationSession {
     return sessions;
   }
 
-  List<ConversationMessage> get history => List.unmodifiable(_history);
+  // Getters
+  String get id => _id;
+  String get title => _title;
+  set title(String newTitle) => _title = newTitle;
+  List<ConversationMessage> get history => _history;
+  DateTime get createdAt => _createdAt;
+  DateTime get updatedAt => _updatedAt;
   ContextSettings get contextSettings => _contextSettings;
   
   Future<void> addUserMessage(String content) async {
@@ -221,7 +239,7 @@ class ConversationSession {
         : _history;
     
     for (final message in recentHistory) {
-      final prefix = message.role == 'user' ? 'You asked' : 'I responded';
+      final prefix = message.role == 'user' ? 'User' : 'Assistant';
       conversationParts.add('$prefix: ${message.content}');
     }
     

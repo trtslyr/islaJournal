@@ -6,7 +6,27 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- File access permissions for file picker -->
 	<key>com.apple.security.files.user-selected.read-only</key>
 	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-only</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+	<key>com.apple.security.files.pictures.read-only</key>
+	<true/>
+	<key>com.apple.security.files.music.read-only</key>
+	<true/>
+	<key>com.apple.security.files.movies.read-only</key>
+	<true/>
+	<!-- Additional permissions for file picker -->
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+	<key>com.apple.security.files.bookmarks.document-scope</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.executable</key>
+	<false/>
 </dict>
 </plist>
