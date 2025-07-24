@@ -30,15 +30,37 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _initializeProvider() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final journalProvider = Provider.of<JournalProvider>(context, listen: false);
-      final aiProvider = Provider.of<AIProvider>(context, listen: false);
-      final ragProvider = Provider.of<RAGProvider>(context, listen: false);
-      final autoTaggingProvider = Provider.of<AutoTaggingProvider>(context, listen: false);
-      
-      await journalProvider.initialize();
-      await aiProvider.initialize();
-      await ragProvider.initialize();
-      await autoTaggingProvider.initialize();
+      try {
+        print('HomeScreen: Starting provider initialization...');
+        
+        final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+        final aiProvider = Provider.of<AIProvider>(context, listen: false);
+        final ragProvider = Provider.of<RAGProvider>(context, listen: false);
+        final autoTaggingProvider = Provider.of<AutoTaggingProvider>(context, listen: false);
+        
+        // Initialize in order - journal first, then AI services
+        print('HomeScreen: Initializing journal provider...');
+        await journalProvider.initialize();
+        print('HomeScreen: ✅ Journal provider initialized');
+        
+        print('HomeScreen: Initializing AI provider...');
+        await aiProvider.initialize();
+        print('HomeScreen: ✅ AI provider initialized');
+        
+        print('HomeScreen: Initializing RAG provider...');
+        await ragProvider.initialize();
+        print('HomeScreen: ✅ RAG provider initialized');
+        
+        print('HomeScreen: Initializing auto-tagging provider...');
+        await autoTaggingProvider.initialize();
+        print('HomeScreen: ✅ Auto-tagging provider initialized');
+        
+        print('HomeScreen: ✅ All providers initialized successfully');
+        
+      } catch (e) {
+        print('HomeScreen: ❌ Provider initialization error: $e');
+        // Don't prevent app from working - just log the error
+      }
     });
   }
 

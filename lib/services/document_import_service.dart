@@ -138,7 +138,14 @@ class DocumentImportService {
   static const int chunkOverlap = 200;
 
   Future<void> initialize() async {
-    await _embeddingService.initialize();
+    try {
+      print('DocumentImportService: Initializing...');
+      await _embeddingService.initialize();
+      print('DocumentImportService: ✅ Initialized successfully');
+    } catch (e) {
+      print('DocumentImportService: ⚠️ Initialization warning: $e');
+      // Don't throw - embedding service might already be initialized
+    }
   }
 
   // Import documents from file picker

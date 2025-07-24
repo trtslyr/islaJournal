@@ -40,26 +40,39 @@ class RAGProvider with ChangeNotifier {
     if (_isInitialized) return;
     
     try {
+      print('RAGProvider: Starting initialization...');
+      
       await _ragService.initialize();
+      print('RAGProvider: ✅ RAG service initialized');
+      
       await _refreshImportedDocuments();
+      print('RAGProvider: ✅ Imported documents loaded');
+      
       await _refreshRAGStats();
+      print('RAGProvider: ✅ RAG stats loaded');
       
       _isInitialized = true;
       notifyListeners();
       
-      // Start background indexing if needed
+      print('RAGProvider: ✅ Fully initialized');
+      
+      // Start background indexing if needed (non-blocking)
       _startBackgroundIndexing();
     } catch (e) {
-      debugPrint('Error initializing RAG provider: $e');
-      rethrow;
+      print('RAGProvider: ❌ Initialization error: $e');
+      // Set error state but don't throw - allow UI to show error
+      _indexingStatus = 'Initialization failed: $e';
+      notifyListeners();
+      // Don't rethrow - let the app continue to work
     }
   }
 
   // Start background indexing of journal entries
   Future<void> _startBackgroundIndexing() async {
-    if (_isIndexing) return;
+    if (_isIndexing || !_isInitialized) return;
     
     try {
+      print('RAGProvider: Starting background indexing...');
       _isIndexing = true;
       _indexingStatus = 'Starting indexing...';
       notifyListeners();
@@ -73,11 +86,13 @@ class RAGProvider with ChangeNotifier {
         },
       );
       
-      _indexingStatus = 'Indexing completed';
+      _indexingStatus = 'Indexing completed successfully';
+      print('RAGProvider: ✅ Background indexing completed');
       await _refreshRAGStats();
     } catch (e) {
       _indexingStatus = 'Indexing failed: $e';
-      debugPrint('Error during background indexing: $e');
+      print('RAGProvider: ⚠️ Background indexing failed (non-critical): $e');
+      // Don't rethrow - this is a background operation
     } finally {
       _isIndexing = false;
       notifyListeners();

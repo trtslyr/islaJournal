@@ -68,14 +68,34 @@ class RAGService {
     if (_isInitialized) return;
     
     try {
+      print('RAG Service: Starting initialization...');
+      
+      // Initialize embedding service first (critical for RAG)
+      print('RAG Service: Initializing embedding service...');
       await _embeddingService.initialize();
+      print('RAG Service: ✅ Embedding service initialized');
+      
+      // Initialize import service (also critical for RAG)
+      print('RAG Service: Initializing document import service...');
       await _importService.initialize();
-      await _aiService.initialize();
+      print('RAG Service: ✅ Document import service initialized');
+      
+      // Initialize AI service (optional - RAG can work without it for retrieval)
+      print('RAG Service: Initializing AI service...');
+      try {
+        await _aiService.initialize();
+        print('RAG Service: ✅ AI service initialized');
+      } catch (e) {
+        print('RAG Service: ⚠️ AI service initialization failed (will continue without AI responses): $e');
+        // Don't fail the entire RAG initialization if AI service fails
+        // The RAG system can still do retrieval without AI responses
+      }
       
       _isInitialized = true;
-      print('RAG Service initialized successfully');
+      print('RAG Service: ✅ Initialized successfully');
+      
     } catch (e) {
-      print('Error initializing RAG service: $e');
+      print('RAG Service: ❌ Critical initialization error: $e');
       throw Exception('Failed to initialize RAG service: $e');
     }
   }

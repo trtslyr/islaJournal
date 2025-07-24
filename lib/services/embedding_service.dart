@@ -25,20 +25,29 @@ class EmbeddingService {
     if (_isInitialized) return;
     
     try {
+      print('EmbeddingService: Starting initialization...');
       await _loadVocabulary();
       _isInitialized = true;
-      print('Embedding service initialized with vocabulary size: ${_vocabulary.length}, documents: $_documentCount');
+      print('EmbeddingService: ✅ Initialized - vocabulary: ${_vocabulary.length} words, documents: ${_processedDocuments.length}');
     } catch (e) {
-      print('Error initializing embedding service: $e');
-      throw Exception('Failed to initialize embedding service: $e');
+      print('EmbeddingService: ❌ Initialization error: $e');
+      // Initialize with empty vocabulary as fallback
+      _vocabulary.clear();
+      _termFrequency.clear();
+      _inverseDocumentFrequency.clear();
+      _processedDocuments.clear();
+      _documentCount = 0;
+      _isInitialized = true;
+      print('EmbeddingService: ⚠️ Initialized with empty vocabulary as fallback');
     }
   }
 
   Future<void> _loadVocabulary() async {
-    // Load existing vocabulary from disk if available
-    final vocabFile = await _getVocabularyFile();
-    if (await vocabFile.exists()) {
-      try {
+    try {
+      // Load existing vocabulary from disk if available
+      final vocabFile = await _getVocabularyFile();
+      if (await vocabFile.exists()) {
+        print('EmbeddingService: Loading existing vocabulary...');
         final contents = await vocabFile.readAsString();
         final data = jsonDecode(contents);
         _vocabulary.addAll(Map<String, double>.from(data['vocabulary'] ?? {}));
@@ -53,11 +62,13 @@ class EmbeddingService {
         _processedDocuments.addAll(Set<String>.from(data['processedDocuments'] ?? []));
         _documentCount = data['documentCount'] ?? 0;
         
-        print('Loaded vocabulary: ${_vocabulary.length} words, ${_processedDocuments.length} documents');
-      } catch (e) {
-        print('Error loading vocabulary: $e');
-        // Continue with empty vocabulary
+        print('EmbeddingService: ✅ Loaded vocabulary: ${_vocabulary.length} words, ${_processedDocuments.length} documents');
+      } else {
+        print('EmbeddingService: No existing vocabulary found - starting fresh');
       }
+    } catch (e) {
+      print('EmbeddingService: ⚠️ Error loading vocabulary, starting fresh: $e');
+      // Continue with empty vocabulary - this is not a critical error
     }
   }
 
@@ -74,14 +85,20 @@ class EmbeddingService {
   }
 
   Future<File> _getVocabularyFile() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final embeddingDir = Directory('${appDir.path}/isla_journal_embeddings');
-    
-    if (!await embeddingDir.exists()) {
-      await embeddingDir.create(recursive: true);
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final embeddingDir = Directory('${appDir.path}/isla_journal_embeddings');
+      
+      if (!await embeddingDir.exists()) {
+        print('EmbeddingService: Creating embeddings directory...');
+        await embeddingDir.create(recursive: true);
+      }
+      
+      return File('${embeddingDir.path}/vocabulary.json');
+    } catch (e) {
+      print('EmbeddingService: ❌ Error accessing vocabulary file: $e');
+      rethrow;
     }
-    
-    return File('${embeddingDir.path}/vocabulary.json');
   }
 
   // Preprocess text for embedding
