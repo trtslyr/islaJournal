@@ -1,79 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
 import '../models/journal_file.dart';
+import '../models/mood_entry.dart';
 import 'database_service.dart';
 import 'ai_service.dart';
-
-class MoodEntry {
-  final String id;
-  final String fileId;
-  final DateTime date;
-  final double valence; // -1 (negative) to 1 (positive)
-  final double arousal; // 0 (calm) to 1 (excited)
-  final List<String> emotions;
-  final String summary;
-  final double confidence;
-
-  MoodEntry({
-    required this.id,
-    required this.fileId,
-    required this.date,
-    required this.valence,
-    required this.arousal,
-    required this.emotions,
-    required this.summary,
-    required this.confidence,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'file_id': fileId,
-      'date': date.toIso8601String(),
-      'valence': valence,
-      'arousal': arousal,
-      'emotions': jsonEncode(emotions),
-      'summary': summary,
-      'confidence': confidence,
-      'created_at': DateTime.now().toIso8601String(),
-    };
-  }
-
-  factory MoodEntry.fromMap(Map<String, dynamic> map) {
-    return MoodEntry(
-      id: map['id'] as String,
-      fileId: map['file_id'] as String,
-      date: DateTime.parse(map['date'] as String),
-      valence: map['valence'] as double,
-      arousal: map['arousal'] as double,
-      emotions: List<String>.from(jsonDecode(map['emotions'] as String)),
-      summary: map['summary'] as String,
-      confidence: map['confidence'] as double,
-    );
-  }
-}
-
-class MoodPattern {
-  final DateTime startDate;
-  final DateTime endDate;
-  final double averageValence;
-  final double averageArousal;
-  final Map<String, int> emotionFrequency;
-  final List<MoodEntry> entries;
-  final String trend; // 'improving', 'declining', 'stable'
-
-  MoodPattern({
-    required this.startDate,
-    required this.endDate,
-    required this.averageValence,
-    required this.averageArousal,
-    required this.emotionFrequency,
-    required this.entries,
-    required this.trend,
-  });
-}
 
 class MoodAnalysisService {
   static final MoodAnalysisService _instance = MoodAnalysisService._internal();
@@ -90,37 +21,12 @@ class MoodAnalysisService {
     
     try {
       await _aiService.initialize();
-      await _ensureMoodTables();
       _isInitialized = true;
       debugPrint('Mood Analysis Service initialized successfully');
     } catch (e) {
       debugPrint('Error initializing mood analysis service: $e');
       throw Exception('Failed to initialize mood analysis service: $e');
     }
-  }
-
-  Future<void> _ensureMoodTables() async {
-    final db = await _dbService.database;
-    
-    // Create mood_entries table
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS mood_entries (
-        id TEXT PRIMARY KEY,
-        file_id TEXT NOT NULL,
-        date TEXT NOT NULL,
-        valence REAL NOT NULL,
-        arousal REAL NOT NULL,
-        emotions TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        confidence REAL NOT NULL,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE
-      )
-    ''');
-
-    // Create index for better performance
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_mood_entries_date ON mood_entries(date)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_mood_entries_file_id ON mood_entries(file_id)');
   }
 
   // Analyze mood for a journal entry
@@ -148,14 +54,14 @@ Please respond with ONLY a valid JSON object in this exact format:
 Where:
 - valence: -1.0 (very negative) to 1.0 (very positive)
 - arousal: 0.0 (very calm) to 1.0 (very excited/intense)
-- emotions: List of 2-4 primary emotions detected
+- emotions: List of 2-4 primary emotions detected (use: happy, sad, angry, fearful, surprised, disgusted, calm, excited, anxious, content, frustrated, hopeful, lonely, grateful, confused, proud, ashamed, jealous, guilty, peaceful)
 - summary: 1-2 sentence emotional summary
 - confidence: 0.0 (uncertain) to 1.0 (very confident in analysis)
 ''';
 
       final response = await _aiService.generateText(
         prompt,
-        maxTokens: 300,
+        maxTokens: 400,
         temperature: 0.3,
       );
 
@@ -168,7 +74,7 @@ Where:
 
       // Create MoodEntry
       final moodEntry = MoodEntry(
-        id: '${journalFile.id}_mood',
+        id: 'mood_${journalFile.id}_${DateTime.now().millisecondsSinceEpoch}',
         fileId: journalFile.id,
         date: journalFile.updatedAt,
         valence: analysis['valence'] as double,
@@ -178,7 +84,7 @@ Where:
         confidence: analysis['confidence'] as double,
       );
 
-      // Save to database
+      // Save to database using existing mood_entries table
       await _saveMoodEntry(moodEntry);
       
       debugPrint('Mood analysis completed for: ${journalFile.name}');
@@ -218,6 +124,11 @@ Where:
       parsed['arousal'] = (parsed['arousal'] as num).toDouble().clamp(0.0, 1.0);
       parsed['confidence'] = (parsed['confidence'] as num).toDouble().clamp(0.0, 1.0);
       
+      // Validate emotions list
+      if (parsed['emotions'] is! List || (parsed['emotions'] as List).isEmpty) {
+        parsed['emotions'] = ['neutral'];
+      }
+      
       return parsed;
     } catch (e) {
       debugPrint('Error parsing AI response: $e');
@@ -226,13 +137,23 @@ Where:
   }
 
   Future<void> _saveMoodEntry(MoodEntry entry) async {
-    final db = await _dbService.database;
-    
-    await db.insert(
-      'mood_entries',
-      entry.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      await _dbService.saveMoodEntry(
+        entry.fileId,
+        entry.valence,
+        entry.arousal,
+        entry.emotions,
+        confidence: entry.confidence,
+        metadata: {
+          'summary': entry.summary,
+          'date': entry.date.toIso8601String(),
+          'analysis_version': 1,
+        },
+      );
+    } catch (e) {
+      debugPrint('Error saving mood entry: $e');
+      rethrow;
+    }
   }
 
   // Get mood entry for a specific file
@@ -240,17 +161,10 @@ Where:
     if (!_isInitialized) await initialize();
     
     try {
-      final db = await _dbService.database;
-      final maps = await db.query(
-        'mood_entries',
-        where: 'file_id = ?',
-        whereArgs: [fileId],
-      );
+      final moodData = await _dbService.getMoodEntry(fileId);
+      if (moodData == null) return null;
       
-      if (maps.isNotEmpty) {
-        return MoodEntry.fromMap(maps.first);
-      }
-      return null;
+      return MoodEntry.fromMap(moodData);
     } catch (e) {
       debugPrint('Error getting mood entry: $e');
       return null;
@@ -266,31 +180,13 @@ Where:
     if (!_isInitialized) await initialize();
     
     try {
-      final db = await _dbService.database;
-      
-      String whereClause = '';
-      List<dynamic> whereArgs = [];
-      
-      if (startDate != null) {
-        whereClause += 'date >= ?';
-        whereArgs.add(startDate.toIso8601String());
-      }
-      
-      if (endDate != null) {
-        if (whereClause.isNotEmpty) whereClause += ' AND ';
-        whereClause += 'date <= ?';
-        whereArgs.add(endDate.toIso8601String());
-      }
-      
-      final maps = await db.query(
-        'mood_entries',
-        where: whereClause.isEmpty ? null : whereClause,
-        whereArgs: whereArgs.isEmpty ? null : whereArgs,
-        orderBy: 'date DESC',
+      final moodDataList = await _dbService.getMoodHistory(
+        startDate: startDate,
+        endDate: endDate,
         limit: limit,
       );
       
-      return maps.map((map) => MoodEntry.fromMap(map)).toList();
+      return moodDataList.map((data) => MoodEntry.fromMap(data)).toList();
     } catch (e) {
       debugPrint('Error getting mood entries: $e');
       return [];
@@ -310,14 +206,9 @@ Where:
     );
     
     if (entries.isEmpty) {
-      return MoodPattern(
-        startDate: startDate ?? DateTime.now().subtract(const Duration(days: 30)),
-        endDate: endDate ?? DateTime.now(),
-        averageValence: 0.0,
-        averageArousal: 0.0,
-        emotionFrequency: {},
-        entries: [],
-        trend: 'stable',
+      return MoodPattern.empty(
+        startDate: startDate,
+        endDate: endDate,
       );
     }
     
@@ -342,12 +233,21 @@ Where:
       final recentAvg = recentEntries.fold<double>(0, (sum, entry) => sum + entry.valence) / recentEntries.length;
       final olderAvg = olderEntries.fold<double>(0, (sum, entry) => sum + entry.valence) / olderEntries.length;
       
-      if (recentAvg > olderAvg + 0.1) {
+      final trendThreshold = 0.15; // More sensitive threshold
+      if (recentAvg > olderAvg + trendThreshold) {
         trend = 'improving';
-      } else if (recentAvg < olderAvg - 0.1) {
+      } else if (recentAvg < olderAvg - trendThreshold) {
         trend = 'declining';
       }
     }
+    
+    // Calculate additional metrics
+    final metrics = <String, double>{
+      'volatility': _calculateVolatility(entries),
+      'positiveRatio': entries.where((e) => e.valence > 0).length / entries.length,
+      'highArousalRatio': entries.where((e) => e.arousal > 0.6).length / entries.length,
+      'averageConfidence': entries.fold<double>(0, (sum, e) => sum + e.confidence) / entries.length,
+    };
     
     return MoodPattern(
       startDate: startDate ?? entries.last.date,
@@ -357,7 +257,17 @@ Where:
       emotionFrequency: emotionFrequency,
       entries: entries,
       trend: trend,
+      metrics: metrics,
     );
+  }
+
+  double _calculateVolatility(List<MoodEntry> entries) {
+    if (entries.length < 2) return 0.0;
+    
+    final valences = entries.map((e) => e.valence).toList();
+    final mean = valences.reduce((a, b) => a + b) / valences.length;
+    final variance = valences.map((v) => (v - mean) * (v - mean)).reduce((a, b) => a + b) / valences.length;
+    return variance;
   }
 
   // Get mood statistics
@@ -365,27 +275,63 @@ Where:
     if (!_isInitialized) await initialize();
     
     try {
-      final db = await _dbService.database;
+      final allEntries = await getMoodEntries();
       
-      final totalCount = await db.rawQuery('SELECT COUNT(*) as count FROM mood_entries');
-      final avgValence = await db.rawQuery('SELECT AVG(valence) as avg FROM mood_entries');
-      final avgArousal = await db.rawQuery('SELECT AVG(arousal) as avg FROM mood_entries');
+      if (allEntries.isEmpty) {
+        return {
+          'totalEntries': 0,
+          'averageValence': 0.0,
+          'averageArousal': 0.0,
+          'hasRecentMood': false,
+          'lastAnalyzed': null,
+          'dominantEmotion': 'none',
+          'trendDescription': 'No data available',
+        };
+      }
       
-      // Get most recent mood
-      final recentMood = await db.query(
-        'mood_entries',
-        orderBy: 'date DESC',
-        limit: 1,
-      );
+      // Calculate comprehensive stats
+      final avgValence = allEntries.fold<double>(0, (sum, e) => sum + e.valence) / allEntries.length;
+      final avgArousal = allEntries.fold<double>(0, (sum, e) => sum + e.arousal) / allEntries.length;
+      final avgConfidence = allEntries.fold<double>(0, (sum, e) => sum + e.confidence) / allEntries.length;
+      
+      // Find dominant emotion
+      final emotionCounts = <String, int>{};
+      for (final entry in allEntries) {
+        for (final emotion in entry.emotions) {
+          emotionCounts[emotion] = (emotionCounts[emotion] ?? 0) + 1;
+        }
+      }
+      
+      final dominantEmotion = emotionCounts.isEmpty ? 'neutral' : 
+          emotionCounts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+      
+      // Calculate trend
+      final recent30Days = allEntries.where((e) => 
+          e.date.isAfter(DateTime.now().subtract(const Duration(days: 30)))
+      ).toList();
+      
+      String trendDescription = 'stable';
+      if (recent30Days.length >= 5) {
+        final recentAvg = recent30Days.fold<double>(0, (sum, e) => sum + e.valence) / recent30Days.length;
+        if (recentAvg > avgValence + 0.1) {
+          trendDescription = 'improving recently';
+        } else if (recentAvg < avgValence - 0.1) {
+          trendDescription = 'declining recently';
+        }
+      }
       
       return {
-        'totalEntries': totalCount.first['count'] as int,
-        'averageValence': (avgValence.first['avg'] as double?) ?? 0.0,
-        'averageArousal': (avgArousal.first['avg'] as double?) ?? 0.0,
-        'hasRecentMood': recentMood.isNotEmpty,
-        'lastAnalyzed': recentMood.isNotEmpty 
-            ? recentMood.first['date'] as String
-            : null,
+        'totalEntries': allEntries.length,
+        'averageValence': avgValence,
+        'averageArousal': avgArousal,
+        'averageConfidence': avgConfidence,
+        'hasRecentMood': allEntries.isNotEmpty,
+        'lastAnalyzed': allEntries.first.createdAt.toIso8601String(),
+        'dominantEmotion': dominantEmotion,
+        'trendDescription': trendDescription,
+        'positiveEntries': allEntries.where((e) => e.valence > 0).length,
+        'negativeEntries': allEntries.where((e) => e.valence < 0).length,
+        'highConfidenceEntries': allEntries.where((e) => e.confidence > 0.8).length,
       };
     } catch (e) {
       debugPrint('Error getting mood stats: $e');
@@ -395,6 +341,7 @@ Where:
         'averageArousal': 0.0,
         'hasRecentMood': false,
         'lastAnalyzed': null,
+        'error': e.toString(),
       };
     }
   }
@@ -407,8 +354,25 @@ Where:
     
     for (int i = 0; i < files.length; i++) {
       try {
+        // Skip files that are too short for meaningful analysis
+        if (files[i].content.trim().length < 50) {
+          debugPrint('Skipping short file: ${files[i].name}');
+          continue;
+        }
+        
+        // Check if already analyzed recently
+        final existing = await getMoodEntry(files[i].id);
+        if (existing != null && 
+            existing.createdAt.isAfter(files[i].updatedAt.subtract(const Duration(hours: 1)))) {
+          debugPrint('Skipping recently analyzed file: ${files[i].name}');
+          continue;
+        }
+        
         await analyzeMood(files[i]);
         progressCallback?.call(i + 1, files.length);
+        
+        // Small delay to prevent overwhelming the AI service
+        await Future.delayed(const Duration(milliseconds: 300));
       } catch (e) {
         debugPrint('Error analyzing mood for file ${files[i].id}: $e');
       }

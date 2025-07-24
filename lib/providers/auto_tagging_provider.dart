@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../services/auto_tagging_service.dart';
 import '../models/journal_file.dart';
+import '../models/auto_tagging_models.dart';
 
 class AutoTaggingProvider with ChangeNotifier {
   final AutoTaggingService _autoTaggingService = AutoTaggingService();
@@ -10,15 +11,13 @@ class AutoTaggingProvider with ChangeNotifier {
   bool _isBatchProcessing = false;
   int _batchProgress = 0;
   int _batchTotal = 0;
+  String? _error;
   
   AutoTaggingResult? _lastResult;
   Map<String, dynamic> _stats = {};
   
   // Settings
-  bool _autoTagOnSave = false;
-  double _autoApprovalThreshold = 0.8;
-  bool _enableNewTagCreation = true;
-  bool _enableNewThemeCreation = false; // More conservative for themes
+  AutoTaggingSettings _settings = const AutoTaggingSettings();
   
   // Getters
   bool get isInitialized => _isInitialized;
@@ -27,29 +26,35 @@ class AutoTaggingProvider with ChangeNotifier {
   int get batchProgress => _batchProgress;
   int get batchTotal => _batchTotal;
   double get batchPercentage => _batchTotal > 0 ? (_batchProgress / _batchTotal) * 100 : 0;
+  String? get error => _error;
   
   AutoTaggingResult? get lastResult => _lastResult;
   Map<String, dynamic> get stats => _stats;
   
-  bool get autoTagOnSave => _autoTagOnSave;
-  double get autoApprovalThreshold => _autoApprovalThreshold;
-  bool get enableNewTagCreation => _enableNewTagCreation;
-  bool get enableNewThemeCreation => _enableNewThemeCreation;
+  AutoTaggingSettings get settings => _settings;
+  bool get autoTagOnSave => _settings.autoTagOnSave;
+  double get autoApprovalThreshold => _settings.autoApprovalThreshold;
+  bool get enableNewTagCreation => _settings.enableNewTagCreation;
+  bool get enableNewThemeCreation => _settings.enableNewThemeCreation;
 
   // Initialize the auto-tagging system
   Future<void> initialize() async {
     if (_isInitialized) return;
     
     try {
+      _error = null;
       await _autoTaggingService.initialize();
       await refreshStats();
+      _loadSettings();
       
       _isInitialized = true;
       notifyListeners();
       
-      debugPrint('Auto-tagging provider initialized');
+      debugPrint('Auto-tagging provider initialized successfully');
     } catch (e) {
+      _error = 'Failed to initialize auto-tagging: $e';
       debugPrint('Error initializing auto-tagging provider: $e');
+      notifyListeners();
       rethrow;
     }
   }
@@ -61,6 +66,7 @@ class AutoTaggingProvider with ChangeNotifier {
     if (_isAnalyzing) return null;
     
     try {
+      _error = null;
       _isAnalyzing = true;
       notifyListeners();
       
@@ -69,6 +75,7 @@ class AutoTaggingProvider with ChangeNotifier {
       
       return result;
     } catch (e) {
+      _error = 'Failed to analyze entry: $e';
       debugPrint('Error analyzing entry for auto-tagging: $e');
       return null;
     } finally {
@@ -80,26 +87,28 @@ class AutoTaggingProvider with ChangeNotifier {
   // Apply auto-tagging to a journal file
   Future<void> applyAutoTagging(String fileId, AutoTaggingResult result, {bool? autoApprove}) async {
     try {
+      _error = null;
       await _autoTaggingService.applyAutoTagging(
         fileId, 
         result, 
-        autoApprove: autoApprove ?? (result.overallConfidence >= _autoApprovalThreshold),
+        autoApprove: autoApprove ?? (result.overallConfidence >= _settings.autoApprovalThreshold),
       );
       
       await refreshStats();
       notifyListeners();
     } catch (e) {
+      _error = 'Failed to apply auto-tagging: $e';
       debugPrint('Error applying auto-tagging: $e');
     }
   }
 
   // Auto-tag entry when saving (if enabled)
   Future<void> autoTagOnSaveIfEnabled(JournalFile journalFile) async {
-    if (!_autoTagOnSave || !_isInitialized) return;
+    if (!_settings.autoTagOnSave || !_isInitialized) return;
     
     try {
       final result = await analyzeEntry(journalFile);
-      if (result != null && result.overallConfidence >= _autoApprovalThreshold) {
+      if (result != null && result.overallConfidence >= _settings.autoApprovalThreshold) {
         await applyAutoTagging(journalFile.id, result, autoApprove: true);
       }
     } catch (e) {
@@ -114,6 +123,7 @@ class AutoTaggingProvider with ChangeNotifier {
     if (_isBatchProcessing) return;
     
     try {
+      _error = null;
       _isBatchProcessing = true;
       _batchProgress = 0;
       _batchTotal = files.length;
@@ -131,6 +141,7 @@ class AutoTaggingProvider with ChangeNotifier {
       
       await refreshStats();
     } catch (e) {
+      _error = 'Batch auto-tagging failed: $e';
       debugPrint('Error in batch auto-tagging: $e');
     } finally {
       _isBatchProcessing = false;
@@ -151,37 +162,45 @@ class AutoTaggingProvider with ChangeNotifier {
   }
 
   // Settings management
+  void updateSettings(AutoTaggingSettings newSettings) {
+    _settings = newSettings;
+    notifyListeners();
+    _saveSettings();
+  }
+
   void setAutoTagOnSave(bool enabled) {
-    _autoTagOnSave = enabled;
+    _settings = _settings.copyWith(autoTagOnSave: enabled);
     notifyListeners();
     _saveSettings();
   }
 
   void setAutoApprovalThreshold(double threshold) {
-    _autoApprovalThreshold = threshold.clamp(0.0, 1.0);
+    _settings = _settings.copyWith(
+      autoApprovalThreshold: threshold.clamp(0.0, 1.0)
+    );
     notifyListeners();
     _saveSettings();
   }
 
   void setEnableNewTagCreation(bool enabled) {
-    _enableNewTagCreation = enabled;
+    _settings = _settings.copyWith(enableNewTagCreation: enabled);
     notifyListeners();
     _saveSettings();
   }
 
   void setEnableNewThemeCreation(bool enabled) {
-    _enableNewThemeCreation = enabled;
+    _settings = _settings.copyWith(enableNewThemeCreation: enabled);
     notifyListeners();
     _saveSettings();
   }
 
   void _saveSettings() {
-    // Save settings to local storage (could use SharedPreferences)
-    debugPrint('Auto-tagging settings saved');
+    // TODO: Save settings to local storage (SharedPreferences)
+    debugPrint('Auto-tagging settings saved: ${_settings.toString()}');
   }
 
   void _loadSettings() {
-    // Load settings from local storage
+    // TODO: Load settings from local storage
     debugPrint('Auto-tagging settings loaded');
   }
 
@@ -202,6 +221,31 @@ class AutoTaggingProvider with ChangeNotifier {
     if (confidence >= 0.6) return '#FFC107'; // Amber
     if (confidence >= 0.5) return '#FF9800'; // Orange
     return '#F44336'; // Red
+  }
+
+  // Get stats summary
+  String get statsSummary {
+    final aiTaggedFiles = _stats['ai_tagged_files'] as int? ?? 0;
+    final aiThemedFiles = _stats['ai_themed_files'] as int? ?? 0;
+    final totalTags = _stats['total_tags'] as int? ?? 0;
+    final totalThemes = _stats['total_themes'] as int? ?? 0;
+    
+    if (aiTaggedFiles == 0 && aiThemedFiles == 0) {
+      return 'No auto-tagging performed yet';
+    }
+    
+    return '$aiTaggedFiles files tagged, $aiThemedFiles files themed (${totalTags} tags, ${totalThemes} themes available)';
+  }
+
+  // Clear error state
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+
+  // Check if service is working
+  bool get isServiceHealthy {
+    return _isInitialized && (_stats['service_initialized'] as bool? ?? false);
   }
 
   @override

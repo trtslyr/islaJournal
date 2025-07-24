@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../services/mood_analysis_service.dart';
 import '../models/journal_file.dart';
+import '../models/mood_entry.dart';
 
 class MoodProvider with ChangeNotifier {
   final MoodAnalysisService _moodService = MoodAnalysisService();
@@ -15,6 +16,7 @@ class MoodProvider with ChangeNotifier {
   MoodPattern? _currentPattern;
   Map<String, dynamic> _moodStats = {};
   List<MoodEntry> _recentEntries = [];
+  String? _error;
   
   // Getters
   bool get isInitialized => _isInitialized;
@@ -23,6 +25,7 @@ class MoodProvider with ChangeNotifier {
   int get totalToAnalyze => _totalToAnalyze;
   String get analysisStatus => _analysisStatus;
   double get analysisPercentage => _totalToAnalyze > 0 ? (_analysisProgress / _totalToAnalyze) * 100 : 0;
+  String? get error => _error;
   
   MoodEntry? get currentMoodEntry => _currentMoodEntry;
   MoodPattern? get currentPattern => _currentPattern;
@@ -34,14 +37,18 @@ class MoodProvider with ChangeNotifier {
     if (_isInitialized) return;
     
     try {
+      _error = null;
       await _moodService.initialize();
       await _refreshMoodStats();
       await _loadRecentEntries();
       
       _isInitialized = true;
       notifyListeners();
+      debugPrint('Mood provider initialized successfully');
     } catch (e) {
+      _error = 'Failed to initialize mood analysis: $e';
       debugPrint('Error initializing mood provider: $e');
+      notifyListeners();
       rethrow;
     }
   }
@@ -51,6 +58,7 @@ class MoodProvider with ChangeNotifier {
     if (!_isInitialized) await initialize();
     
     try {
+      _error = null;
       _isAnalyzing = true;
       _analysisStatus = 'Analyzing mood for ${journalFile.name}...';
       notifyListeners();
@@ -65,6 +73,7 @@ class MoodProvider with ChangeNotifier {
       
       return moodEntry;
     } catch (e) {
+      _error = 'Failed to analyze mood: $e';
       debugPrint('Error analyzing mood: $e');
       return null;
     } finally {
@@ -80,6 +89,7 @@ class MoodProvider with ChangeNotifier {
     if (_isAnalyzing) return;
     
     try {
+      _error = null;
       _isAnalyzing = true;
       _analysisProgress = 0;
       _totalToAnalyze = files.length;
@@ -96,11 +106,12 @@ class MoodProvider with ChangeNotifier {
         },
       );
       
-      _analysisStatus = 'Analysis completed';
+      _analysisStatus = 'Analysis completed successfully';
       await _refreshMoodStats();
       await _loadRecentEntries();
     } catch (e) {
-      _analysisStatus = 'Analysis failed: $e';
+      _error = 'Mood analysis failed: $e';
+      _analysisStatus = 'Analysis failed';
       debugPrint('Error during batch mood analysis: $e');
     } finally {
       _isAnalyzing = false;
@@ -140,6 +151,7 @@ class MoodProvider with ChangeNotifier {
       _currentPattern = pattern;
       return pattern;
     } catch (e) {
+      _error = 'Failed to analyze mood patterns: $e';
       debugPrint('Error analyzing mood pattern: $e');
       return null;
     } finally {
@@ -194,9 +206,10 @@ class MoodProvider with ChangeNotifier {
     if (_currentPattern == null) return 'No mood data available';
     
     final pattern = _currentPattern!;
-    final valenceStr = pattern.averageValence > 0 ? 'positive' : 
-                     pattern.averageValence < 0 ? 'negative' : 'neutral';
-    final arousalStr = pattern.averageArousal > 0.5 ? 'high energy' : 'calm';
+    final valenceStr = pattern.averageValence > 0.2 ? 'positive' : 
+                     pattern.averageValence < -0.2 ? 'negative' : 'neutral';
+    final arousalStr = pattern.averageArousal > 0.6 ? 'high energy' : 
+                     pattern.averageArousal > 0.3 ? 'moderate energy' : 'calm';
     
     return 'Recent mood: $valenceStr and $arousalStr (${pattern.trend})';
   }
@@ -226,12 +239,40 @@ class MoodProvider with ChangeNotifier {
     
     final avgValence = _moodStats['averageValence'] as double? ?? 0.0;
     final avgArousal = _moodStats['averageArousal'] as double? ?? 0.0;
+    final dominantEmotion = _moodStats['dominantEmotion'] as String? ?? 'neutral';
     
     final valenceStr = avgValence > 0.1 ? 'generally positive' :
                       avgValence < -0.1 ? 'generally negative' : 'balanced';
     final arousalStr = avgArousal > 0.5 ? 'energetic' : 'calm';
     
-    return '$totalEntries entries analyzed • $valenceStr mood • $arousalStr energy';
+    return '$totalEntries entries • $valenceStr • $arousalStr • $dominantEmotion';
+  }
+
+  // Get recent mood description
+  String get recentMoodDescription {
+    if (_recentEntries.isEmpty) return 'No recent mood data';
+    
+    final recent = _recentEntries.first;
+    return '${recent.valenceMood} mood, ${recent.arousalLevel} energy (${recent.primaryEmotion})';
+  }
+
+  // Clear error state
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+
+  // Manually refresh all data
+  Future<void> refresh() async {
+    if (!_isInitialized) return;
+    
+    try {
+      await _refreshMoodStats();
+      await _loadRecentEntries();
+    } catch (e) {
+      _error = 'Failed to refresh mood data: $e';
+      notifyListeners();
+    }
   }
 
   @override
