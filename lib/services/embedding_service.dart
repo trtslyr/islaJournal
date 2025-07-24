@@ -14,6 +14,7 @@ class EmbeddingService {
   final Map<String, double> _vocabulary = {};
   final Map<String, Map<String, double>> _termFrequency = {};
   final Map<String, double> _inverseDocumentFrequency = {};
+  final Set<String> _processedDocuments = {}; // Track processed documents to avoid double counting
   int _documentCount = 0;
   bool _isInitialized = false;
 
@@ -26,6 +27,7 @@ class EmbeddingService {
     try {
       await _loadVocabulary();
       _isInitialized = true;
+      print('Embedding service initialized with vocabulary size: ${_vocabulary.length}, documents: $_documentCount');
     } catch (e) {
       print('Error initializing embedding service: $e');
       throw Exception('Failed to initialize embedding service: $e');
@@ -48,7 +50,10 @@ class EmbeddingService {
         _inverseDocumentFrequency.addAll(
           Map<String, double>.from(data['inverseDocumentFrequency'] ?? {}),
         );
+        _processedDocuments.addAll(Set<String>.from(data['processedDocuments'] ?? []));
         _documentCount = data['documentCount'] ?? 0;
+        
+        print('Loaded vocabulary: ${_vocabulary.length} words, ${_processedDocuments.length} documents');
       } catch (e) {
         print('Error loading vocabulary: $e');
         // Continue with empty vocabulary
@@ -62,6 +67,7 @@ class EmbeddingService {
       'vocabulary': _vocabulary,
       'termFrequency': _termFrequency,
       'inverseDocumentFrequency': _inverseDocumentFrequency,
+      'processedDocuments': _processedDocuments.toList(),
       'documentCount': _documentCount,
     };
     await vocabFile.writeAsString(jsonEncode(data));
@@ -115,14 +121,24 @@ class EmbeddingService {
       return List.filled(embeddingDimension, 0.0);
     }
 
-    // Update vocabulary and term frequency
-    _updateVocabulary(words, documentId);
+    // Update vocabulary and term frequency - ONLY if this is a new document
+    final isNewDocument = !_processedDocuments.contains(documentId);
+    if (isNewDocument) {
+      _updateVocabulary(words, documentId);
+      _processedDocuments.add(documentId);
+      print('Added new document to vocabulary: $documentId (total documents: $_documentCount)');
+    } else {
+      // For existing documents, just update the term frequency without affecting global stats
+      _updateTermFrequencyOnly(words, documentId);
+    }
 
     // Generate TF-IDF based embedding
     final embedding = _generateTfIdfEmbedding(words, documentId);
     
-    // Save updated vocabulary
-    await _saveVocabulary();
+    // Save updated vocabulary (but not on every call to avoid performance issues)
+    if (isNewDocument) {
+      await _saveVocabulary();
+    }
     
     return embedding;
   }
@@ -146,13 +162,32 @@ class EmbeddingService {
     }
 
     _termFrequency[documentId] = termFreq;
-    _documentCount++;
+    _documentCount++; // Only increment for NEW documents
 
     // Recalculate IDF
     _updateInverseDocumentFrequency();
   }
 
+  void _updateTermFrequencyOnly(List<String> words, String documentId) {
+    // Calculate term frequency for this document (for existing documents)
+    final termFreq = <String, double>{};
+    for (final word in words) {
+      termFreq[word] = (termFreq[word] ?? 0) + 1;
+    }
+
+    // Normalize term frequency
+    final maxFreq = termFreq.values.isNotEmpty ? termFreq.values.reduce(max) : 1.0;
+    for (final entry in termFreq.entries) {
+      termFreq[entry.key] = entry.value / maxFreq;
+    }
+
+    _termFrequency[documentId] = termFreq;
+    // DON'T increment document count or update vocabulary for existing documents
+  }
+
   void _updateInverseDocumentFrequency() {
+    if (_documentCount == 0) return;
+    
     for (final word in _vocabulary.keys) {
       final documentsContainingWord = _termFrequency.values
           .where((tf) => tf.containsKey(word))
@@ -169,17 +204,19 @@ class EmbeddingService {
     final tfMap = _termFrequency[documentId] ?? {};
     final embedding = List.filled(embeddingDimension, 0.0);
     
-    // Use a simple hash-based approach to map words to embedding dimensions
+    // Improved hash-based approach to map words to embedding dimensions
     for (final word in words) {
       final tf = tfMap[word] ?? 0.0;
       final idf = _inverseDocumentFrequency[word] ?? 0.0;
       final tfidf = tf * idf;
       
-      // Map word to multiple dimensions using hash
+      if (tfidf == 0.0) continue; // Skip words with no weight
+      
+      // Map word to multiple dimensions using hash (improved distribution)
       final hash = word.hashCode.abs();
-      for (int i = 0; i < 5; i++) { // Each word affects 5 dimensions
-        final dim = (hash + i) % embeddingDimension;
-        embedding[dim] += tfidf;
+      for (int i = 0; i < 8; i++) { // Each word affects 8 dimensions (increased for better distribution)
+        final dim = (hash + i * 7919) % embeddingDimension; // Use prime number for better distribution
+        embedding[dim] += tfidf * (1.0 / (i + 1)); // Diminishing weight for each dimension
       }
     }
     
@@ -232,11 +269,13 @@ class EmbeddingService {
       final tf = words.where((w) => w == word).length / words.length;
       final tfidf = tf * idf;
       
-      // Map word to multiple dimensions using hash
+      if (tfidf == 0.0) continue; // Skip words with no weight
+      
+      // Map word to multiple dimensions using hash (same improved distribution)
       final hash = word.hashCode.abs();
-      for (int i = 0; i < 5; i++) {
-        final dim = (hash + i) % embeddingDimension;
-        embedding[dim] += tfidf;
+      for (int i = 0; i < 8; i++) {
+        final dim = (hash + i * 7919) % embeddingDimension;
+        embedding[dim] += tfidf * (1.0 / (i + 1));
       }
     }
     
@@ -253,14 +292,19 @@ class EmbeddingService {
 
   // Reindex all documents (useful when vocabulary changes significantly)
   Future<void> reindexDocuments(Map<String, String> documents) async {
+    print('Reindexing ${documents.length} documents...');
+    
     _vocabulary.clear();
     _termFrequency.clear();
     _inverseDocumentFrequency.clear();
+    _processedDocuments.clear();
     _documentCount = 0;
     
     for (final entry in documents.entries) {
       await generateEmbedding(entry.value, entry.key);
     }
+    
+    print('Reindexing completed. Vocabulary size: ${_vocabulary.length}, Documents: $_documentCount');
   }
 
   // Get vocabulary statistics
@@ -268,15 +312,35 @@ class EmbeddingService {
     return {
       'vocabularySize': _vocabulary.length,
       'documentCount': _documentCount,
+      'processedDocuments': _processedDocuments.length,
       'embeddingDimension': embeddingDimension,
       'isInitialized': _isInitialized,
+      'averageWordsPerDocument': _documentCount > 0 ? (_vocabulary.values.reduce((a, b) => a + b) / _documentCount).toStringAsFixed(2) : '0',
     };
+  }
+
+  // Clear all embeddings and start fresh
+  Future<void> clearEmbeddings() async {
+    _vocabulary.clear();
+    _termFrequency.clear();
+    _inverseDocumentFrequency.clear();
+    _processedDocuments.clear();
+    _documentCount = 0;
+    
+    // Delete vocabulary file
+    final vocabFile = await _getVocabularyFile();
+    if (await vocabFile.exists()) {
+      await vocabFile.delete();
+    }
+    
+    print('Cleared all embeddings and vocabulary');
   }
 
   void dispose() {
     _vocabulary.clear();
     _termFrequency.clear();
     _inverseDocumentFrequency.clear();
+    _processedDocuments.clear();
     _documentCount = 0;
     _isInitialized = false;
   }
