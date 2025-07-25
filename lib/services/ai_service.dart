@@ -5,6 +5,7 @@ import 'package:fllama/fllama.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert'; // Added for jsonDecode
+import 'package:path/path.dart' as path;
 
 enum AIModelSize {
   small, // 1B model (~800MB)
@@ -175,11 +176,36 @@ class AIService {
   }
 
   Future<Directory> _getModelsDirectory() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final modelsDir = Directory('${appDir.path}/isla_journal_models');
+    late Directory baseDir;
+    
+    // Use platform-appropriate directory
+    if (Platform.isAndroid || Platform.isIOS) {
+      // Mobile platforms - use application documents directory
+      baseDir = await getApplicationDocumentsDirectory();
+    } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      // Desktop platforms - use application support directory for better organization
+      try {
+        baseDir = await getApplicationSupportDirectory();
+      } catch (e) {
+        // Fallback to documents directory if application support is not available
+        baseDir = await getApplicationDocumentsDirectory();
+      }
+    } else {
+      // Fallback for any other platforms
+      baseDir = await getApplicationDocumentsDirectory();
+    }
+    
+    // Create platform-appropriate models directory path
+    final modelsDir = Directory(path.join(baseDir.path, 'isla_journal_models'));
     
     if (!await modelsDir.exists()) {
-      await modelsDir.create(recursive: true);
+      try {
+        await modelsDir.create(recursive: true);
+      } catch (e) {
+        // ignore: avoid_print
+        print('Error creating models directory: $e');
+        throw Exception('Failed to create models directory: $e');
+      }
     }
     
     return modelsDir;

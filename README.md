@@ -2,6 +2,35 @@
 
 A fully offline AI-powered journaling application with a simple, Notion-like UI built with Flutter.
 
+## 🧪 **Beta Testing** 
+
+**Want to try Isla Journal?** We're currently in beta testing!
+
+### 📱 **Mobile Beta (Recommended)**
+- **iOS**: Join our [TestFlight Beta](https://testflight.apple.com/join/YOUR_CODE) 
+- **Android**: Join our [Play Store Beta](https://play.google.com/apps/testing/com.islajournal.app)
+
+### 💻 **Desktop Beta**
+1. **Visit our [Releases page](https://github.com/YOUR_USERNAME/isla-journal/releases)**
+2. **Download** the latest version for your platform:
+   - 🍎 **macOS**: `IslaJournal-macOS.zip`
+   - 🪟 **Windows**: `IslaJournal-Windows.zip` 
+   - 🐧 **Linux**: `IslaJournal-Linux.tar.gz`
+3. **Extract** the downloaded file
+4. **Run** the application
+
+#### ⚠️ **First-time Setup**
+Since these are unsigned beta builds, you may see security warnings:
+
+**macOS**: Right-click the app → "Open" → "Open" (bypass Gatekeeper)
+**Windows**: Click "More info" → "Run anyway" (bypass SmartScreen)  
+**Linux**: Make the file executable: `chmod +x isla_journal`
+
+### 🐛 **Report Issues**
+Found a bug or have feedback? [Create an issue](https://github.com/YOUR_USERNAME/isla-journal/issues/new) or email us at beta@islajournal.app
+
+---
+
 ## 🎯 Phase 1 - COMPLETE ✅
 
 Phase 1 has been successfully implemented with all core journaling features:
