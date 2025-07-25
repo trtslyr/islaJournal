@@ -65,10 +65,10 @@ class JournalProvider with ChangeNotifier {
     notifyListeners();
     
     try {
-      debugPrint('🔄 Initializing JournalProvider...');
+  
       
       await _dbService.ensureProfileFileExists(); // Ensure profile file exists
-      debugPrint('✅ Profile file ensured');
+
       
       // Load all data in parallel for better performance
       await Future.wait([
@@ -77,19 +77,19 @@ class JournalProvider with ChangeNotifier {
         loadRecentFiles(),
       ]);
       
-      debugPrint('✅ Loaded ${_folders.length} folders and ${_files.length} files');
+      
       
       // Generate embeddings for files that don't have them
-      debugPrint('🧠 Checking for files missing embeddings...');
+      
       await _generateMissingEmbeddings();
-      debugPrint('✅ Embedding generation complete');
+      
       
     } catch (e) {
-      debugPrint('❌ Error initializing provider: $e');
+      
     } finally {
       _isLoading = false;
       notifyListeners();
-      debugPrint('✅ JournalProvider initialization complete');
+
     }
   }
 
@@ -105,15 +105,15 @@ class JournalProvider with ChangeNotifier {
       final filesWithoutEmbeddings = allFiles.where((f) => !filesWithEmbeddingIds.contains(f.id)).toList();
       
       if (filesWithoutEmbeddings.isEmpty) {
-        debugPrint('✅ All files already have embeddings');
+  
         return;
       }
       
-      debugPrint('🧠 Generating embeddings for ${filesWithoutEmbeddings.length} files...');
+      
       
       for (int i = 0; i < filesWithoutEmbeddings.length; i++) {
         final fileMetadata = filesWithoutEmbeddings[i];
-        debugPrint('   Processing ${i + 1}/${filesWithoutEmbeddings.length}: ${fileMetadata.name}');
+        
         
         try {
           // Load the actual file content from disk
@@ -122,18 +122,18 @@ class JournalProvider with ChangeNotifier {
           if (file?.content?.isNotEmpty == true) {
             final embedding = await _embeddingService.generateEmbedding(file!.content!);
             await _dbService.storeEmbedding(file.id, embedding);
-            debugPrint('   ✅ Generated embedding for ${file.name} (${file.content!.length} characters)');
+
           } else {
-            debugPrint('   ⏭️ Skipping ${fileMetadata.name} - no content (file: ${file != null}, content length: ${file?.content?.length ?? 0})');
+            
           }
         } catch (e) {
-          debugPrint('   ❌ Failed to generate embedding for ${fileMetadata.name}: $e');
+          
         }
       }
       
-      debugPrint('✅ Embedding generation complete for ${filesWithoutEmbeddings.length} files');
+      
     } catch (e) {
-      debugPrint('❌ Error generating missing embeddings: $e');
+      
     }
   }
 
@@ -145,7 +145,7 @@ class JournalProvider with ChangeNotifier {
       _folders = await _dbService.getFolders();
       notifyListeners();
     } catch (e) {
-      debugPrint('Error loading folders: $e');
+
     }
   }
 
@@ -154,7 +154,7 @@ class JournalProvider with ChangeNotifier {
       await _dbService.createFolder(name, parentId: parentId);
       await loadFolders();
     } catch (e) {
-      debugPrint('Error creating folder: $e');
+
     }
   }
 
@@ -163,7 +163,7 @@ class JournalProvider with ChangeNotifier {
       await _dbService.updateFolder(folder);
       await loadFolders();
     } catch (e) {
-      debugPrint('Error updating folder: $e');
+
     }
   }
 
@@ -173,7 +173,7 @@ class JournalProvider with ChangeNotifier {
       await loadFolders();
       await loadFiles();
     } catch (e) {
-      debugPrint('Error deleting folder: $e');
+
     }
   }
 
@@ -183,7 +183,7 @@ class JournalProvider with ChangeNotifier {
       _files = await _dbService.getFiles();
       notifyListeners();
     } catch (e) {
-      debugPrint('Error loading files: $e');
+
     }
   }
 
@@ -193,9 +193,9 @@ class JournalProvider with ChangeNotifier {
       await _dbService.refreshJournalDatesForAllFiles();
       await loadFiles(); // Reload files to get updated dates
       notifyListeners(); // Explicitly notify UI to refresh
-      debugPrint('✅ Journal dates refreshed successfully');
+      
     } catch (e) {
-      debugPrint('Error refreshing journal dates: $e');
+      
     }
   }
 
@@ -205,9 +205,9 @@ class JournalProvider with ChangeNotifier {
       await _dbService.deleteAllData();
       await loadFiles(); // Reload to show empty state
       await loadFolders(); // Reload folders to show default state
-      debugPrint('✅ All data deleted successfully');
+      
     } catch (e) {
-      debugPrint('Error deleting all data: $e');
+      
       rethrow;
     }
   }
@@ -220,7 +220,7 @@ class JournalProvider with ChangeNotifier {
       _files = await _dbService.getFiles(folderId: folderId);
       notifyListeners();
     } catch (e) {
-      debugPrint('Error loading files in folder: $e');
+
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -229,7 +229,7 @@ class JournalProvider with ChangeNotifier {
 
   Future<String?> createFile(String name, String content, {String? folderId}) async {
     try {
-      debugPrint('🔄 Creating file: $name');
+  
       
       // Automatically assign today's date
       final today = DateTime.now();
@@ -243,28 +243,28 @@ class JournalProvider with ChangeNotifier {
         folderId: targetFolderId,
         journalDate: today, // Automatically assign today's date
       );
-      debugPrint('✅ File created with ID: $fileId in folder: ${targetFolderId ?? "root"}');
+      
       
       // Generate embedding for new file
       if (content.isNotEmpty) {
         try {
-          debugPrint('🧠 Generating embedding for new file: $name');
+  
           final embedding = await _embeddingService.generateEmbedding(content);
           await _dbService.storeEmbedding(fileId, embedding);
-          debugPrint('✅ Embedding generated for new file');
+
         } catch (e) {
-          debugPrint('❌ Failed to generate embedding for new file: $e');
+          
         }
       }
       
       await loadFiles();
-      debugPrint('✅ Files reloaded, now have ${_files.length} files');
+      
       
 
       
       return fileId;
     } catch (e) {
-      debugPrint('❌ Error creating file: $e');
+      
       return null;
     }
   }
@@ -280,7 +280,7 @@ class JournalProvider with ChangeNotifier {
       }
       return file;
     } catch (e) {
-      debugPrint('Error getting file: $e');
+      
       return null;
     }
   }
@@ -295,18 +295,18 @@ class JournalProvider with ChangeNotifier {
       // Regenerate embedding for updated file
       if (file.content?.isNotEmpty == true) {
         try {
-          debugPrint('🧠 Regenerating embedding for updated file: ${file.name}');
+  
           final embedding = await _embeddingService.generateEmbedding(file.content!);
           await _dbService.storeEmbedding(file.id, embedding);
-          debugPrint('✅ Embedding regenerated for updated file');
+          
         } catch (e) {
-          debugPrint('❌ Failed to regenerate embedding for updated file: $e');
+          
         }
       }
       
       await loadFiles();
     } catch (e) {
-      debugPrint('Error updating file: $e');
+      
     }
   }
 
@@ -328,7 +328,7 @@ class JournalProvider with ChangeNotifier {
       await loadFiles();
       await loadRecentFiles();
     } catch (e) {
-      debugPrint('Error deleting file: $e');
+      
     }
   }
 
@@ -432,7 +432,7 @@ class JournalProvider with ChangeNotifier {
       _searchResults = await _dbService.searchFiles(query);
       notifyListeners();
     } catch (e) {
-      debugPrint('Error searching files: $e');
+      
       _searchResults = [];
       notifyListeners();
     } finally {
@@ -594,7 +594,7 @@ class JournalProvider with ChangeNotifier {
       _recentFiles = await _dbService.getRecentFiles();
       notifyListeners();
     } catch (e) {
-      debugPrint('Error loading recent files: $e');
+      
     }
   }
 
@@ -603,7 +603,7 @@ class JournalProvider with ChangeNotifier {
     try {
       return await _dbService.getProfileFile();
     } catch (e) {
-      debugPrint('Error getting profile file: $e');
+      
       return null;
     }
   }

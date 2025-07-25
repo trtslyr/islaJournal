@@ -687,7 +687,7 @@ When you're ready, delete this instruction text and write your own introduction.
     final db = await database;
     final documentsDir = await getApplicationDocumentsDirectory();
     
-    debugPrint('🔄 DatabaseService: Creating file "$name" in folder: ${folderId ?? "root"}');
+
     
     // Create database entry first to get the ID
     final journalFile = JournalFile(
@@ -700,25 +700,25 @@ When you're ready, delete this instruction text and write your own introduction.
     );
     
     final filePath = join(documentsDir.path, 'journal_files', '${journalFile.id}.md');
-    debugPrint('📁 File path: $filePath');
+    
     
     // Ensure the directory exists
     final fileDir = Directory(dirname(filePath));
     if (!await fileDir.exists()) {
       await fileDir.create(recursive: true);
-      debugPrint('📁 Created directory: ${fileDir.path}');
+      
     }
     
     // Write content to file
     final file = File(filePath);
     await file.writeAsString(content);
-    debugPrint('💾 Written content to file: ${content.length} characters');
+    
     
     // Update the file path in the journal file
     final updatedJournalFile = journalFile.copyWith(filePath: filePath);
     
     await db.insert('files', updatedJournalFile.toMap());
-    debugPrint('📊 Inserted file into database');
+    
     
     // Update search index
     await db.insert('files_fts', {
@@ -726,9 +726,9 @@ When you're ready, delete this instruction text and write your own introduction.
       'title': name,
       'content': content,
     });
-    debugPrint('🔍 Updated search index');
     
-    debugPrint('✅ DatabaseService: File created successfully with ID: ${updatedJournalFile.id}');
+    
+    
     
     return updatedJournalFile.id;
   }

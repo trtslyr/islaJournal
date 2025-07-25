@@ -23,7 +23,7 @@ class ImportService {
   String _currentFileName = '';
 
   Future<ImportResult> importMarkdownFiles(List<File> files) async {
-    print('📊 ImportService: Starting import of ${files.length} files');
+
     final result = ImportResult();
     
     // Initialize tracking variables
@@ -45,7 +45,7 @@ class ImportService {
       _currentFileIndex = i + 1;
       _currentFileName = fileName;
       
-      print('📄 Processing file ${i + 1}/${files.length}: $fileName');
+
       
       try {
         // 1. Parse markdown file
@@ -57,9 +57,9 @@ class ImportService {
           phaseDescription: 'Parsing markdown content...',
         ));
         
-        print('  1️⃣ Parsing markdown file...');
+
         final parsed = await _parseMarkdownFile(file);
-        print('  ✅ Parsed: title="${parsed.title}", content=${parsed.content.length} chars, ${parsed.tags.length} tags');
+        
         
         // 2. Store in database
         _progressController.add(ImportProgress(
@@ -70,9 +70,9 @@ class ImportService {
           phaseDescription: 'Storing in database...',
         ));
         
-        print('  2️⃣ Storing in database...');
+        
         final fileId = await _storeJournalEntry(parsed);
-        print('  ✅ Stored with ID: $fileId');
+        
         
         // 3. Index for AI
         _progressController.add(ImportProgress(
@@ -83,12 +83,12 @@ class ImportService {
           phaseDescription: 'Generating AI embeddings...',
         ));
         
-        print('  3️⃣ Indexing for AI...');
+        
         await _indexForAI(fileId, parsed);
-        print('  ✅ AI indexing complete');
+        
         
         result.filesImported++;
-        print('  🎉 File imported successfully');
+        
         
       } catch (e) {
         _progressController.add(ImportProgress(
@@ -99,11 +99,7 @@ class ImportService {
           phaseDescription: 'Error: ${e.toString()}',
         ));
         
-        print('  🔴 Error importing ${file.path}: $e');
-        print('  🔴 Error type: ${e.runtimeType}');
-        print('  🔴 Stack trace: ${StackTrace.current}');
         result.addError(fileName, e.toString());
-        debugPrint('Error importing ${file.path}: $e');
         
         // Brief pause on error to show the error state
         await Future.delayed(Duration(milliseconds: 500));
@@ -118,7 +114,7 @@ class ImportService {
       isComplete: true,
     ));
     
-    print('📊 ImportService: Completed import - ${result.filesImported} successful, ${result.errors} errors');
+
     return result;
   }
 
@@ -132,12 +128,12 @@ class ImportService {
 
   Future<String> _storeJournalEntry(ParsedEntry parsed) async {
     try {
-      print('    🔍 Finding suggested folder...');
+
       // Smart folder placement
       final folderId = await _suggestFolder(parsed);
-      print('    📁 Suggested folder: ${folderId ?? 'root'}');
+
       
-      print('    💾 Creating journal file in database...');
+      
       // Create the journal file with extracted date
       final fileId = await _db.createFile(
         parsed.title,
@@ -145,26 +141,24 @@ class ImportService {
         folderId: folderId,
         journalDate: parsed.date,
       );
-      print('    ✅ Journal file created with ID: $fileId');
       
-      print('    📋 Tracking import history...');
+      
+      
       // Track import history
       await _db.trackImport(parsed.originalPath, fileId);
-      print('    ✅ Import history tracked');
+      
       
 
       
       return fileId;
     } catch (e) {
-      print('    🔴 Error in _storeJournalEntry: $e');
-      print('    🔴 Error type: ${e.runtimeType}');
       rethrow;
     }
   }
 
   Future<String?> _suggestFolder(ParsedEntry parsed) async {
     // Place all imported files at root level - let the new sorting system handle organization
-    print('    📁 Placing imported file at root level (sorting system will handle organization)');
+    
     return null;
   }
 
@@ -186,7 +180,7 @@ class ImportService {
       await _storeInsights(fileId, parsed);
       
     } catch (e) {
-      debugPrint('Error indexing for AI: $e');
+
       // Don't fail the import if AI indexing fails
     }
   }
@@ -195,7 +189,7 @@ class ImportService {
     // Chunk content for better embeddings
     final chunks = _chunkContent(parsed.content);
     
-    print('    🧠 Generating embeddings for ${chunks.length} chunks...');
+    
     
     for (int i = 0; i < chunks.length; i++) {
       final chunk = chunks[i];
@@ -214,14 +208,13 @@ class ImportService {
       try {
         final embedding = await _embedding.generateEmbedding(chunk);
         await _db.storeChunkedEmbedding(fileId, i, chunk, embedding);
-        print('    ✅ Embedded chunk ${i + 1}/${chunks.length}');
+        
       } catch (e) {
-        print('    🔴 Error generating embedding for chunk $i: $e');
-        debugPrint('Error generating embedding for chunk $i: $e');
+  
       }
     }
     
-    print('    🎯 Completed all embeddings for file');
+    
   }
 
   List<String> _chunkContent(String content) {

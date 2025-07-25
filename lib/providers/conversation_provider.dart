@@ -34,7 +34,6 @@ class ConversationProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _error = 'Failed to load conversations: $e';
-      debugPrint('Error loading conversations: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -51,7 +50,6 @@ class ConversationProvider with ChangeNotifier {
       }
     } catch (e) {
       _error = 'Failed to load active conversation: $e';
-      debugPrint('Error loading active conversation: $e');
     }
   }
 
@@ -71,7 +69,6 @@ class ConversationProvider with ChangeNotifier {
       return conversation;
     } catch (e) {
       _error = 'Failed to create conversation: $e';
-      debugPrint('Error creating conversation: $e');
       rethrow;
     } finally {
       _isLoading = false;
@@ -87,42 +84,42 @@ class ConversationProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _error = 'Failed to set active conversation: $e';
-      debugPrint('Error setting active conversation: $e');
+
     }
   }
 
   // Delete a conversation
   Future<void> deleteConversation(ConversationSession conversation) async {
     try {
-      print('🗑️ ConversationProvider: Deleting conversation ${conversation.id}');
+  
       await conversation.delete();
       
-      print('🗑️ Removing from conversations list...');
+  
       final beforeCount = _conversations.length;
       _conversations.removeWhere((c) => c.id == conversation.id);
       final afterCount = _conversations.length;
-      print('🗑️ Conversations count: $beforeCount -> $afterCount');
+      
       
       // If this was the active conversation, clear it
       if (_activeConversation?.id == conversation.id) {
-        print('🗑️ Deleted conversation was active, switching...');
+
         _activeConversation = null;
         
         // Set the first conversation as active if available
         if (_conversations.isNotEmpty) {
-          print('🗑️ Setting new active conversation: ${_conversations.first.title}');
+
           await setActiveConversation(_conversations.first);
         } else {
-          print('🗑️ No conversations remaining');
+          
         }
       }
       
-      print('🗑️ Notifying listeners...');
+      
       notifyListeners();
-      print('🗑️ Delete operation complete');
+      
     } catch (e) {
       _error = 'Failed to delete conversation: $e';
-      debugPrint('Error deleting conversation: $e');
+      
     }
   }
 
@@ -138,25 +135,25 @@ class ConversationProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _error = 'Failed to clear all conversations: $e';
-      debugPrint('Error clearing all conversations: $e');
+      
     }
   }
 
   // Update conversation title
   Future<void> updateConversationTitle(ConversationSession conversation, String newTitle) async {
     try {
-      print('✏️ ConversationProvider: Updating title from "${conversation.title}" to "$newTitle"');
+  
       await conversation.updateTitle(newTitle);
-      print('✏️ Database update completed');
+      
       
       // The conversation object itself is updated, no need to replace it
       // Just notify listeners that the data has changed
-      print('✏️ Notifying listeners of title change');
+      
       notifyListeners();
-      print('✏️ Title update complete');
+      
     } catch (e) {
       _error = 'Failed to update conversation title: $e';
-      debugPrint('Error updating conversation title: $e');
+      
     }
   }
 
@@ -210,15 +207,15 @@ class ConversationProvider with ChangeNotifier {
   Future<void> updateContextSettings(dynamic newSettings) async {
     try {
       if (_activeConversation != null) {
-        print('🔧 ConversationProvider: Updating context settings');
+    
         await _activeConversation!.updateContextSettings(newSettings);
-        print('🔧 Database update completed, notifying listeners');
+    
         notifyListeners();
-        print('🔧 Context settings update complete');
+        
       }
     } catch (e) {
       _error = 'Failed to update context settings: $e';
-      debugPrint('Error updating context settings: $e');
+      
     }
   }
 } 

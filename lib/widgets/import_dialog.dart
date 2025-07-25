@@ -127,7 +127,7 @@ class _ImportDialogState extends State<ImportDialog> {
         child:         InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: () {
-            print('🔘 Import button tapped: $title');
+        
             onPressed();
           },
           child: Padding(
@@ -204,8 +204,7 @@ class _ImportDialogState extends State<ImportDialog> {
 
   Future<void> _selectFiles() async {
     try {
-      print('🔄 Opening file picker for markdown files...');
-      print('🔍 Using improved file picker with proper permissions...');
+      
       
       // Use specific file type filtering with improved permissions
       final result = await FilePicker.platform.pickFiles(
@@ -217,8 +216,7 @@ class _ImportDialogState extends State<ImportDialog> {
         withReadStream: false,
       );
       
-      print('📁 File picker result: ${result?.files.length ?? 0} files selected');
-      print('📋 Files: ${result?.files.map((f) => '${f.name} (${f.path})').toList()}');
+      
       
       if (result != null && result.files.isNotEmpty) {
         final files = result.files
@@ -226,15 +224,13 @@ class _ImportDialogState extends State<ImportDialog> {
             .map((f) => File(f.path!))
             .toList();
             
-        print('✅ Starting import of ${files.length} markdown files');
+        
         await _importFiles(files);
       } else {
-        print('❌ File picker was cancelled or returned null');
+        
         _showPickerHelp();
       }
     } catch (e, stackTrace) {
-      print('🔴 Error in _selectFiles: $e');
-      print('🔴 Stack trace: $stackTrace');
       
       // More specific error handling
       if (e.toString().contains('Operation not permitted') || 
@@ -252,17 +248,17 @@ class _ImportDialogState extends State<ImportDialog> {
 
   Future<void> _selectFolder() async {
     try {
-      print('🔄 Opening directory picker...');
+  
       final result = await FilePicker.platform.getDirectoryPath();
       
-      print('📁 Directory picker result: ${result ?? 'cancelled'}');
+
       
       if (result != null) {
         final directory = Directory(result);
-        print('🔍 Scanning directory: ${directory.path}');
+        
         final files = await _findMarkdownFiles(directory);
         
-        print('📄 Found ${files.length} markdown files');
+        
         
         if (files.isNotEmpty) {
           await _importFiles(files);
@@ -270,10 +266,9 @@ class _ImportDialogState extends State<ImportDialog> {
           _showError('No markdown files found in the selected folder.');
         }
       } else {
-        print('❌ Directory picker cancelled');
+        
       }
     } catch (e) {
-      print('🔴 Error in _selectFolder: $e');
       _showError('Failed to open directory picker: $e');
     }
   }
@@ -315,21 +310,21 @@ class _ImportDialogState extends State<ImportDialog> {
         }
       }
     } catch (e) {
-      debugPrint('Error scanning directory: $e');
+      
     }
     
     return files;
   }
 
   Future<void> _importFiles(List<File> files) async {
-    print('🚀 Starting import process for ${files.length} files');
+
     setState(() {
       _isImporting = true;
       _currentProgress = null;
     });
     
     try {
-      print('📦 Creating ImportService...');
+
       _importService = ImportService();
       
       // Subscribe to progress updates
@@ -341,10 +336,10 @@ class _ImportDialogState extends State<ImportDialog> {
         }
       });
       
-      print('📥 Beginning import process...');
+      
       final result = await _importService!.importMarkdownFiles(files);
       
-      print('✅ Import completed: ${result.filesImported} files imported, ${result.errors} errors');
+      
       
       // Brief delay to show completion state
       await Future.delayed(Duration(seconds: 1));
@@ -355,16 +350,14 @@ class _ImportDialogState extends State<ImportDialog> {
       _showResultDialog(result);
       
       // Refresh the file list
-      print('🔄 Refreshing file lists...');
+      
       final journalProvider = Provider.of<JournalProvider>(context, listen: false);
       await journalProvider.loadFiles();
       await journalProvider.loadFolders();
-      print('✅ File lists refreshed');
+      
       
     } catch (e) {
-      print('🔴 Import failed with error: $e');
-      print('🔴 Error type: ${e.runtimeType}');
-      print('🔴 Full error: ${e.toString()}');
+      
       
       Navigator.pop(context);
       _showError('Import failed: $e');
@@ -376,7 +369,7 @@ class _ImportDialogState extends State<ImportDialog> {
         _isImporting = false;
         _currentProgress = null;
       });
-      print('🧹 Import service disposed');
+      
     }
   }
 
@@ -611,7 +604,7 @@ Happy journaling! 🎉
 
       // Write the test file
       await testFile.writeAsString(testContent);
-      print('📝 Created test file: ${testFile.path}');
+      
       
       // Show dialog with the app-accessible path
       final pathController = TextEditingController(text: testFile.path);
@@ -687,7 +680,7 @@ Happy journaling! 🎉
                 
                 try {
                   if (await testFile.exists()) {
-                    print('📁 Manual import: ${testFile.path}');
+            
                     await _importFiles([testFile]);
                   } else {
                     _showError('Test file was not created properly');

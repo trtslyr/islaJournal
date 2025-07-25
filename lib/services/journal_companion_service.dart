@@ -24,9 +24,7 @@ class JournalCompanionService {
     ConversationSession? conversation,
     required ContextSettings settings,
   }) async {
-    print('🚨🚨🚨🚨🚨 GENERATEINSIGHTS CALLED WITH QUERY: "$userQuery" 🚨🚨🚨🚨🚨');
-    print('=== GENERATEINSIGHTS METHOD CALLED ===');
-    print('USER QUERY: $userQuery');
+    
     
     // Try multiple log approaches to see if any work
     stderr.writeln('STDERR: generateInsights called with query: $userQuery');
@@ -34,16 +32,12 @@ class JournalCompanionService {
     // Force flush stdout
     stdout.writeln('STDOUT: generateInsights method entry');
     
-    print('🚨🚨🚨 METHOD CALLED - START OF GENERATEINSIGHTS 🚨🚨🚨');
-    print('🚨🚨🚨 USER QUERY: $userQuery 🚨🚨🚨');
-    print('🚨🚨🚨 SETTINGS: ${settings.toString()} 🚨🚨🚨');
-    try {
-      print('🚨🚨🚨 EMBEDDINGS SEARCH STARTING 🚨🚨🚨');
-      print('🧠 Generating insights with embeddings-based context...');
+
+          try {
       
       // Get user token setting
       final userTokens = await _getUserTokenSetting();
-      print('   User token setting: $userTokens');
+      
       
       // 1. CORE CONTEXT (Always included, minimal tokens)
       final conversationContext = _getConversationHistory(conversation, 300);
@@ -59,7 +53,7 @@ class JournalCompanionService {
       // 4. EMBEDDINGS (Gets remaining tokens)
       final coreTokensUsed = 300 + pinnedTokensUsed; // conversation(300) + pinned(actual usage)
       final remainingTokensForEmbeddings = userTokens - coreTokensUsed - customTokensUsed;
-      print('🚨🚨🚨 ABOUT TO SEARCH EMBEDDINGS 🚨🚨🚨');
+      
       final relevantEntries = await _getRelevantEntriesFromEmbeddings(userQuery, remainingTokensForEmbeddings);
       
       return await _generateCleanResponse(
@@ -71,7 +65,7 @@ class JournalCompanionService {
       );
       
     } catch (e) {
-      print('❌ Error generating insights: $e');
+      
       return 'Sorry, I had trouble processing your question. Please try again.';
     }
   }
@@ -383,31 +377,121 @@ class JournalCompanionService {
     required String pinnedContext,
   }) async {
       
-    final systemPrompt = '''You are talking to a close friend. Respond directly to what they just told you, like any friend would in conversation. 
+    final systemPrompt = '''You are a close friend who knows this person well. Respond naturally and directly, like you would in any normal conversation. Be warm, authentic, and helpful.''';
 
-Don't mention reading their journal or analyzing anything - just respond naturally to what they're sharing right now.''';
-
-    final prompt = '''$userQuery
-
-${conversationContext.isNotEmpty ? '$conversationContext\n' : ''}
-${pinnedContext.isNotEmpty ? '$pinnedContext\n' : ''}
-${relevantEntries.isNotEmpty ? '$relevantEntries\n' : ''}
-${customContext.isNotEmpty ? '$customContext\n' : ''}''';
+    // Build a conversational prompt that weaves context naturally
+    final prompt = _buildConversationalPrompt(
+      userQuery: userQuery,
+      conversationContext: conversationContext,
+      pinnedContext: pinnedContext,
+      relevantEntries: relevantEntries,
+      customContext: customContext,
+    );
 
     return await _generateCompleteResponse(prompt, systemPrompt);
   }
 
+  /// Build a natural, conversational prompt that integrates context smoothly
+  String _buildConversationalPrompt({
+    required String userQuery,
+    required String conversationContext,
+    required String pinnedContext,
+    required String relevantEntries,
+    required String customContext,
+  }) {
+    final parts = <String>[];
+    
+    // Start with the user's actual question/statement
+    parts.add(userQuery);
+    
+    // Add conversational context if we have recent chat history
+    if (conversationContext.isNotEmpty) {
+      parts.add('\n--- Our Recent Conversation ---');
+      parts.add(conversationContext);
+    }
+    
+    // Integrate relevant background information naturally
+    final backgroundInfo = <String>[];
+    
+    if (pinnedContext.isNotEmpty) {
+      backgroundInfo.add('Important context you should know:\n$pinnedContext');
+    }
+    
+    if (customContext.isNotEmpty) {
+      backgroundInfo.add('Specific entries you wanted me to consider:\n$customContext');
+    }
+    
+    if (relevantEntries.isNotEmpty) {
+      backgroundInfo.add('Related things you\'ve written about:\n$relevantEntries');
+    }
+    
+    // Add background info conversationally
+    if (backgroundInfo.isNotEmpty) {
+      parts.add('\n--- Background Context ---');
+      parts.addAll(backgroundInfo);
+      parts.add('\n--- End Context ---');
+      parts.add('\nNow, knowing all of this about you and what you\'ve shared, here\'s what I think about your question...');
+    }
+    
+    return parts.join('\n');
+  }
+
   /// Generate a complete response with natural completion
   Future<String> _generateCompleteResponse(String prompt, String systemPrompt) async {
-    // Let AI complete naturally with no character limits
+    // Let AI complete naturally with character limit
     final response = await _aiService.generateTextNaturally(
       prompt,
-      // No safetyLimit - allow unlimited response length
       temperature: 0.5, // LOWER - More focused and direct responses
       systemPrompt: systemPrompt,
     );
     
-    return response.trim();
+    // Apply character limit with smart truncation
+    return _applyResponseLimit(response.trim());
+  }
+
+  /// Apply response character limit with smart sentence boundary truncation
+  String _applyResponseLimit(String response, {int maxCharacters = 1800}) {
+    if (response.length <= maxCharacters) {
+      return response;
+    }
+    
+    // Find the last complete sentence within the limit
+    final truncated = response.substring(0, maxCharacters);
+    
+    // Look for sentence endings (., !, ?) working backwards
+    final sentenceEndings = ['.', '!', '?'];
+    int lastSentenceEnd = -1;
+    
+    for (int i = truncated.length - 1; i >= maxCharacters - 200; i--) {
+      if (sentenceEndings.contains(truncated[i])) {
+        // Make sure it's not an abbreviation by checking if next char is space or end
+        if (i == truncated.length - 1 || truncated[i + 1] == ' ') {
+          lastSentenceEnd = i;
+          break;
+        }
+      }
+    }
+    
+    if (lastSentenceEnd > 0) {
+      // Truncate at sentence boundary
+      return truncated.substring(0, lastSentenceEnd + 1).trim();
+    } else {
+      // Fallback: truncate at word boundary
+      final words = truncated.split(' ');
+      words.removeLast(); // Remove potentially incomplete word
+      return '${words.join(' ')}...';
+    }
+  }
+
+  /// Test the character limit functionality (for debugging)
+  String testCharacterLimit() {
+    const longResponse = '''This is a very long response that would exceed our character limit. It has multiple sentences to test the smart truncation. The system should cut off at a sentence boundary. This sentence should be included. But this one might be cut off depending on where we are in the character count. This is definitely too long and should be truncated. We want to make sure it ends gracefully.''';
+    
+    final result = _applyResponseLimit(longResponse, maxCharacters: 200);
+    print('Original: ${longResponse.length} chars');
+    print('Truncated: ${result.length} chars');
+    print('Result: $result');
+    return result;
   }
   
   /// Extract user content only (filter out template/AI content)

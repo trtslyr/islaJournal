@@ -76,6 +76,10 @@ class AIProvider with ChangeNotifier {
   Future<void> downloadModel(String modelId) async {
     try {
       _error = null;
+      
+      // Immediately update status to show downloading in UI
+      _modelStatuses = Map.from(_aiService.modelStatuses);
+      _modelStatuses[modelId] = ModelStatus.downloading;
       notifyListeners();
       
       await _aiService.downloadModel(modelId);
@@ -83,6 +87,7 @@ class AIProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _error = 'Failed to download model: $e';
+      _modelStatuses = Map.from(_aiService.modelStatuses);
       notifyListeners();
     }
   }

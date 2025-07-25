@@ -18,7 +18,6 @@ class _EditorWidgetState extends State<EditorWidget> {
   TextEditingController? _controller;
   Timer? _saveTimer;
   bool _isLoading = true;
-  bool _hasUnsavedChanges = false;
   JournalFile? _currentFile;
   FocusNode? _focusNode;
 
@@ -45,7 +44,6 @@ class _EditorWidgetState extends State<EditorWidget> {
         setState(() {
           _currentFile = file;
           _isLoading = false;
-          _hasUnsavedChanges = false;
         });
         
         // Initialize controller with file content
@@ -59,36 +57,25 @@ class _EditorWidgetState extends State<EditorWidget> {
       });
     }
   }
-  
-
 
   void _onTextChanged() {
     if (mounted && _currentFile != null) {
-      setState(() {
-        _hasUnsavedChanges = true;
+      // Cancel existing timer and start new autosave countdown
+      _saveTimer?.cancel();
+      _saveTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) {
+          _saveFile();
+        }
       });
-      
-      // Notify provider about unsaved changes
-      final provider = Provider.of<JournalProvider>(context, listen: false);
-      provider.markFileAsUnsaved(_currentFile!.id);
     }
-    
-    _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) {
-        _saveFile();
-      }
-    });
   }
-
-
 
   Future<void> _saveFile() async {
     if (_controller == null || _currentFile == null) return;
     
     final provider = Provider.of<JournalProvider>(context, listen: false);
     
-    // Save only the user content (no AI responses)
+    // Save the current content
     final content = _controller!.text;
     final wordCount = JournalFile.calculateWordCount(content);
     
@@ -102,12 +89,16 @@ class _EditorWidgetState extends State<EditorWidget> {
     
     if (mounted) {
       setState(() {
-        _hasUnsavedChanges = false;
         _currentFile = updatedFile;
       });
-      
-      // Notify provider that file is now saved
-      provider.markFileAsSaved(updatedFile.id);
+    }
+  }
+
+  Future<void> _saveBeforeFileSwitch() async {
+    // Save current file before switching if there's content and a timer is active
+    if (_controller != null && _currentFile != null && _saveTimer?.isActive == true) {
+      _saveTimer!.cancel();
+      await _saveFile();
     }
   }
 
@@ -115,21 +106,22 @@ class _EditorWidgetState extends State<EditorWidget> {
   Widget build(BuildContext context) {
     return Consumer<JournalProvider>(
       builder: (context, provider, child) {
-        // Check if selected file changed
+        // Check if selected file changed - save current file first
         if (provider.selectedFileId != _currentFile?.id) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            await _saveBeforeFileSwitch();
             _loadFile();
           });
         }
 
         if (_isLoading) {
-          return const Center(
+          return Center(
             child: Text(
               'loading...',
               style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 14.0,
-                color: AppTheme.mediumGray,
+                color: Theme.of(context).textTheme.bodyMedium?.color,
               ),
             ),
           );
@@ -137,8 +129,8 @@ class _EditorWidgetState extends State<EditorWidget> {
 
         if (_currentFile == null) {
           return Container(
-            color: AppTheme.creamBeige,
-            child: const Center(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -148,16 +140,16 @@ class _EditorWidgetState extends State<EditorWidget> {
                       fontFamily: 'JetBrainsMono',
                       fontSize: 16.0,
                       fontWeight: FontWeight.w500,
-                      color: AppTheme.mediumGray,
+                      color: Theme.of(context).textTheme.bodyMedium?.color,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     'select a file from sidebar or create new one',
                     style: TextStyle(
                       fontFamily: 'JetBrainsMono',
                       fontSize: 14.0,
-                      color: AppTheme.mediumGray,
+                      color: Theme.of(context).textTheme.bodyMedium?.color,
                     ),
                   ),
                 ],
@@ -167,7 +159,7 @@ class _EditorWidgetState extends State<EditorWidget> {
         }
 
         return Container(
-          color: AppTheme.creamBeige,
+          color: Theme.of(context).scaffoldBackgroundColor,
           child: Column(
             children: [
 
@@ -178,13 +170,13 @@ class _EditorWidgetState extends State<EditorWidget> {
                         padding: const EdgeInsets.all(32.0),
                         child: _buildStyledTextField(),
                       )
-                    : const Center(
+                    : Center(
                         child: Text(
                           'failed to load editor',
                           style: TextStyle(
                             fontFamily: 'JetBrainsMono',
                             fontSize: 14.0,
-                            color: AppTheme.mediumGray,
+                            color: Theme.of(context).textTheme.bodyMedium?.color,
                           ),
                         ),
                       ),
@@ -210,23 +202,23 @@ class _EditorWidgetState extends State<EditorWidget> {
         contentPadding: EdgeInsets.zero,
         hintStyle: TextStyle(
           fontFamily: 'JetBrainsMono',
-          color: AppTheme.mediumGray.withOpacity(0.6),
+          color: Theme.of(context).hintColor?.withOpacity(0.6),
           fontSize: 14.0,
           fontWeight: FontWeight.w400,
           height: 1.6,
         ),
         hoverColor: Colors.transparent,
-        fillColor: AppTheme.creamBeige,
+        fillColor: Theme.of(context).scaffoldBackgroundColor,
         filled: true,
       ),
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'JetBrainsMono',
-        color: AppTheme.darkText,
+        color: Theme.of(context).textTheme.bodyLarge?.color,
         fontSize: 14.0,
         fontWeight: FontWeight.w400,
         height: 1.6,
       ),
-      cursorColor: AppTheme.warmBrown,
+      cursorColor: Theme.of(context).colorScheme.primary,
       cursorWidth: 2,
       cursorRadius: const Radius.circular(0),
     );

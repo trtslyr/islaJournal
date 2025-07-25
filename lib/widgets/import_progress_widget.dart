@@ -15,9 +15,9 @@ class ImportProgressWidget extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.creamBeige,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.lightGray),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -38,7 +38,7 @@ class ImportProgressWidget extends StatelessWidget {
                         fontFamily: 'JetBrainsMono',
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.darkText,
+                                                 color: Theme.of(context).textTheme.titleLarge?.color,
                       ),
                     ),
                     if (progress.currentFile != null)
@@ -47,7 +47,7 @@ class ImportProgressWidget extends StatelessWidget {
                         style: TextStyle(
                           fontFamily: 'JetBrainsMono',
                           fontSize: 12,
-                          color: AppTheme.mediumGray,
+                                                     color: Theme.of(context).textTheme.bodyMedium?.color,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

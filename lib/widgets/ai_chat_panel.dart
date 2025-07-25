@@ -46,13 +46,11 @@ class _AIChatPanelState extends State<AIChatPanel> {
   
   Future<void> _initializeConversation() async {
     try {
-      print('🔄 Initializing conversation...');
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
       await conversationProvider.initialize();
       
       // Get or create a default conversation
       final conversation = await conversationProvider.getOrCreateDefaultConversation();
-      print('✅ Got conversation: ${conversation.id} - ${conversation.title}');
       
       // Load messages from conversation history
       _loadMessagesFromConversation(conversation);
@@ -62,9 +60,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
         _isInitialized = true;
       });
       }
-      print('✅ Conversation initialization complete');
     } catch (e) {
-      print('🔴 Error initializing conversation: $e');
       if (mounted) {
       setState(() {
         _isInitialized = true; // Still show UI even if initialization failed
@@ -75,11 +71,8 @@ class _AIChatPanelState extends State<AIChatPanel> {
   
   void _loadMessagesFromConversation(ConversationSession? conversation) {
     if (conversation == null) {
-      print('⚠️ No conversation to load messages from');
       return;
     }
-    
-    print('📥 Loading ${conversation.history.length} messages from conversation: ${conversation.title}');
     
     final messages = conversation.history.map((msg) => ChatMessage(
       content: msg.content,
@@ -92,8 +85,6 @@ class _AIChatPanelState extends State<AIChatPanel> {
       _messages = messages;
     });
     }
-    
-    print('✅ Loaded ${_messages.length} messages into UI');
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom();
@@ -214,14 +205,14 @@ class _AIChatPanelState extends State<AIChatPanel> {
                     return;
                   }
                   
-                  print('🔄 Switching to conversation: $conversationId');
+              
                   final conversation = provider.getConversationById(conversationId);
                   if (conversation != null) {
-                    print('✅ Found conversation: ${conversation.title} with ${conversation.history.length} messages');
+              
                     await provider.setActiveConversation(conversation);
                     _loadMessagesFromConversation(conversation);
                   } else {
-                    print('❌ Conversation not found: $conversationId');
+              
                   }
                 },
                 itemBuilder: (context) {
@@ -526,7 +517,6 @@ class _AIChatPanelState extends State<AIChatPanel> {
 
     final aiProvider = Provider.of<AIProvider>(context, listen: false);
     if (!aiProvider.isModelLoaded) {
-      print('🔴 AI model not loaded');
       return;
     }
 
@@ -534,11 +524,8 @@ class _AIChatPanelState extends State<AIChatPanel> {
     final activeConversation = conversationProvider.activeConversation;
     
     if (activeConversation == null) {
-      print('🔴 No active conversation found');
       return;
     }
-
-    print('✅ Sending message: $message');
 
     // Add user message
     if (mounted) {
@@ -560,17 +547,11 @@ class _AIChatPanelState extends State<AIChatPanel> {
       await activeConversation.addUserMessage(message);
       
       // Get AI response using new embeddings-based context system
-      print('=== AI CHAT: About to call generateInsights ===');
-      print('🔥🔥🔥 AI CHAT: About to call generateInsights for query: $message');
       final response = await JournalCompanionService().generateInsights(
         userQuery: message,
         conversation: activeConversation,
         settings: activeConversation.contextSettings,
       );
-      
-      // Log response properly (don't truncate unless it's really long)
-      final responsePreview = response.length > 200 ? '${response.substring(0, 200)}...' : response;
-      print('🔥🔥🔥 AI CHAT: generateInsights returned (${response.length} chars): $responsePreview');
       
       // Ensure we have a valid response
       if (response.trim().isEmpty) {
@@ -595,7 +576,6 @@ class _AIChatPanelState extends State<AIChatPanel> {
     
     } catch (e) {
       // Handle error
-      print('🔴 Error in AI chat: $e');
       if (mounted) {
       setState(() {
         _messages.add(ChatMessage(
@@ -700,12 +680,12 @@ class _AIChatPanelState extends State<AIChatPanel> {
     );
     
     if (newTitle != null && newTitle != conversation.title) {
-      print('✏️ Attempting to rename conversation: ${conversation.title} -> $newTitle');
+
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
       await conversationProvider.updateConversationTitle(conversation, newTitle);
-      print('✏️ Rename completed');
+      
     } else {
-      print('✏️ Rename cancelled or same title: $newTitle');
+      
     }
   }
 
@@ -745,27 +725,21 @@ class _AIChatPanelState extends State<AIChatPanel> {
     );
     
     if (confirmed == true) {
-      print('🗑️ Attempting to delete conversation: ${conversation.title} (${conversation.id})');
+  
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
       
-      print('📋 Conversations before delete: ${conversationProvider.conversations.length}');
-      for (final conv in conversationProvider.conversations) {
-        print('  - ${conv.id}: ${conv.title}');
-      }
+      
       
       await conversationProvider.deleteConversation(conversation);
       
-      print('📋 Conversations after delete: ${conversationProvider.conversations.length}');
-      for (final conv in conversationProvider.conversations) {
-        print('  - ${conv.id}: ${conv.title}');
-      }
+      
       
       // If we deleted the active conversation, load the new active one
       if (conversationProvider.activeConversation != null) {
-        print('✅ Loading new active conversation: ${conversationProvider.activeConversation!.title}');
+        
         _loadMessagesFromConversation(conversationProvider.activeConversation);
       } else {
-        print('⚠️ No active conversation remaining, clearing messages');
+        
         if (mounted) {
         setState(() {
           _messages.clear();
@@ -817,7 +791,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
     );
     
     if (confirmed == true) {
-      print('🗑️ Attempting to delete all conversations ($conversationCount total)');
+  
       
       try {
         await conversationProvider.clearAllConversations();
@@ -832,7 +806,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
         // Create a new default conversation
         await conversationProvider.createConversation('Chat 1');
         
-        print('🗑️ All conversations deleted and new default created');
+        
       } catch (e) {
         print('🔴 Error deleting all conversations: $e');
         if (mounted) {
@@ -845,7 +819,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
         }
       }
     } else {
-      print('🗑️ Delete all cancelled by user');
+      
     }
   }
 

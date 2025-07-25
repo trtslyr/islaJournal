@@ -46,7 +46,7 @@ class EmbeddingService {
       
       return embedding;
     } catch (e) {
-      print('Error generating embedding: $e');
+
       return List.filled(100, 0.0);
     }
   }
@@ -182,11 +182,10 @@ class EmbeddingService {
 
   // Find similar files using cosine similarity with chunked embeddings
   Future<List<JournalFile>> findSimilarFiles(String query, {int topK = 10}) async {
-    print('🔍 SIMILARITY SEARCH DEBUG: Starting search for query: "$query"');
+
     
     final queryEmbedding = await generateEmbedding(query);
-    print('🔍 Query embedding: length=${queryEmbedding.length}, first 5 values=[${queryEmbedding.take(5).map((v) => v.toStringAsFixed(4)).join(', ')}]');
-    print('🔍 Query embedding sum: ${queryEmbedding.fold(0.0, (a, b) => a + b).toStringAsFixed(4)}');
+
     
     // Get all file chunks with embeddings from file_embeddings table
     final db = await _dbService.database;

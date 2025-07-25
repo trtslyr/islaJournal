@@ -22,7 +22,6 @@ class DateParsingService {
     if (frontMatter != null) {
       date = _extractFromYaml(frontMatter);
       if (date != null && _isReasonableJournalDate(date)) {
-        print('📅 Found date in YAML: $date');
         return date;
       }
     }
@@ -30,25 +29,21 @@ class DateParsingService {
     // 2. Check content headers (Date:, ## Date, etc.)
     date = _extractFromContentHeaders(content);
     if (date != null && _isReasonableJournalDate(date)) {
-      print('📅 Found date in content headers: $date');
       return date;
     }
     
     // 3. Check filename
     date = _extractFromFilename(filename);
     if (date != null && _isReasonableJournalDate(date)) {
-      print('📅 Found date in filename: $date');
       return date;
     }
     
     // 4. Check general content (lowest priority)
     date = _extractFromContent(content);
     if (date != null && _isReasonableJournalDate(date)) {
-      print('📅 Found date in content: $date');
       return date;
     }
     
-    print('📅 No date found, returning null');
     return null; // Return null instead of current date fallback
   }
   
@@ -61,12 +56,10 @@ class DateParsingService {
     
     // Journal entries should be within reasonable bounds
     if (date.isAfter(oneYearFromNow)) {
-      print('🚫 Rejecting future date: $date (more than 1 year from now)');
       return false;
     }
     
     if (date.isBefore(tenYearsAgo)) {
-      print('🚫 Rejecting old date: $date (more than 10 years ago)');
       return false;
     }
     
@@ -101,9 +94,9 @@ class DateParsingService {
     // Look for actual date patterns in the entire content using regex
     final dateRegexes = [
       // Explicit date patterns (most reliable)
-      RegExp(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b'),           // 2024-12-29, 2024/12/29
-      RegExp(r'\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b'),           // 12/29/2024, 12-29-2024
-      RegExp(r'\b\d{1,2}[-/]\d{1,2}[-/]\d{2}\b'),           // 12/29/24
+      RegExp(r'\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b'),           // 2024-12-29, 2024/12/29, 2024.12.29
+      RegExp(r'\b\d{1,2}[-/.]\d{1,2}[-/.]\d{4}\b'),           // 12/29/2024, 12-29-2024, 12.29.2024
+      RegExp(r'\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2}\b'),           // 12/29/24, 12-29-24, 12.29.24
       
       // Text-based dates
       RegExp(r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\b', caseSensitive: false),  // Dec 29, 2024
@@ -115,10 +108,8 @@ class DateParsingService {
       final match = regex.firstMatch(content);
       if (match != null) {
         final dateStr = match.group(0)!;
-        print('🔍 DEBUG: Found date pattern: "$dateStr"');
         final parsed = _parseAnyDateFormat(dateStr);
         if (parsed != null) {
-          print('🔍 DEBUG: Parsed as: $parsed');
           return parsed;
         }
       }
@@ -139,9 +130,9 @@ class DateParsingService {
   static DateTime? _extractFromContent(String content) {
     // Use the same simple approach as content headers
     final dateRegexes = [
-      RegExp(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b'),           // 2024-12-29, 2024/12/29
-      RegExp(r'\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b'),           // 12/29/2024, 12-29-2024
-      RegExp(r'\b\d{1,2}[-/]\d{1,2}[-/]\d{2}\b'),           // 12/29/24
+      RegExp(r'\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b'),           // 2024-12-29, 2024/12/29, 2024.12.29
+      RegExp(r'\b\d{1,2}[-/.]\d{1,2}[-/.]\d{4}\b'),           // 12/29/2024, 12-29-2024, 12.29.2024
+      RegExp(r'\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2}\b'),           // 12/29/24, 12-29-24, 12.29.24
       RegExp(r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\b', caseSensitive: false),
       RegExp(r'\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b', caseSensitive: false),
     ];
@@ -190,24 +181,23 @@ class DateParsingService {
   /// Get all possible date parsing functions - ONLY actual date formats
   static List<DateTime? Function(String)> _getAllDateFormats() {
     return [
-      _parseISODate,                // 2024-01-15, 2024/01/15
-      _parseUSDate,                 // 01/15/2024, 1/15/24
-      _parseEuropeanDate,           // 15/01/2024, 15.01.2024
-      _parseCompactDate,            // 20240115
-      _parseTextualDate,            // January 15, 2024
-      _parseEnhancedTextualDate,    // January 15th, 2024
-      _parseShortTextualDate,       // Jan 15 2024, 15 Jan 2024, 10 Dec 2024
-      _parseOrdinalDate,            // 15th January 2024, 1st Jan
-      // Removed: week parsing, year-only parsing, year-from-text parsing
+      _parseISODate,                    // 2024-01-15, 2024/01/15, 2024.01.15
+      _parseInternationalDate,          // Handles both US and European ambiguous dates
+      _parseUSDateExplicit,             // Explicit US format with context clues
+      _parseEuropeanDateExplicit,       // Explicit European format with context clues
+      _parseCompactDate,                // 20240115
+      _parseTextualDate,                // January 15, 2024
+      _parseEnhancedTextualDate,        // January 15th, 2024
+      _parseShortTextualDate,           // Jan 15 2024, 15 Jan 2024, 10 Dec 2024
+      _parseOrdinalDate,                // 15th January 2024, 1st Jan
+      _parseAlternativeFormats,         // dd.mm.yyyy, dd-mm-yyyy, yyyy.mm.dd, etc.
     ];
   }
   
-
-  
-  /// Parse ISO format dates (2024-01-15, 2024/01/15)
+  /// Parse ISO format dates (2024-01-15, 2024/01/15, 2024.01.15)
   static DateTime? _parseISODate(String dateStr) {
     final patterns = [
-      RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$'),
+      RegExp(r'^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$'),
     ];
     
     for (final pattern in patterns) {
@@ -224,6 +214,75 @@ class DateParsingService {
     }
     
     return null;
+  }
+  
+  /// Parse international dates with intelligent disambiguation
+  /// Handles both mm/dd/yyyy and dd/mm/yyyy by using context clues
+  static DateTime? _parseInternationalDate(String dateStr) {
+    final patterns = [
+      RegExp(r'^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$'),
+      RegExp(r'^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})$'),
+    ];
+    
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(dateStr);
+      if (match != null) {
+        final first = int.parse(match.group(1)!);
+        final second = int.parse(match.group(2)!);
+        var year = int.parse(match.group(3)!);
+        
+        // Handle 2-digit years
+        if (year < 100) {
+          year += year < 50 ? 2000 : 1900;
+        }
+        
+        // Smart disambiguation: try both interpretations and return the most likely
+        final possibilities = <DateTime>[];
+        
+        // Try US format (mm/dd/yyyy)
+        if (_isValidDate(year, first, second)) {
+          possibilities.add(DateTime(year, first, second));
+        }
+        
+        // Try European format (dd/mm/yyyy)
+        if (_isValidDate(year, second, first)) {
+          possibilities.add(DateTime(year, second, first));
+        }
+        
+        // If only one interpretation is valid, use it
+        if (possibilities.length == 1) {
+          return possibilities.first;
+        }
+        
+        // If both are valid, use additional heuristics
+        if (possibilities.length == 2) {
+          // Prefer European format if day > 12 (clearly not a month)
+          if (first > 12) {
+            return DateTime(year, second, first); // European: dd/mm/yyyy
+          }
+          if (second > 12) {
+            return DateTime(year, first, second); // US: mm/dd/yyyy
+          }
+          
+          // If still ambiguous, prefer US format (more common in many contexts)
+          return DateTime(year, first, second); // US: mm/dd/yyyy
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  /// Parse explicit US format dates with clear indicators
+  static DateTime? _parseUSDateExplicit(String dateStr) {
+    // This is for when we have clear US format indicators
+    return _parseUSDate(dateStr);
+  }
+  
+  /// Parse explicit European format dates with clear indicators  
+  static DateTime? _parseEuropeanDateExplicit(String dateStr) {
+    // This is for when we have clear European format indicators
+    return _parseEuropeanDate(dateStr);
   }
   
   /// Parse US format dates (01/15/2024, 1/15/24)
@@ -282,13 +341,70 @@ class DateParsingService {
     return null;
   }
   
+  /// Parse alternative international formats
+  static DateTime? _parseAlternativeFormats(String dateStr) {
+    final patterns = [
+      // yyyy.mm.dd format (common in some Asian countries)
+      RegExp(r'^(\d{4})\.(\d{1,2})\.(\d{1,2})$'),
+      // dd-mm-yyyy format (European with dashes)
+      RegExp(r'^(\d{1,2})-(\d{1,2})-(\d{4})$'),
+      // yyyy-mm-dd with different separators
+      RegExp(r'^(\d{4})\.(\d{1,2})\.(\d{1,2})$'),
+      // dd.mm.yyyy format (European with dots)
+      RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$'),
+      // mm.dd.yyyy format (US with dots)
+      RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$'),
+    ];
+    
+    final patternTypes = [
+      'iso',        // yyyy.mm.dd
+      'european',   // dd-mm-yyyy
+      'iso',        // yyyy.mm.dd (duplicate for dots)
+      'european',   // dd.mm.yyyy
+      'us',         // mm.dd.yyyy
+    ];
+    
+    for (int i = 0; i < patterns.length; i++) {
+      final pattern = patterns[i];
+      final type = patternTypes[i];
+      final match = pattern.firstMatch(dateStr);
+      
+      if (match != null) {
+        int year, month, day;
+        
+        if (type == 'iso') {
+          year = int.parse(match.group(1)!);
+          month = int.parse(match.group(2)!);
+          day = int.parse(match.group(3)!);
+        } else if (type == 'european') {
+          day = int.parse(match.group(1)!);
+          month = int.parse(match.group(2)!);
+          year = int.parse(match.group(3)!);
+        } else { // us
+          month = int.parse(match.group(1)!);
+          day = int.parse(match.group(2)!);
+          year = int.parse(match.group(3)!);
+        }
+        
+        if (_isValidDate(year, month, day)) {
+          return DateTime(year, month, day);
+        }
+      }
+    }
+    
+    return null;
+  }
+  
   /// Parse textual dates (January 15, 2024, 15 January 2024)
   static DateTime? _parseTextualDate(String dateStr) {
     final months = {
       'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6,
       'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12,
       'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'jun': 6, 'jul': 7, 'aug': 8,
-      'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+      'sep': 9, 'sept': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+      // Additional international abbreviations
+      'mai': 5, 'mai.': 5, // May in some languages
+      'dez': 12, 'dez.': 12, // Dec in German/Portuguese
     };
     
     final lower = dateStr.toLowerCase();
@@ -332,20 +448,24 @@ class DateParsingService {
   static DateTime? _parseShortTextualDate(String dateStr) {
     final months = {
       'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-      'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+      'jul': 7, 'aug': 8, 'sep': 9, 'sept': 9, 'oct': 10, 'nov': 11, 'dec': 12,
       // Add full month names as well for robustness  
       'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6,
-      'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
+      'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12,
+      // Additional international formats
+      'jan.': 1, 'feb.': 2, 'mar.': 3, 'apr.': 4, 'may.': 5, 'jun.': 6,
+      'jul.': 7, 'aug.': 8, 'sep.': 9, 'oct.': 10, 'nov.': 11, 'dec.': 12,
+      'mai': 5, 'dez': 12, // International variants
     };
     
     final lower = dateStr.toLowerCase().trim();
     
     // Handle various short formats
     final patterns = [
-      RegExp(r'^(\w{3,9})\s+(\d{1,2})\s+(\d{2,4})$'),  // Jan 15 2024, December 10 2024
-      RegExp(r'^(\d{1,2})\s+(\w{3,9})\s+(\d{2,4})$'),  // 15 Jan 2024, 10 Dec 2024
-      RegExp(r'^(\d{1,2})\s+(\w{3,9})$'),              // 15 Jan (current year)
-      RegExp(r'^(\w{3,9})\s+(\d{1,2})$'),              // Jan 15 (current year)
+      RegExp(r'^(\w{3,9}\.?)\s+(\d{1,2})\s+(\d{2,4})$'),  // Jan 15 2024, December 10 2024, Jan. 15 2024
+      RegExp(r'^(\d{1,2})\s+(\w{3,9}\.?)\s+(\d{2,4})$'),  // 15 Jan 2024, 10 Dec 2024, 15 Jan. 2024
+      RegExp(r'^(\d{1,2})\s+(\w{3,9}\.?)$'),              // 15 Jan (current year), 15 Jan.
+      RegExp(r'^(\w{3,9}\.?)\s+(\d{1,2})$'),              // Jan 15 (current year), Jan. 15
     ];
     
     for (final pattern in patterns) {
@@ -355,15 +475,15 @@ class DateParsingService {
         int? day;
         int? year;
         
-        if (pattern.pattern.startsWith(r'^(\w{3,9})')) {
+        if (pattern.pattern.startsWith(r'^(\w{3,9}')) {
           // Month first (Jan 15 2024, December 10 2024)
-          monthName = match.group(1)!;
+          monthName = match.group(1)!.replaceAll('.', '');
           day = int.parse(match.group(2)!);
           year = match.groupCount >= 3 ? int.tryParse(match.group(3)!) : null;
         } else {
           // Day first (15 Jan 2024, 10 Dec 2024)
           day = int.parse(match.group(1)!);
-          monthName = match.group(2)!;
+          monthName = match.group(2)!.replaceAll('.', '');
           year = match.groupCount >= 3 ? int.tryParse(match.group(3)!) : null;
         }
         
@@ -442,7 +562,6 @@ class DateParsingService {
           final firstMondayOfYear = jan4.subtract(Duration(days: jan4Weekday - 1));
           final targetDate = firstMondayOfYear.add(Duration(days: (week - 1) * 7));
           
-          print('🔍 DEBUG: Week $week of $year calculated as: $targetDate');
           return targetDate;
         }
       }
@@ -456,7 +575,7 @@ class DateParsingService {
     final months = {
       'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6,
       'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12,
-      'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+      'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'jun': 6,
       'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
     };
     
@@ -485,7 +604,6 @@ class DateParsingService {
     if (pattern.hasMatch(dateStr)) {
       final year = int.parse(dateStr);
       if (year >= 1900 && year <= 2100) {
-        print('🔍 DEBUG: _parseYearOnly matched "$dateStr" -> $year-01-01');
         return DateTime(year, 1, 1); // Use January 1st
       }
     }
@@ -512,7 +630,6 @@ class DateParsingService {
       if (year >= 2020 && year <= 2030) { // More restrictive year range for journals
         // Only use year parsing if text contains year-focused keywords
         if (yearFocusedKeywords.hasMatch(text)) {
-          print('🔍 DEBUG: _parseYearFromText found year "$yearStr" in text "$text" -> $year-01-01');
           return DateTime(year, 1, 1); // Use January 1st of that year
         }
       }
@@ -541,7 +658,7 @@ class DateParsingService {
       'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6,
       'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12,
       'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'jun': 6, 'jul': 7, 'aug': 8,
-      'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+      'sep': 9, 'sept': 9, 'oct': 10, 'nov': 11, 'dec': 12
     };
     
     final lower = dateStr.toLowerCase().replaceAll(RegExp(r'[,]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();

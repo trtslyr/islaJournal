@@ -440,28 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                ),
                              ),
                            ),
-                           const SizedBox(width: 4),
-                           GestureDetector(
-                             onTap: () => _showEditFileDialog(context, selectedFile, provider),
-                             child: const Text(
-                               '✎',
-                               style: TextStyle(
-                                 fontFamily: 'JetBrainsMono',
-                                 fontSize: 12.0,
-                                 color: AppTheme.mediumGray,
-                               ),
-                             ),
-                           ),
                            const Spacer(),
-                           if (provider.hasUnsavedChanges(selectedFile.id))
-                             const Text(
-                               'unsaved',
-                               style: TextStyle(
-                                 fontFamily: 'JetBrainsMono',
-                                 fontSize: 12.0,
-                                 color: AppTheme.mediumGray,
-                               ),
-                             ),
                          ],
                        ),
                      ),

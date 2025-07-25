@@ -479,49 +479,305 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Download progress indicator
   Widget _buildDownloadProgress(AIProvider aiProvider, String modelId) {
     final progress = aiProvider.currentDownload;
-    if (progress == null || progress.percentage == 0) return const SizedBox.shrink();
+    final modelStatus = aiProvider.modelStatuses[modelId] ?? ModelStatus.notDownloaded;
+    
+    // Show progress indicator if model is downloading OR if we have progress data
+    if (progress == null && modelStatus != ModelStatus.downloading) {
+      return const SizedBox.shrink();
+    }
+    
+    // If model is downloading but no progress yet, show initial state
+    if (progress == null && modelStatus == ModelStatus.downloading) {
+      return Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.darkerCream,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.warmBrown.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Initializing download...',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.warmBrown,
+                    ),
+                  ),
+                ),
+                // Cancel button
+                InkWell(
+                  onTap: () => _showCancelDownloadDialog(aiProvider),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppTheme.warningRed.withOpacity(0.3)),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'cancel',
+                      style: TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 10.0,
+                        color: AppTheme.warningRed,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
     
     return Column(
       children: [
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                height: 4,
+        const SizedBox(height: 12),
+        
+        // Enhanced progress bar with animation
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.darkerCream,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppTheme.warmBrown.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Status header with cancel button
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      progress?.status ?? 'Downloading...',
+                      style: const TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 12.0,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.warmBrown,
+                      ),
+                    ),
+                  ),
+                  // Cancel button
+                  if ((progress?.percentage ?? 0) < 100)
+                    InkWell(
+                      onTap: () => _showCancelDownloadDialog(aiProvider),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppTheme.warningRed.withOpacity(0.3)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'cancel',
+                          style: TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 10.0,
+                            color: AppTheme.warningRed,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // Animated progress bar
+              Container(
+                height: 6,
                 decoration: BoxDecoration(
-                  color: AppTheme.darkerCream,
-                  border: Border.all(color: AppTheme.warmBrown.withOpacity(0.3)),
+                  color: AppTheme.creamBeige,
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: AppTheme.warmBrown.withOpacity(0.2)),
                 ),
-                child: FractionallySizedBox(
-                  alignment: Alignment.centerLeft,
-                  widthFactor: progress.percentage / 100,
-                  child: Container(
-                    color: AppTheme.warmBrown,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: ((progress?.percentage ?? 0) / 100).clamp(0.0, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: (progress?.percentage ?? 0) >= 100 
+                            ? [Colors.green.shade400, Colors.green.shade600]
+                            : [AppTheme.warmBrown, AppTheme.warmBrown.withOpacity(0.8)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '${progress.percentage.toStringAsFixed(1)}%',
-              style: const TextStyle(
+              
+              const SizedBox(height: 8),
+              
+              // Progress details row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Percentage
+                  Text(
+                    '${(progress?.percentage ?? 0).toStringAsFixed(1)}%',
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.warmBrown,
+                    ),
+                  ),
+                  
+                  // Download stats
+                  Text(
+                    '${_formatBytes(progress?.downloaded ?? 0)} / ${_formatBytes(progress?.total ?? 0)}',
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 10.0,
+                      color: AppTheme.mediumGray,
+                    ),
+                  ),
+                ],
+              ),
+              
+              // Download speed and ETA (if downloading)
+              if ((progress?.percentage ?? 0) < 100 && (progress?.percentage ?? 0) > 0) ...[
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Download speed
+                    Text(
+                      progress?.formattedSpeed ?? 'calculating...',
+                      style: const TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 10.0,
+                        color: AppTheme.mediumGray,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                    
+                    // ETA
+                    Text(
+                      progress?.formattedETA ?? 'calculating...',
+                      style: const TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 10.0,
+                        color: AppTheme.mediumGray,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              
+              // Completion status
+              if ((progress?.percentage ?? 0) >= 100) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      size: 14,
+                      color: Colors.green.shade600,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Download completed successfully!',
+                      style: TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 10.0,
+                        color: Colors.green.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Show cancel download confirmation dialog
+  void _showCancelDownloadDialog(AIProvider aiProvider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.creamBeige,
+        title: const Text(
+          'Cancel Download',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 16.0,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: const Text(
+          'Are you sure you want to cancel the download?\n\nPartial downloads can be resumed later.',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 12.0,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Continue Download',
+              style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 12.0,
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '${_formatBytes(progress.downloaded)} / ${_formatBytes(progress.total)}',
-          style: const TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 10.0,
-            color: AppTheme.mediumGray,
           ),
-        ),
-      ],
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              aiProvider.cancelDownload();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Download cancelled. You can resume it later.',
+                    style: TextStyle(fontFamily: 'JetBrainsMono'),
+                  ),
+                  backgroundColor: AppTheme.warmBrown,
+                ),
+              );
+            },
+            child: const Text(
+              'Cancel Download',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+                color: AppTheme.warningRed,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

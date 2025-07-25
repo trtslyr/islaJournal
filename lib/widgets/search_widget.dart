@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../core/theme/app_theme.dart';
 
 class SearchWidget extends StatefulWidget {
   final TextEditingController controller;
@@ -24,9 +23,9 @@ class _SearchWidgetState extends State<SearchWidget> {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.darkerCream,
+        color: Theme.of(context).cardColor,
         border: Border.all(
-          color: AppTheme.warmBrown.withOpacity(0.3),
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
         ),
       ),
       child: TextField(
@@ -34,22 +33,22 @@ class _SearchWidgetState extends State<SearchWidget> {
         autofocus: widget.autofocus,
         decoration: InputDecoration(
           hintText: widget.hintText ?? 'search entries...',
-          hintStyle: const TextStyle(
+          hintStyle: TextStyle(
             fontFamily: 'JetBrainsMono',
-            color: AppTheme.mediumGray,
+            color: Theme.of(context).hintColor,
             fontSize: 14.0,
             fontWeight: FontWeight.w400,
           ),
-          prefixIcon: const Icon(
+          prefixIcon: Icon(
             Icons.search,
-            color: AppTheme.warmBrown,
+            color: Theme.of(context).colorScheme.primary,
             size: 18,
           ),
           suffixIcon: widget.controller.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.clear,
-                    color: AppTheme.mediumGray,
+                    color: Theme.of(context).hintColor,
                     size: 18,
                   ),
                   onPressed: () {
@@ -65,9 +64,9 @@ class _SearchWidgetState extends State<SearchWidget> {
             vertical: 12.0,
           ),
         ),
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'JetBrainsMono',
-          color: AppTheme.darkText,
+          color: Theme.of(context).textTheme.bodyLarge?.color,
           fontSize: 14.0,
           fontWeight: FontWeight.w400,
         ),
@@ -98,15 +97,15 @@ class SearchResultsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24.0),
           child: Text(
             'searching...',
             style: TextStyle(
               fontFamily: 'JetBrainsMono',
               fontSize: 14.0,
-              color: AppTheme.mediumGray,
+              color: Theme.of(context).textTheme.bodyMedium?.color,
             ),
           ),
         ),
@@ -114,15 +113,15 @@ class SearchResultsWidget extends StatelessWidget {
     }
 
     if (results.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24.0),
           child: Text(
             'no results',
             style: TextStyle(
                   fontFamily: 'JetBrainsMono',
               fontSize: 14.0,
-                  color: AppTheme.mediumGray,
+                  color: Theme.of(context).textTheme.bodyMedium?.color,
                 ),
           ),
         ),
@@ -135,23 +134,23 @@ class SearchResultsWidget extends StatelessWidget {
         final result = results[index];
         return Container(
           margin: const EdgeInsets.only(bottom: 1.0),
-          color: AppTheme.darkerCream,
+          color: Theme.of(context).cardColor, // Changed from AppTheme.darkerCream
           child: ListTile(
-            leading: const Text(
+            leading: Text(
               '•',
               style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 16.0,
-              color: AppTheme.warmBrown,
+              color: Theme.of(context).colorScheme.primary,
               ),
             ),
             title: Text(
               result.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 14.0,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.darkText,
+                color: Theme.of(context).textTheme.bodyLarge?.color,
               ),
             ),
             subtitle: Column(
@@ -160,11 +159,11 @@ class SearchResultsWidget extends StatelessWidget {
                 if (result.snippet.isNotEmpty)
                   Text(
                     result.snippet,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'JetBrainsMono',
                       fontSize: 12.0,
                       fontWeight: FontWeight.w400,
-                      color: AppTheme.darkText,
+                      color: Theme.of(context).textTheme.bodyMedium?.color,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -172,22 +171,22 @@ class SearchResultsWidget extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   '${result.wordCount}w • ${result.folderPath}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'JetBrainsMono',
                     fontSize: 10.0,
                     fontWeight: FontWeight.w400,
-                    color: AppTheme.mediumGray,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
                 ),
               ],
             ),
             trailing: Text(
               result.lastModified,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 10.0,
                 fontWeight: FontWeight.w400,
-                color: AppTheme.mediumGray,
+                color: Theme.of(context).textTheme.bodySmall?.color,
               ),
             ),
             onTap: () => onResultTap(result),
@@ -236,9 +235,9 @@ class SearchBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.darkerCream,
+        color: Theme.of(context).cardColor,
         border: Border.all(
-          color: AppTheme.warmBrown.withOpacity(0.3),
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
         ),
       ),
       child: TextField(
@@ -246,22 +245,22 @@ class SearchBar extends StatelessWidget {
         autofocus: autofocus,
         decoration: InputDecoration(
           hintText: hintText ?? 'search...',
-          hintStyle: const TextStyle(
+          hintStyle: TextStyle(
             fontFamily: 'JetBrainsMono',
-            color: AppTheme.mediumGray,
+            color: Theme.of(context).hintColor,
             fontSize: 14.0,
             fontWeight: FontWeight.w400,
           ),
-          prefixIcon: const Icon(
+          prefixIcon: Icon(
             Icons.search,
-            color: AppTheme.warmBrown,
+            color: Theme.of(context).colorScheme.primary,
             size: 18,
           ),
           suffixIcon: controller.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.clear,
-                    color: AppTheme.mediumGray,
+                    color: Theme.of(context).hintColor,
                     size: 18,
                   ),
                   onPressed: () {
@@ -277,9 +276,9 @@ class SearchBar extends StatelessWidget {
             vertical: 12.0,
           ),
         ),
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'JetBrainsMono',
-          color: AppTheme.darkText,
+          color: Theme.of(context).textTheme.bodyLarge?.color,
           fontSize: 14.0,
           fontWeight: FontWeight.w400,
         ),

@@ -722,15 +722,6 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
               color: isMainSelected ? AppTheme.warmBrown : (isSelected ? AppTheme.darkerBrown : AppTheme.darkText),
             ),
           ),
-          subtitle: Text(
-            _formatDate(file.lastOpened),
-            style: const TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 12.0,
-              fontWeight: FontWeight.w400,
-              color: AppTheme.mediumGray,
-            ),
-          ),
           isSelected: isSelected,
           onTap: () => _handleFileTap(file.id, provider),
           onContextMenu: (context) => _showFileContextMenu(context, file),
@@ -752,15 +743,6 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
             fontSize: 14.0,
             fontWeight: isMainSelected ? FontWeight.w600 : (isSelected ? FontWeight.w500 : FontWeight.w400),
             color: isMainSelected ? AppTheme.warmBrown : (isSelected ? AppTheme.darkerBrown : AppTheme.darkText),
-          ),
-        ),
-        subtitle: Text(
-          _formatDate(file.lastOpened),
-          style: const TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 12.0,
-            fontWeight: FontWeight.w400,
-            color: AppTheme.mediumGray,
           ),
         ),
         isSelected: isSelected,
@@ -925,23 +907,6 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     }
   }
 
-  /// Format date for display
-  String _formatDate(DateTime? date) {
-    if (date == null) return 'never';
-    
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays == 0) {
-      return 'today';
-    } else if (difference.inDays == 1) {
-      return 'yesterday';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${date.day}/${date.month}/${date.year}';
-    }
-  }
 
   Widget _buildFolderTile(JournalFolder folder, JournalProvider provider) {
     final isExpanded = _expandedFolders.contains(folder.id);
@@ -1123,15 +1088,6 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
               color: isMainSelected ? AppTheme.warmBrown : (isSelected ? AppTheme.darkerBrown : AppTheme.darkText),
             ),
           ),
-          subtitle: Text(
-            _formatDate(file.lastOpened),
-            style: const TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 12.0,
-              fontWeight: FontWeight.w400,
-              color: AppTheme.mediumGray,
-            ),
-          ),
           isSelected: isSelected,
           onTap: () => _handleFileTap(file.id, provider),
           onContextMenu: (context) => _showFileContextMenu(context, file),
@@ -1153,15 +1109,6 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
             fontSize: 14.0,
             fontWeight: isMainSelected ? FontWeight.w600 : (isSelected ? FontWeight.w500 : FontWeight.w400),
             color: isMainSelected ? AppTheme.warmBrown : (isSelected ? AppTheme.darkerBrown : AppTheme.darkText),
-          ),
-        ),
-        subtitle: Text(
-          _formatDate(file.lastOpened),
-          style: const TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 12.0,
-            fontWeight: FontWeight.w400,
-            color: AppTheme.mediumGray,
           ),
         ),
         isSelected: isSelected,
@@ -1727,8 +1674,6 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
               _buildPropertyRow('Created:', _formatDateTime(file.createdAt)),
               const SizedBox(height: 8),
               _buildPropertyRow('Modified:', _formatDateTime(file.updatedAt)),
-              const SizedBox(height: 8),
-              _buildPropertyRow('Last Opened:', file.lastOpened != null ? _formatDateTime(file.lastOpened!) : 'Never'),
               const SizedBox(height: 8),
               _buildPropertyRow('File Path:', file.filePath),
             ],

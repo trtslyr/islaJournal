@@ -45,13 +45,45 @@ class DownloadProgress {
   final int total;
   final double percentage;
   final String status;
+  final double speedBytesPerSecond;
+  final Duration? estimatedTimeRemaining;
+  final DateTime timestamp;
 
   DownloadProgress({
     required this.downloaded,
     required this.total,
     required this.percentage,
     required this.status,
-  });
+    this.speedBytesPerSecond = 0.0,
+    this.estimatedTimeRemaining,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
+
+  String get formattedSpeed {
+    if (speedBytesPerSecond < 1024) {
+      return '${speedBytesPerSecond.toStringAsFixed(0)} B/s';
+    } else if (speedBytesPerSecond < 1024 * 1024) {
+      return '${(speedBytesPerSecond / 1024).toStringAsFixed(1)} KB/s';
+    } else {
+      return '${(speedBytesPerSecond / (1024 * 1024)).toStringAsFixed(1)} MB/s';
+    }
+  }
+
+  String get formattedETA {
+    if (estimatedTimeRemaining == null) return 'calculating...';
+    
+    final totalSeconds = estimatedTimeRemaining!.inSeconds;
+    if (totalSeconds < 60) {
+      return '${totalSeconds}s left';
+    } else if (totalSeconds < 3600) {
+      final minutes = (totalSeconds / 60).floor();
+      return '${minutes}m left';
+    } else {
+      final hours = (totalSeconds / 3600).floor();
+      final minutes = ((totalSeconds % 3600) / 60).floor();
+      return '${hours}h ${minutes}m left';
+    }
+  }
 }
 
 class AIService {
@@ -178,6 +210,23 @@ class AIService {
     _modelStatuses[modelId] = ModelStatus.downloading;
     _downloadCancelToken = CancelToken();
 
+    // Immediately notify UI that download is starting
+    _downloadProgressController.add(DownloadProgress(
+      downloaded: 0,
+      total: modelInfo.fileSizeBytes,
+      percentage: 0.0,
+      status: 'Preparing download...',
+      speedBytesPerSecond: 0.0,
+    ));
+
+    // Download speed tracking
+    DateTime? lastProgressTime;
+    DateTime? lastUpdateTime; // For throttling UI updates
+    int lastProgressBytes = 0;
+    final List<double> speedSamples = [];
+    const maxSpeedSamples = 10; // Keep last 10 speed samples for smoothing
+    const updateInterval = Duration(milliseconds: 500); // Update UI every 500ms max
+
     try {
       final modelsDir = await _getModelsDirectory();
       final modelFile = File('${modelsDir.path}/${modelInfo.fileName}');
@@ -188,6 +237,7 @@ class AIService {
       // Check if we can resume
       if (resumeIfPossible && await tempFile.exists()) {
         downloadedBytes = await tempFile.length();
+        lastProgressBytes = downloadedBytes;
       }
 
       final dio = Dio();
@@ -242,15 +292,61 @@ class AIService {
           maxRedirects: 5,
         ),
         onReceiveProgress: (received, total) {
+          final now = DateTime.now();
           final totalBytes = total != -1 ? total : modelInfo.fileSizeBytes;
           final currentReceived = downloadedBytes + received;
           final percentage = (currentReceived / totalBytes) * 100;
+          
+          // Throttle UI updates to prevent flashing
+          if (lastUpdateTime != null && 
+              now.difference(lastUpdateTime!).inMilliseconds < updateInterval.inMilliseconds &&
+              percentage < 100) {
+            return; // Skip this update to prevent spamming the UI
+          }
+          
+          double currentSpeed = 0.0;
+          Duration? eta;
+          
+          // Calculate speed if we have previous timing data
+          if (lastProgressTime != null) {
+            final timeDiff = now.difference(lastProgressTime!);
+            final bytesDiff = currentReceived - lastProgressBytes;
+            
+            if (timeDiff.inMilliseconds > 0) {
+              // Calculate current speed in bytes per second
+              currentSpeed = bytesDiff / (timeDiff.inMilliseconds / 1000.0);
+              
+              // Add to speed samples for smoothing
+              speedSamples.add(currentSpeed);
+              if (speedSamples.length > maxSpeedSamples) {
+                speedSamples.removeAt(0);
+              }
+              
+              // Use average speed for more stable calculations
+              final avgSpeed = speedSamples.reduce((a, b) => a + b) / speedSamples.length;
+              
+              // Calculate ETA based on average speed
+              if (avgSpeed > 0) {
+                final remainingBytes = totalBytes - currentReceived;
+                final etaSeconds = remainingBytes / avgSpeed;
+                eta = Duration(seconds: etaSeconds.round());
+              }
+              
+              currentSpeed = avgSpeed; // Use smoothed speed
+            }
+          }
+          
+          lastProgressTime = now;
+          lastUpdateTime = now;
+          lastProgressBytes = currentReceived;
           
           _downloadProgressController.add(DownloadProgress(
             downloaded: currentReceived,
             total: totalBytes,
             percentage: percentage,
-            status: 'Downloading ${modelInfo.name}... ${(percentage).toStringAsFixed(1)}%',
+            status: 'Downloading ${modelInfo.name}... ${percentage.toStringAsFixed(1)}%',
+            speedBytesPerSecond: currentSpeed,
+            estimatedTimeRemaining: eta,
           ));
         },
       );
@@ -264,6 +360,7 @@ class AIService {
         total: modelInfo.fileSizeBytes,
         percentage: 100.0,
         status: 'Download completed successfully!',
+        speedBytesPerSecond: 0.0,
       ));
 
     } catch (e) {
@@ -299,6 +396,7 @@ class AIService {
         total: modelInfo.fileSizeBytes,
         percentage: 0.0,
         status: errorMessage,
+        speedBytesPerSecond: 0.0,
       ));
       
       throw Exception(errorMessage);
@@ -360,10 +458,7 @@ class AIService {
       final messages = <Message>[];
       
       // Add a default system prompt if none provided
-      final defaultSystemPrompt = systemPrompt ?? '''You are a helpful friend who has read someone's journal. 
-Respond naturally and directly to their questions. 
-Keep responses concise and focused on their journal content.
-Never mention that you are an AI or language model.''';
+      final defaultSystemPrompt = systemPrompt ?? '''You are a close friend who knows this person well. Respond naturally and directly, like you would in any normal conversation. Be warm, authentic, and helpful.''';
       
       messages.add(Message(Role.system, defaultSystemPrompt));
       messages.add(Message(Role.user, prompt));
@@ -579,10 +674,7 @@ Never mention that you are an AI or language model.''';
       final messages = <Message>[];
       
       // Add a default system prompt if none provided
-      final defaultSystemPrompt = systemPrompt ?? '''You are a helpful friend who has read someone's journal. 
-Respond naturally and directly to their questions. 
-Keep responses concise and focused on their journal content.
-Never mention that you are an AI or language model.''';
+      final defaultSystemPrompt = systemPrompt ?? '''You are a close friend who knows this person well. Respond naturally and directly, like you would in any normal conversation. Be warm, authentic, and helpful.''';
       
       messages.add(Message(Role.system, defaultSystemPrompt));
       messages.add(Message(Role.user, prompt));
