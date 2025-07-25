@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:fllama/fllama.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
+import 'dart:convert'; // Added for jsonDecode
 
 enum AIModelSize {
   small, // 1B model (~800MB)
@@ -346,7 +347,7 @@ class AIService {
   }
 
   Future<String> generateText(String prompt, {
-    int maxTokens = 256,
+    int maxTokens = 512,
     double temperature = 0.7,
     double topP = 0.9,
     String? systemPrompt,
@@ -452,7 +453,7 @@ Never mention that you are an AI or language model.''';
       messages.add(Message(Role.user, prompt));
 
       final request = OpenAiRequest(
-        maxTokens: 1024, // BALANCED - Direct but complete responses
+        maxTokens: 512, // REDUCED - Concise but complete responses
         messages: messages,
         numGpuLayers: 99, // Auto-detect GPU support
         modelPath: _currentModelPath!,
@@ -480,17 +481,60 @@ Never mention that you are an AI or language model.''';
         if (response.isEmpty && openaiResponseJsonString != null && openaiResponseJsonString.isNotEmpty) {
           // Extract content from JSON response as fallback
           try {
-            final jsonMatch = RegExp(r'"content":"([^"]*)"').firstMatch(openaiResponseJsonString);
-            if (jsonMatch != null) {
-              currentResponse = jsonMatch.group(1) ?? '';
-              // Decode common escape sequences
+            print('[AI] DEBUG: Attempting to parse JSON response of length ${openaiResponseJsonString.length}');
+            
+            // Try parsing as proper JSON first
+            final jsonData = jsonDecode(openaiResponseJsonString);
+            if (jsonData is Map<String, dynamic>) {
+              // Handle OpenAI format: {"choices": [{"message": {"content": "..."}}]}
+              if (jsonData['choices'] != null && jsonData['choices'] is List && jsonData['choices'].isNotEmpty) {
+                final choice = jsonData['choices'][0];
+                if (choice['message'] != null && choice['message']['content'] != null) {
+                  currentResponse = choice['message']['content'].toString();
+                  print('[AI] DEBUG: Extracted response from choices.message.content: ${currentResponse.length} chars');
+                }
+              }
+              // Handle direct content format: {"content": "..."}
+              else if (jsonData['content'] != null) {
+                currentResponse = jsonData['content'].toString();
+                print('[AI] DEBUG: Extracted response from direct content: ${currentResponse.length} chars');
+              }
+            }
+            
+            // Fallback to regex if JSON parsing didn't work
+            if (currentResponse.isEmpty) {
+              print('[AI] DEBUG: JSON parsing failed, trying regex fallback');
+              // Try multiple regex patterns
+              var patterns = [
+                r'"content":"([^"]*)"',
+                r'"content":\s*"([^"]*)"',
+                r'content["\s]*:["\s]*([^"]*)',
+              ];
+              
+              for (var pattern in patterns) {
+                final jsonMatch = RegExp(pattern, multiLine: true, dotAll: true).firstMatch(openaiResponseJsonString);
+                if (jsonMatch != null && jsonMatch.group(1) != null) {
+                  currentResponse = jsonMatch.group(1)!;
+                  print('[AI] DEBUG: Regex pattern "$pattern" extracted: ${currentResponse.length} chars');
+                  break;
+                }
+              }
+            }
+            
+            // Decode common escape sequences
+            if (currentResponse.isNotEmpty) {
               currentResponse = currentResponse
                   .replaceAll('\\n', '\n')
                   .replaceAll('\\t', '\t')
                   .replaceAll('\\"', '"')
                   .replaceAll('\\\\', '\\');
+              print('[AI] DEBUG: Final response after decoding: ${currentResponse.length} chars');
+            } else {
+              print('[AI] DEBUG: Failed to extract any content from JSON response');
+              print('[AI] DEBUG: JSON sample: ${openaiResponseJsonString.length > 200 ? openaiResponseJsonString.substring(0, 200) + "..." : openaiResponseJsonString}');
             }
           } catch (e) {
+            print('[AI] DEBUG: JSON parsing error: $e');
             // Use empty response as fallback
           }
         }
@@ -544,7 +588,7 @@ Never mention that you are an AI or language model.''';
       messages.add(Message(Role.user, prompt));
 
       final request = OpenAiRequest(
-        maxTokens: 2048, // High token limit, we'll control by character count instead
+        maxTokens: 512, // REDUCED - Consistent with other methods
         messages: messages,
         numGpuLayers: 99, // Auto-detect GPU support
         modelPath: _currentModelPath!,

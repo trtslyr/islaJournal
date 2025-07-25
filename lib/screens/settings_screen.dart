@@ -1061,32 +1061,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: Colors.red,
             ),
           ),
-          const SizedBox(height: 12),
-          
-          // Profile reset button (less destructive)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _showResetProfileDialog,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text(
-                'Reset Profile to New Template',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 12.0,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              ),
-            ),
-          ),
-          
-
-          
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           
           // Delete all data button (most destructive)
           SizedBox(
@@ -1113,95 +1088,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _showResetProfileDialog() async {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(
-          'Reset Profile Template',
-          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 14),
-        ),
-        content: const Text(
-          'This will replace your current profile with the new comprehensive introspection template. Your journal entries will not be affected. This action cannot be undone.',
-          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                Navigator.of(context).pop();
-                
-                // Show loading dialog
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) => const AlertDialog(
-                    content: Row(
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(width: 16),
-                        Text(
-                          'Resetting profile template...',
-                          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-                
-                await DatabaseService().resetProfileToNewTemplate();
-                final journalProvider = Provider.of<JournalProvider>(context, listen: false);
-                await journalProvider.loadFiles();
-                
-                // Check if widget is still mounted before using context
-                if (!mounted) return;
-                
-                Navigator.of(context).pop(); // Close loading dialog
-                
-                if (!mounted) return;
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Profile has been reset to the new introspection template!'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              } catch (e) {
-                // Check if widget is still mounted before using context
-                if (!mounted) return;
-                
-                Navigator.of(context).pop(); // Close loading dialog if error
-                
-                if (!mounted) return;
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error resetting profile: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text(
-              'Reset Profile',
-              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
 
 

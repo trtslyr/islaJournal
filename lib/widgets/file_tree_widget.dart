@@ -66,9 +66,9 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      _getProfileName(provider),
-                      style: const TextStyle(
+                    const Text(
+                      'files',
+                      style: TextStyle(
                         fontFamily: 'JetBrainsMono',
                         fontSize: 16.0,
                         fontWeight: FontWeight.w600,
@@ -107,8 +107,6 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
               ),
             // Sorting controls - always show
             _buildSortingControls(provider),
-            // Profile file - fixed at top
-            ..._buildProfileSection(provider),
             // File tree
             Expanded(
               child: DragTarget<JournalFile>(
@@ -130,11 +128,13 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                         : null,
                     child: ListView(
                       children: [
-                        // Root folders
-                        ...provider.rootFolders.map((folder) => _buildFolderTile(folder, provider)),
-                        // Root files with drop zones for reordering (excluding profile)
+                        // Pinned files section - now scrollable inline
+                        ..._buildPinnedSection(provider),
+                        // Regular folders only (pinned folders appear in pinned section)
+                        ...provider.rootFolders.where((folder) => !folder.isPinned).map((folder) => _buildFolderTile(folder, provider)),
+                        // Regular files only (excluding pinned files)
                         ..._buildRootFilesWithDropZones(
-                          _getSortedFiles(provider.files.where((file) => file.folderId == null && !provider.isProfileFile(file.id)).toList(), provider),
+                          _getSortedFiles(provider.files.where((file) => file.folderId == null && !file.isPinned).toList(), provider),
                           provider,
                         ),
                         // Empty space at the bottom for dropping
@@ -367,50 +367,493 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     });
   }
 
-  /// Get profile name for display in header
-  String _getProfileName(JournalProvider provider) {
-    final profileFile = provider.files.where((file) => provider.isProfileFile(file.id)).firstOrNull;
-    if (profileFile == null) return 'files';
-    
-    // Extract name from the first line of the profile content
-    final lines = profileFile.content.split('\n');
-    if (lines.isNotEmpty) {
-      final firstLine = lines.first.trim();
-      if (firstLine.startsWith('# ')) {
-        final extractedName = firstLine.substring(2).trim();
-        if (extractedName.isNotEmpty && extractedName != '[Your Name Here]') {
-          return extractedName;
-        }
-      }
-    }
-    
-    // Fallback to stored name or 'files'
-    return profileFile.name ?? 'files';
-  }
 
-  /// Build profile section - fixed at top with darker styling
-  List<Widget> _buildProfileSection(JournalProvider provider) {
-    final profileFile = provider.files.where((file) => provider.isProfileFile(file.id)).firstOrNull;
+
+
+
+  /// Build pinned files section - user-selected files for AI context
+  List<Widget> _buildPinnedSection(JournalProvider provider) {
+    final pinnedFiles = provider.files.where((file) => 
+      file.isPinned && 
+      file.folderId == null
+    ).toList();
     
-    if (profileFile == null) {
-      return [];
-    }
+    final pinnedFolders = provider.folders.where((folder) => folder.isPinned).toList();
     
-    return [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-        decoration: BoxDecoration(
-          color: AppTheme.darkerCream,
-          border: Border(
-            bottom: BorderSide(
-        color: AppTheme.warmBrown.withOpacity(0.1),
-              width: 1,
-            ),
+    if (pinnedFiles.isEmpty && pinnedFolders.isEmpty) {
+      // Show empty drop zone when no pinned files
+      return [
+        Container(
+          decoration: BoxDecoration(
+            color: AppTheme.darkerCream,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          margin: const EdgeInsets.only(bottom: 8.0),
+          child: DragTarget<Object>(
+            onWillAcceptWithDetails: (details) {
+              final data = details.data;
+              if (data is JournalFile && !data.isPinned) return true;
+              if (data is JournalFolder && !data.isPinned) return true;
+              return false;
+            },
+            onAcceptWithDetails: (details) {
+              final data = details.data;
+              if (data is JournalFile) {
+                _pinFileFromDrag(data);
+              } else if (data is JournalFolder) {
+                _pinFolderFromDrag(data);
+              }
+            },
+            builder: (context, candidateData, rejectedData) {
+              final isHighlighted = candidateData.isNotEmpty;
+              
+              return Container(
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: isHighlighted 
+                    ? AppTheme.warmBrown.withOpacity(0.1)
+                    : AppTheme.darkerCream,
+                  border: isHighlighted 
+                    ? Border.all(
+                        color: AppTheme.warmBrown.withOpacity(0.3),
+                        width: 2,
+                      )
+                    : null,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Center(
+                  child: Text(
+                    isHighlighted 
+                      ? 'Drop here to pin'
+                      : 'Drag files or folders here to pin them',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12,
+                      color: isHighlighted 
+                        ? AppTheme.warmBrown
+                        : AppTheme.mediumGray,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
-        child: _buildProfileTile(profileFile, provider),
+      ];
+    }
+    
+    // Show pinned files with drag target around them
+    return [
+      Container(
+        decoration: BoxDecoration(
+          color: AppTheme.darkerCream,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        margin: const EdgeInsets.only(bottom: 8.0),
+        child: DragTarget<Object>(
+          onWillAcceptWithDetails: (details) {
+            final data = details.data;
+            if (data is JournalFile && !data.isPinned) return true;
+            if (data is JournalFolder && !data.isPinned) return true;
+            return false;
+          },
+          onAcceptWithDetails: (details) {
+            final data = details.data;
+            if (data is JournalFile) {
+              _pinFileFromDrag(data);
+            } else if (data is JournalFolder) {
+              _pinFolderFromDrag(data);
+            }
+          },
+          builder: (context, candidateData, rejectedData) {
+            final isHighlighted = candidateData.isNotEmpty;
+            
+            return Container(
+              decoration: BoxDecoration(
+                color: isHighlighted 
+                  ? AppTheme.warmBrown.withOpacity(0.1)
+                  : AppTheme.darkerCream,
+                border: isHighlighted 
+                  ? Border.all(
+                      color: AppTheme.warmBrown.withOpacity(0.3),
+                      width: 2,
+                    )
+                  : null,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Pinned folders list
+                  ...pinnedFolders.map((folder) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: _buildPinnedFolderTile(folder, provider),
+                  )),
+                  // Pinned files list
+                  ...pinnedFiles.map((file) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: _buildPinnedFileTile(file, provider),
+                  )),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     ];
+  }
+
+  /// Build a pinned folder tile with hyphen instead of bullet  
+  Widget _buildPinnedFolderTile(JournalFolder folder, JournalProvider provider) {
+    final isExpanded = _expandedFolders.contains(folder.id);
+    final subfolders = provider.folders.where((f) => f.parentId == folder.id && !f.isPinned).toList();
+    final folderFiles = provider.files.where((f) => f.folderId == folder.id && !f.isPinned).toList();
+    final sortedFiles = _getSortedFiles(folderFiles, provider);
+    final hasChildren = subfolders.isNotEmpty || sortedFiles.isNotEmpty;
+
+    return Column(
+      children: [
+        Draggable<JournalFolder>(
+          data: folder,
+          feedback: Material(
+            elevation: 4.0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.creamBeige,
+                border: Border.all(color: AppTheme.warmBrown.withOpacity(0.3)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '-',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      color: AppTheme.mediumGray,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    folder.name,
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.darkText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(
+            opacity: 0.5,
+            child: _HoverableTile(
+              leading: Text(
+                hasChildren
+                    ? (isExpanded ? '▼' : '▶')
+                    : '-',
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12.0,
+                  color: AppTheme.mediumGray,
+                ),
+              ),
+              title: Text(
+                folder.name,
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.w400,
+                  color: AppTheme.darkText,
+                ),
+              ),
+              subtitle: const Text(
+                'folder',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12.0,
+                  fontWeight: FontWeight.w400,
+                  color: AppTheme.mediumGray,
+                ),
+              ),
+              onTap: () {
+                if (hasChildren) {
+                  setState(() {
+                    if (isExpanded) {
+                      _expandedFolders.remove(folder.id);
+                    } else {
+                      _expandedFolders.add(folder.id);
+                    }
+                  });
+                }
+                provider.selectFolder(folder.id);
+              },
+              onContextMenu: (context) => _showFolderContextMenu(context, folder),
+            ),
+          ),
+          child: _HoverableTile(
+            leading: Text(
+              hasChildren
+                  ? (isExpanded ? '▼' : '▶')
+                  : '-',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+                color: AppTheme.mediumGray,
+              ),
+            ),
+            title: Text(
+              folder.name,
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 14.0,
+                fontWeight: FontWeight.w400,
+                color: AppTheme.darkText,
+              ),
+            ),
+                         subtitle: const Text(
+               'folder',
+               style: TextStyle(
+                 fontFamily: 'JetBrainsMono',
+                 fontSize: 12.0,
+                 fontWeight: FontWeight.w400,
+                 color: AppTheme.mediumGray,
+               ),
+             ),
+            onTap: () {
+              if (hasChildren) {
+                setState(() {
+                  if (isExpanded) {
+                    _expandedFolders.remove(folder.id);
+                  } else {
+                    _expandedFolders.add(folder.id);
+                  }
+                });
+              }
+              provider.selectFolder(folder.id);
+            },
+            onContextMenu: (context) => _showFolderContextMenu(context, folder),
+          ),
+        ),
+        if (isExpanded && hasChildren)
+          Container(
+            margin: const EdgeInsets.only(left: 16.0),
+            child: Column(
+              children: [
+                ...subfolders.map((subfolder) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                  child: _buildPinnedFolderTile(subfolder, provider),
+                )),
+                ...sortedFiles.map((file) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                  child: _buildPinnedFileTile(file, provider),
+                )),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Build a pinned file tile with hyphen instead of bullet
+  Widget _buildPinnedFileTile(JournalFile file, JournalProvider provider) {
+    final isSelected = provider.isFileSelected(file.id);
+    final isMainSelected = provider.selectedFileId == file.id;
+    
+    return Draggable<JournalFile>(
+      data: file,
+      feedback: Material(
+        elevation: 4.0,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.creamBeige,
+            border: Border.all(color: AppTheme.warmBrown.withOpacity(0.3)),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '-',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12.0,
+                  color: AppTheme.mediumGray,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                file.name,
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.darkText,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.5,
+        child: _HoverableTile(
+          leading: const Text(
+            '-',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              color: AppTheme.mediumGray,
+            ),
+          ),
+          title: Text(
+            file.name,
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+              fontWeight: isMainSelected ? FontWeight.w600 : (isSelected ? FontWeight.w500 : FontWeight.w400),
+              color: isMainSelected ? AppTheme.warmBrown : (isSelected ? AppTheme.darkerBrown : AppTheme.darkText),
+            ),
+          ),
+          subtitle: Text(
+            _formatDate(file.lastOpened),
+            style: const TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              fontWeight: FontWeight.w400,
+              color: AppTheme.mediumGray,
+            ),
+          ),
+          isSelected: isSelected,
+          onTap: () => _handleFileTap(file.id, provider),
+          onContextMenu: (context) => _showFileContextMenu(context, file),
+        ),
+      ),
+      child: _HoverableTile(
+        leading: const Text(
+          '-',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 12.0,
+            color: AppTheme.mediumGray,
+          ),
+        ),
+        title: Text(
+          file.name,
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 14.0,
+            fontWeight: isMainSelected ? FontWeight.w600 : (isSelected ? FontWeight.w500 : FontWeight.w400),
+            color: isMainSelected ? AppTheme.warmBrown : (isSelected ? AppTheme.darkerBrown : AppTheme.darkText),
+          ),
+        ),
+        subtitle: Text(
+          _formatDate(file.lastOpened),
+          style: const TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 12.0,
+            fontWeight: FontWeight.w400,
+            color: AppTheme.mediumGray,
+          ),
+        ),
+        isSelected: isSelected,
+        onTap: () => _handleFileTap(file.id, provider),
+        onContextMenu: (context) => _showFileContextMenu(context, file),
+      ),
+    );
+  }
+
+  /// Pin a folder from drag and drop
+  void _pinFolderFromDrag(JournalFolder folder) async {
+    try {
+      final provider = Provider.of<JournalProvider>(context, listen: false);
+      final updatedFolder = folder.copyWith(isPinned: true);
+      await provider.updateFolder(updatedFolder);
+      
+      // Show feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Pinned folder "${folder.name}"',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: AppTheme.warmBrown,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Show error feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to pin folder "${folder.name}": ${e.toString()}',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Pin a file from drag and drop
+  void _pinFileFromDrag(JournalFile file) async {
+    try {
+      final provider = Provider.of<JournalProvider>(context, listen: false);
+      final updatedFile = file.copyWith(isPinned: true);
+      await provider.updateFile(updatedFile);
+      
+      // Show feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Pinned "${file.name}"',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: AppTheme.warmBrown,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Show error feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to pin "${file.name}": ${e.toString()}',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   /// Handle keyboard shortcuts
@@ -509,77 +952,110 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
 
     return Column(
       children: [
-        DragTarget<JournalFile>(
-          onWillAccept: (data) => data != null && data.folderId != folder.id,
-          onAccept: (file) => _moveFileToFolder(file, folder, provider),
-          builder: (context, candidateData, rejectedData) {
-            final isHighlighted = candidateData.isNotEmpty;
-            
-            return Container(
-              decoration: isHighlighted
-                  ? BoxDecoration(
-                      color: AppTheme.warmBrown.withOpacity(0.1),
-                      border: Border.all(
-                        color: AppTheme.warmBrown.withOpacity(0.5),
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    )
-                  : null,
-              child: _HoverableTile(
-                leading: Text(
-                  hasChildren
-                      ? (isExpanded ? '▼' : '▶')
-                      : '•',
-                  style: const TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12.0,
-                    color: AppTheme.warmBrown,
+        Draggable<JournalFolder>(
+          data: folder,
+          feedback: Material(
+            elevation: 4.0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.creamBeige,
+                border: Border.all(color: AppTheme.warmBrown.withOpacity(0.3)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '📁',
+                    style: TextStyle(fontSize: 12.0),
                   ),
-                ),
-                title: Text(
-                  folder.name,
-                  style: const TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 14.0,
-                    fontWeight: FontWeight.w400,
-                    color: AppTheme.darkText,
+                  const SizedBox(width: 8),
+                  Text(
+                    folder.name,
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.darkText,
+                    ),
                   ),
-                ),
-                trailing: hasChildren
-                    ? Text(
-                        '${subfolders.length + sortedFiles.length}',
-                        style: const TextStyle(
-                          fontFamily: 'JetBrainsMono',
-                          fontSize: 12.0,
-                          color: AppTheme.mediumGray,
+                ],
+              ),
+            ),
+          ),
+          child: DragTarget<JournalFile>(
+            onWillAccept: (data) => data != null && data.folderId != folder.id,
+            onAccept: (file) => _moveFileToFolder(file, folder, provider),
+            builder: (context, candidateData, rejectedData) {
+              final isHighlighted = candidateData.isNotEmpty;
+              
+              return Container(
+                decoration: isHighlighted
+                    ? BoxDecoration(
+                        color: AppTheme.warmBrown.withOpacity(0.1),
+                        border: Border.all(
+                          color: AppTheme.warmBrown.withOpacity(0.5),
+                          width: 2,
                         ),
+                        borderRadius: BorderRadius.circular(4),
                       )
                     : null,
-                onTap: () {
-                  if (hasChildren) {
-                    setState(() {
-                      if (isExpanded) {
-                        _expandedFolders.remove(folder.id);
-                      } else {
-                        _expandedFolders.add(folder.id);
-                      }
-                    });
-                  }
-                  provider.selectFolder(folder.id);
-                },
-                onContextMenu: (context) => _showFolderContextMenu(context, folder),
-              ),
-            );
-          },
+                child: _HoverableTile(
+                  leading: Text(
+                    hasChildren
+                        ? (isExpanded ? '▼' : '▶')
+                        : '•',
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      color: AppTheme.warmBrown,
+                    ),
+                  ),
+                  title: Text(
+                    folder.name,
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w400,
+                      color: AppTheme.darkText,
+                    ),
+                  ),
+                  trailing: hasChildren
+                      ? Text(
+                          '${subfolders.length + sortedFiles.length}',
+                          style: const TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 12.0,
+                            color: AppTheme.mediumGray,
+                          ),
+                        )
+                      : null,
+                  onTap: () {
+                    if (hasChildren) {
+                      setState(() {
+                        if (isExpanded) {
+                          _expandedFolders.remove(folder.id);
+                        } else {
+                          _expandedFolders.add(folder.id);
+                        }
+                      });
+                    }
+                    provider.selectFolder(folder.id);
+                  },
+                  onContextMenu: (context) => _showFolderContextMenu(context, folder),
+                ),
+              );
+            },
+          ),
         ),
         if (isExpanded && hasChildren)
           Container(
             margin: const EdgeInsets.only(left: 16.0),
             child: Column(
               children: [
-                ...subfolders.map((subfolder) => _buildFolderTile(subfolder, provider)),
-                ...sortedFiles.map((file) => _buildFileTile(file, provider)),
+                ...subfolders.where((subfolder) => !subfolder.isPinned).map((subfolder) => _buildFolderTile(subfolder, provider)),
+                ...sortedFiles.where((file) => !file.isPinned).map((file) => _buildFileTile(file, provider)),
               ],
             ),
           ),
@@ -605,12 +1081,12 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                '•',
+              Text(
+                file.isPinned ? '📌' : '•',
                 style: TextStyle(
                   fontFamily: 'JetBrainsMono',
                   fontSize: 12.0,
-                  color: AppTheme.mediumGray,
+                  color: file.isPinned ? AppTheme.warmBrown : AppTheme.mediumGray,
                 ),
               ),
               const SizedBox(width: 8),
@@ -695,45 +1171,7 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     );
   }
 
-  Widget _buildProfileTile(JournalFile file, JournalProvider provider) {
-    final isSelected = provider.selectedFileId == file.id;
-    
-    // Extract display name from profile content
-    String displayName = file.name;
-    final lines = file.content.split('\n');
-    if (lines.isNotEmpty) {
-      final firstLine = lines.first.trim();
-      if (firstLine.startsWith('# ')) {
-        final extractedName = firstLine.substring(2).trim();
-        if (extractedName.isNotEmpty && extractedName != '[Your Name Here]') {
-          displayName = extractedName;
-        }
-      }
-    }
-    
-    return _HoverableTile(
-        leading: const Text(
-          '•',
-          style: TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 12.0,
-            color: AppTheme.mediumGray,
-          ),
-        ),
-        title: Text(
-        displayName,
-          style: TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 14.0,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-            color: isSelected ? AppTheme.warmBrown : AppTheme.darkText,
-          ),
-        ),
-      isSelected: isSelected,
-        onTap: () => provider.selectFile(file.id),
-      onContextMenu: (context) => _showProfileContextMenu(context, file),
-    );
-  }
+
 
   void _showFolderContextMenu(BuildContext context, JournalFolder folder) {
     final RenderBox button = context.findRenderObject()! as RenderBox;
@@ -779,6 +1217,10 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                       _buildMenuItem('properties', () {
                         Navigator.of(context).pop();
                         _showFolderProperties(context, folder);
+                      }),
+                      _buildMenuItem(folder.isPinned ? 'unpin' : 'pin', () {
+                        Navigator.of(context).pop();
+                        _toggleFolderPin(folder);
                       }),
                       Container(height: 1, color: AppTheme.warmBrown.withOpacity(0.3)),
                       _buildMenuItem('delete', () {
@@ -861,6 +1303,10 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                           Navigator.of(context).pop();
                           _showFileProperties(context, file);
                         }),
+                        _buildMenuItem(file.isPinned ? 'unpin' : 'pin', () {
+                          Navigator.of(context).pop();
+                          _toggleFilePin(file);
+                        }),
                         Container(height: 1, color: AppTheme.warmBrown.withOpacity(0.3)),
                         _buildMenuItem('delete', () {
                           Navigator.of(context).pop();
@@ -878,58 +1324,7 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     );
   }
 
-  void _showProfileContextMenu(BuildContext context, JournalFile file) {
-    final RenderBox button = context.findRenderObject()! as RenderBox;
-    final RenderBox overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
-    final buttonPosition = button.localToGlobal(Offset.zero, ancestor: overlay);
 
-    showDialog<String>(
-      context: context,
-      barrierColor: Colors.transparent,
-      builder: (context) => Stack(
-        children: [
-          // Invisible barrier that closes the menu when tapped
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(color: Colors.transparent),
-            ),
-          ),
-          // Menu positioned at the button location
-          Positioned(
-            left: buttonPosition.dx,
-            top: buttonPosition.dy + button.size.height,
-            child: Material(
-              color: AppTheme.creamBeige,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.creamBeige,
-                  border: Border.all(color: AppTheme.warmBrown.withOpacity(0.3)),
-                ),
-                child: IntrinsicWidth(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildMenuItem('reset to new template', () {
-                        Navigator.of(context).pop();
-                        _resetProfileTemplate(context);
-                      }),
-                      Container(height: 1, color: AppTheme.warmBrown.withOpacity(0.3)),
-                      _buildMenuItem('properties', () {
-                        Navigator.of(context).pop();
-                        _showFileProperties(context, file);
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildMenuItem(String text, VoidCallback onTap) {
     return InkWell(
@@ -1664,57 +2059,7 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
     );
   }
 
-  void _resetProfileTemplate(BuildContext context) async {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(
-          'Reset Profile Template',
-          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 14),
-        ),
-        content: const Text(
-          'This will replace your current profile with the new introspection template. This action cannot be undone.',
-          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              try {
-                Navigator.of(context).pop();
-                await DatabaseService().resetProfileToNewTemplate();
-                final provider = Provider.of<JournalProvider>(context, listen: false);
-                await provider.loadFiles();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Profile has been reset to the new template!'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error resetting profile: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            child: const Text(
-              'Reset',
-              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   void _showDeleteMultipleFilesDialog(BuildContext context, Set<String> fileIds) {
     showDialog(
@@ -1745,6 +2090,92 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
         ],
       ),
     );
+  }
+
+  /// Toggle pin status of a folder
+  void _toggleFolderPin(JournalFolder folder) async {
+    try {
+      final provider = Provider.of<JournalProvider>(context, listen: false);
+      final updatedFolder = folder.copyWith(isPinned: !folder.isPinned);
+      await provider.updateFolder(updatedFolder);
+      
+      // Show feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              folder.isPinned ? 'Unpinned folder "${folder.name}"' : 'Pinned folder "${folder.name}"',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: AppTheme.warmBrown,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Show error feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to ${folder.isPinned ? 'unpin' : 'pin'} folder "${folder.name}": ${e.toString()}',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Toggle pin status of a file
+  void _toggleFilePin(JournalFile file) async {
+    try {
+      final provider = Provider.of<JournalProvider>(context, listen: false);
+      final updatedFile = file.copyWith(isPinned: !file.isPinned);
+      await provider.updateFile(updatedFile);
+      
+      // Show feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              file.isPinned ? 'Unpinned "${file.name}"' : 'Pinned "${file.name}"',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: AppTheme.warmBrown,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Show error feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to ${file.isPinned ? 'unpin' : 'pin'} "${file.name}": ${e.toString()}',
+              style: const TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _showEditProfileNameDialog(BuildContext context, JournalFile file, JournalProvider provider) {

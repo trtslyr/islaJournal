@@ -28,7 +28,7 @@ class DatabaseService {
     
     return await openDatabase(
       path,
-      version: 10, // Increment version to add summary and keywords fields
+      version: 12, // Increment version to add is_pinned field to folders
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -43,6 +43,7 @@ class DatabaseService {
         parent_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        is_pinned INTEGER DEFAULT 0,
         FOREIGN KEY (parent_id) REFERENCES folders (id) ON DELETE CASCADE
       )
     ''');
@@ -62,6 +63,7 @@ class DatabaseService {
         journal_date TEXT,
         summary TEXT,
         keywords TEXT,
+        is_pinned INTEGER DEFAULT 0,
         FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE SET NULL
       )
     ''');
@@ -309,6 +311,40 @@ class DatabaseService {
         print('Error in v10 upgrade: $e');
       }
     }
+
+    if (oldVersion < 11) {
+      // Version 11 upgrade: Add is_pinned field for pinning files to AI context
+      try {
+        final result = await db.rawQuery("PRAGMA table_info(files)");
+        final hasPinned = result.any((column) => column['name'] == 'is_pinned');
+        
+        if (!hasPinned) {
+          await db.execute('ALTER TABLE files ADD COLUMN is_pinned INTEGER DEFAULT 0');
+          print('Database upgraded v11: Added is_pinned field for file pinning');
+        }
+        
+        print('Database upgraded v11: Pin functionality enabled');
+      } catch (e) {
+        print('Error in v11 upgrade: $e');
+      }
+    }
+
+    if (oldVersion < 12) {
+      // Version 12 upgrade: Add is_pinned field to folders table
+      try {
+        final result = await db.rawQuery("PRAGMA table_info(folders)");
+        final hasPinned = result.any((column) => column['name'] == 'is_pinned');
+        
+        if (!hasPinned) {
+          await db.execute('ALTER TABLE folders ADD COLUMN is_pinned INTEGER DEFAULT 0');
+          print('Database upgraded v12: Added is_pinned field to folders');
+        }
+        
+        print('Database upgraded v12: Folder pin functionality enabled');
+      } catch (e) {
+        print('Error in v12 upgrade: $e');
+      }
+    }
   }
 
   /// Backfill journal dates for existing files that don't have them
@@ -500,8 +536,7 @@ class DatabaseService {
         print('🗃️ Cleared all database tables (preserved profile file)');
       });
       
-      // Reset profile file content to default template
-      await _resetProfileFileContent(db);
+
       
       print('📁 Skipped recreating default folders');
       
@@ -512,125 +547,7 @@ class DatabaseService {
     }
   }
 
-  /// Reset the profile file content to default template
-  Future<void> _resetProfileFileContent(Database db) async {
-    try {
-      const profileId = 'profile_special_file';
-      final defaultProfileContent = '''# [Your Name Here]
 
-*This becomes your display name in the file tree*
-
-## Mission Statement
-*What is your core purpose? Your "why"?*
-
-Write your personal mission statement here...
-
----
-
-## My Roles
-*What are the key roles you play in life? (4-8 roles)*
-
-• 
-• 
-• 
-• 
-• 
-• 
-
----
-
-## Core Values
-*What principles guide your decisions?*
-
-• 
-• 
-• 
-• 
-
----
-
-## What Drives Me  
-*What energizes and motivates you?*
-
-• 
-• 
-• 
-• 
-
----
-
-## 5-Year Vision
-*Where do you see yourself in 5 years?*
-
-Write your long-term vision here...
-
-## This Year's Focus
-*What are your main objectives for this year?*
-
-• 
-• 
-• 
-
-## This Month
-*What specific goals are you working on right now?*
-
-• 
-• 
-• 
-
----
-
-*This information helps the AI understand your context and provide more personalized responses.*
-''';
-
-      // Get current profile file to get its file path
-      final profileResult = await db.query(
-        'files',
-        where: 'id = ?',
-        whereArgs: [profileId],
-      );
-
-      if (profileResult.isNotEmpty) {
-        final profileData = profileResult.first;
-        final filePath = profileData['file_path'] as String;
-        
-        // Update the physical file with default content
-        final file = File(filePath);
-        await file.writeAsString(defaultProfileContent);
-        
-        // Update database with default content and reset word count
-        await db.update(
-          'files',
-          {
-            'word_count': JournalFile.calculateWordCount(defaultProfileContent),
-            'updated_at': DateTime.now().toIso8601String(),
-          },
-          where: 'id = ?',
-          whereArgs: [profileId],
-        );
-        
-        // Update search index
-        await db.update(
-          'files_fts',
-          {
-            'title': 'Profile',
-            'content': defaultProfileContent,
-          },
-          where: 'file_id = ?',
-          whereArgs: [profileId],
-        );
-        
-        print('✅ Reset profile file content to default template');
-      } else {
-        // Profile file doesn't exist, recreate it
-        await _createProfileFile(db);
-        print('✅ Recreated profile file with default content');
-      }
-    } catch (e) {
-      print('⚠️ Error resetting profile file content: $e');
-      // Don't throw error - just log it so data deletion can continue
-    }
-  }
 
   Future<void> _createDefaultFolders(Database db) async {
     final defaultFolders = [
@@ -653,71 +570,11 @@ Write your long-term vision here...
 
   Future<void> _createProfileFile(Database db) async {
     final documentsDir = await getApplicationDocumentsDirectory();
-    final profileContent = '''# [Your Name Here]
+    final profileContent = '''# Profile
 
-*This becomes your display name in the file tree*
+This is your AI context profile. The AI reads this file in every conversation to understand who you are. Write a few sentences about yourself, your role, what you're working on, and anything else that would help the AI have better conversations with you. Keep it personal and conversational - think of it as introducing yourself to a friend.
 
-## Mission Statement
-*What is your core purpose? Your "why"?*
-
-Write your personal mission statement here...
-
----
-
-## My Roles
-*What are the key roles you play in life? (4-8 roles)*
-
-• 
-• 
-• 
-• 
-• 
-• 
-
----
-
-## Core Values
-*What principles guide your decisions?*
-
-• 
-• 
-• 
-• 
-
----
-
-## What Drives Me  
-*What energizes and motivates you?*
-
-• 
-• 
-• 
-• 
-
----
-
-## 5-Year Vision
-*Where do you see yourself in 5 years?*
-
-Write your long-term vision here...
-
-## This Year's Focus
-*What are your main objectives for this year?*
-
-• 
-• 
-• 
-
-## This Month
-*What specific goals are you working on right now?*
-
-• 
-• 
-• 
-
----
-
-*This information helps the AI understand your context and provide more personalized responses.*
+When you're ready, delete this instruction text and write your own introduction. The AI only sees what you write, not these instructions.
 ''';
     
     // Create profile file with specific ID
@@ -953,6 +810,46 @@ Write your long-term vision here...
     );
   }
 
+  /// Get pinned files for AI context
+  Future<List<JournalFile>> getPinnedFiles() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'files',
+      where: 'is_pinned = ?',
+      whereArgs: [1],
+      orderBy: 'updated_at DESC',
+    );
+    
+    final pinnedFiles = <JournalFile>[];
+    for (final map in maps) {
+      final file = JournalFile.fromMap(map);
+      try {
+        // Read content from file system
+        final fileContent = await File(file.filePath).readAsString();
+        pinnedFiles.add(file.copyWith(content: fileContent));
+      } catch (e) {
+        print('Warning: Could not read pinned file ${file.name}: $e');
+        // Add without content rather than skipping entirely
+        pinnedFiles.add(file);
+      }
+    }
+    
+    return pinnedFiles;
+  }
+
+  /// Get pinned folders for AI context
+  Future<List<JournalFolder>> getPinnedFolders() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'folders',
+      where: 'is_pinned = ?',
+      whereArgs: [1],
+      orderBy: 'updated_at DESC',
+    );
+    
+    return maps.map((map) => JournalFolder.fromMap(map)).toList();
+  }
+
   /// Clear all summaries from all files (for regeneration)
   Future<void> clearAllSummaries() async {
     final db = await database;
@@ -1056,20 +953,24 @@ Write your long-term vision here...
   // Get files with embeddings for similarity search
   Future<List<JournalFile>> getFilesWithEmbeddings({DateTime? beforeDate}) async {
     final db = await database;
-    String whereClause = 'embedding IS NOT NULL';
+    
+    // Updated to check file_embeddings table instead of files.embedding column
+    String whereClause = '';
     List<dynamic> whereArgs = [];
     
     if (beforeDate != null) {
-      whereClause += ' AND updated_at < ?';
+      whereClause = 'f.updated_at < ?';
       whereArgs.add(beforeDate.toIso8601String());
     }
     
-    final maps = await db.query(
-      'files',
-      where: whereClause,
-      whereArgs: whereArgs,
-      orderBy: 'updated_at DESC',
-    );
+    // Query files that have entries in the file_embeddings table (chunked embeddings)
+    final maps = await db.rawQuery('''
+      SELECT DISTINCT f.* 
+      FROM files f
+      INNER JOIN file_embeddings fe ON f.id = fe.file_id
+      ${whereClause.isNotEmpty ? 'WHERE $whereClause' : ''}
+      ORDER BY f.updated_at DESC
+    ''', whereArgs);
     
     return maps.map((map) => JournalFile.fromMap(map)).toList();
   }
@@ -1392,17 +1293,7 @@ Write your long-term vision here...
     }
   }
 
-  /// Reset only the profile file content to the new template (keeps all other data)
-  Future<void> resetProfileToNewTemplate() async {
-    try {
-      final db = await database;
-      await _resetProfileFileContent(db);
-      print('✅ Profile file has been reset to the new introspection template');
-    } catch (e) {
-      print('❌ Error resetting profile file: $e');
-      rethrow;
-    }
-  }
+
 
   // Import functionality methods
   Future<void> trackImport(String originalPath, String fileId) async {

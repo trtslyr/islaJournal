@@ -203,9 +203,9 @@ class EmbeddingService {
       return [];
     }
     
-    print('🔍 Found ${chunkRows.length} chunks to search');
+    print('🔍 Found ${chunkRows.length} chunks to search across files');
     
-    // Group chunks by file and calculate average similarity per file
+    // Group chunks by file and calculate similarity per file
     final fileChunks = <String, List<Map<String, dynamic>>>{};
     final fileInfos = <String, Map<String, dynamic>>{};
     
@@ -227,8 +227,13 @@ class EmbeddingService {
       fileChunks[fileId]!.add(row);
     }
     
+    print('🔍 Grouped chunks into ${fileChunks.length} unique files');
+    
     final similarities = <_SimilarityResult>[];
     int chunkCount = 0;
+    int dimensionMismatches = 0;
+    int emptyEmbeddings = 0;
+    int validSimilarityCalculations = 0;
     
     for (final fileId in fileChunks.keys) {
       final chunks = fileChunks[fileId]!;
@@ -244,26 +249,26 @@ class EmbeddingService {
         chunkCount++;
         final embedding = _parseChunkedEmbedding(chunk['embedding']);
         
-        print('🔍 Chunk $chunkCount: parsed embedding length=${embedding.length}');
-        if (embedding.isNotEmpty) {
-          print('🔍 Chunk $chunkCount: first 5 values=[${embedding.take(5).map((v) => v.toStringAsFixed(4)).join(', ')}]');
-          print('🔍 Chunk $chunkCount: sum=${embedding.fold(0.0, (a, b) => a + b).toStringAsFixed(4)}');
-          
-          if (embedding.length != queryEmbedding.length) {
-            print('🔍 DIMENSION MISMATCH: query=${queryEmbedding.length}, chunk=${embedding.length}');
-            continue;
-          }
-          
-          final similarity = _cosineSimilarity(queryEmbedding, embedding);
-          final chunkPreview = chunk['content'].toString().substring(0, math.min(50, chunk['content'].toString().length));
-          print('🔍 Chunk $chunkCount similarity: ${similarity.toStringAsFixed(6)} for "$chunkPreview..."');
-          
-          if (similarity > maxSimilarity) {
-            maxSimilarity = similarity;
-            bestChunkContent = chunk['content'] as String?;
-          }
-        } else {
+        if (embedding.isEmpty) {
           print('🔍 Chunk $chunkCount: EMPTY EMBEDDING!');
+          emptyEmbeddings++;
+          continue;
+        }
+        
+        if (embedding.length != queryEmbedding.length) {
+          print('🔍 DIMENSION MISMATCH: query=${queryEmbedding.length}, chunk=${embedding.length}');
+          dimensionMismatches++;
+          continue;
+        }
+        
+        validSimilarityCalculations++;
+        final similarity = _cosineSimilarity(queryEmbedding, embedding);
+        final chunkPreview = chunk['content'].toString().substring(0, math.min(50, chunk['content'].toString().length));
+        print('🔍 Chunk $chunkCount similarity: ${similarity.toStringAsFixed(6)} for "$chunkPreview..."');
+        
+        if (similarity > maxSimilarity) {
+          maxSimilarity = similarity;
+          bestChunkContent = chunk['content'] as String?;
         }
       }
       
@@ -290,28 +295,61 @@ class EmbeddingService {
         );
         
         similarities.add(_SimilarityResult(journalFile, maxSimilarity));
+      } else {
+        print('🔍 File "${fileInfo['name']}" EXCLUDED: maxSimilarity=${maxSimilarity.toStringAsFixed(6)}, hasContent=${bestChunkContent != null}');
       }
     }
     
+    print('🔍 SIMILARITY SEARCH SUMMARY:');
+    print('   - Total chunks processed: $chunkCount');
+    print('   - Empty embeddings: $emptyEmbeddings');
+    print('   - Dimension mismatches: $dimensionMismatches');
+    print('   - Valid similarity calculations: $validSimilarityCalculations');
+    print('   - Files with valid similarities: ${similarities.length}');
+    
     // Sort by similarity and return top K
     similarities.sort((a, b) => b.similarity.compareTo(a.similarity));
-    print('   Found ${similarities.length} files with chunked embeddings, returning top $topK');
-    return similarities.take(topK).map((s) => s.file).toList();
+    final results = similarities.take(topK).map((s) => s.file).toList();
+    
+    print('🔍 FINAL RESULTS: ${results.length} files returned (requested top $topK)');
+    for (int i = 0; i < results.length; i++) {
+      final similarity = similarities[i].similarity;
+      print('   ${i + 1}. "${results[i].name}" - similarity: ${similarity.toStringAsFixed(6)}');
+    }
+    
+    return results;
   }
 
-  // Parse chunked embedding from binary storage (Float32List bytes)
-  List<double> _parseChunkedEmbedding(dynamic embeddingBytes) {
+  // Parse chunked embedding from binary storage (Float32List bytes) - PUBLIC for testing
+  List<double> parseChunkedEmbedding(dynamic embeddingBytes) {
     if (embeddingBytes == null) return [];
     try {
       if (embeddingBytes is Uint8List) {
-        final float32List = Float32List.view(embeddingBytes.buffer);
-        return float32List.cast<double>();
+        // FIXED: Use Float32List.fromList with proper length constraint
+        final expectedFloats = 100; // Our embeddings should be 100 dimensions
+        final maxFloats = embeddingBytes.length ~/ 4; // 4 bytes per float
+        final actualFloats = math.min(expectedFloats, maxFloats);
+        
+        final float32List = Float32List.view(
+          embeddingBytes.buffer, 
+          embeddingBytes.offsetInBytes, 
+          actualFloats
+        );
+        
+        final result = float32List.cast<double>();
+        print('🔍 PARSE DEBUG: Parsed ${result.length} floats from ${embeddingBytes.length} bytes (expected: $expectedFloats)');
+        return result;
       }
       return [];
     } catch (e) {
       print('Error parsing chunked embedding: $e');
       return [];
     }
+  }
+
+  // Private wrapper for internal use
+  List<double> _parseChunkedEmbedding(dynamic embeddingBytes) {
+    return parseChunkedEmbedding(embeddingBytes);
   }
 
   // Parse stored embedding from database (legacy comma-separated format)
@@ -345,11 +383,12 @@ class EmbeddingService {
     final sqrtNormB = math.sqrt(normB);
     final norm = sqrtNormA * sqrtNormB;
     
-    print('🔍 COSINE: dot=${dot.toStringAsFixed(6)}, normA=${normA.toStringAsFixed(6)}, normB=${normB.toStringAsFixed(6)}');
-    print('🔍 COSINE: sqrtNormA=${sqrtNormA.toStringAsFixed(6)}, sqrtNormB=${sqrtNormB.toStringAsFixed(6)}, norm=${norm.toStringAsFixed(6)}');
-    
     final result = norm > 0 ? dot / norm : 0.0;
-    print('🔍 COSINE: final similarity=${result.toStringAsFixed(6)}');
+    
+    // Only log detailed cosine info for very low or very high similarities (to reduce spam)
+    if (result < 0.1 || result > 0.5) {
+      print('🔍 COSINE (notable): similarity=${result.toStringAsFixed(6)}, dot=${dot.toStringAsFixed(4)}, norm=${norm.toStringAsFixed(4)}');
+    }
     
     return result;
   }

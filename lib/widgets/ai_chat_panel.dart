@@ -7,6 +7,7 @@ import '../core/theme/app_theme.dart';
 import '../services/journal_companion_service.dart';
 import '../models/conversation_session.dart';
 import '../models/context_settings.dart';
+import 'package:flutter/foundation.dart';
 
 class ChatMessage {
   final String content;
@@ -208,6 +209,11 @@ class _AIChatPanelState extends State<AIChatPanel> {
               final activeConversation = provider.activeConversation;
               return PopupMenuButton<String>(
                 onSelected: (conversationId) async {
+                  if (conversationId == 'delete_all') {
+                    await _showDeleteAllConfirmation();
+                    return;
+                  }
+                  
                   print('🔄 Switching to conversation: $conversationId');
                   final conversation = provider.getConversationById(conversationId);
                   if (conversation != null) {
@@ -219,64 +225,94 @@ class _AIChatPanelState extends State<AIChatPanel> {
                   }
                 },
                 itemBuilder: (context) {
-                  return provider.conversations.map((conversation) {
+                  final items = <PopupMenuEntry<String>>[];
+                  
+                  // Add conversation items
+                  for (final conversation in provider.conversations) {
                     final isActive = provider.activeConversation?.id == conversation.id;
-                    return PopupMenuItem<String>(
-                      value: conversation.id,
-                      child: Row(
-                        children: [
-                          if (isActive) const Icon(Icons.check_circle, size: 16, color: Colors.green),
-                          if (isActive) const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              conversation.title,
-                              style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-                            ),
-                          ),
-                          // Three dots menu
-                          PopupMenuButton<String>(
-                            onSelected: (action) async {
-                              switch (action) {
-                                case 'rename':
-                                  await _showRenameDialog(conversation);
-                                  break;
-                                case 'delete':
-                                  await _showDeleteConfirmation(conversation);
-                                  break;
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem<String>(
-                                value: 'rename',
-                                child: Text(
-                                  'Rename',
-                                  style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-                                ),
-                              ),
-                              const PopupMenuItem<String>(
-                                value: 'delete',
-                                child: Text(
-                                  'Delete',
-                                  style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12, color: Colors.red),
-                                ),
-                              ),
-                            ],
-                            child: const Padding(
-                              padding: EdgeInsets.all(4.0),
+                    items.add(
+                      PopupMenuItem<String>(
+                        value: conversation.id,
+                        child: Row(
+                          children: [
+                            if (isActive) const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                            if (isActive) const SizedBox(width: 8),
+                            Expanded(
                               child: Text(
-                                '⋯',
-                                style: TextStyle(
-                                  fontFamily: 'JetBrainsMono',
-                                  fontSize: 14.0,
-                                  color: AppTheme.mediumGray,
+                                conversation.title,
+                                style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+                              ),
+                            ),
+                            // Three dots menu
+                            PopupMenuButton<String>(
+                              onSelected: (action) async {
+                                switch (action) {
+                                  case 'rename':
+                                    await _showRenameDialog(conversation);
+                                    break;
+                                  case 'delete':
+                                    await _showDeleteConfirmation(conversation);
+                                    break;
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem<String>(
+                                  value: 'rename',
+                                  child: Text(
+                                    'Rename',
+                                    style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+                                  ),
+                                ),
+                                const PopupMenuItem<String>(
+                                  value: 'delete',
+                                  child: Text(
+                                    'Delete',
+                                    style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12, color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                              child: const Padding(
+                                padding: EdgeInsets.all(4.0),
+                                child: Text(
+                                  '⋯',
+                                  style: TextStyle(
+                                    fontFamily: 'JetBrainsMono',
+                                    fontSize: 14.0,
+                                    color: AppTheme.mediumGray,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
-                  }).toList();
+                  }
+                  
+                  // Add separator and delete all button if there are conversations
+                  if (provider.conversations.isNotEmpty) {
+                    items.add(const PopupMenuDivider());
+                    items.add(
+                      PopupMenuItem<String>(
+                        value: 'delete_all',
+                        child: Container(
+                          width: double.infinity,
+                          child: const Text(
+                            'Delete All Chats',
+                            style: TextStyle(
+                              fontFamily: 'JetBrainsMono', 
+                              fontSize: 12, 
+                              color: Colors.red,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                  
+                  return items;
                 },
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -453,7 +489,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
 
   Widget _buildMessageBubble(ChatMessage message) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8.0),
+      margin: const EdgeInsets.only(bottom: 12.0), // Increased spacing
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -468,13 +504,14 @@ class _AIChatPanelState extends State<AIChatPanel> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
+            child: SelectableText( // Changed to SelectableText for better UX
               message.content,
               style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 12.0,
                 color: message.isUser ? AppTheme.darkText : AppTheme.mediumGray,
                 fontWeight: FontWeight.w400,
+                height: 1.4, // Better line spacing
               ),
             ),
           ),
@@ -530,25 +567,35 @@ class _AIChatPanelState extends State<AIChatPanel> {
         conversation: activeConversation,
         settings: activeConversation.contextSettings,
       );
-      print('🔥🔥🔥 AI CHAT: generateInsights returned: ${response.substring(0, 50)}...');
+      
+      // Log response properly (don't truncate unless it's really long)
+      final responsePreview = response.length > 200 ? '${response.substring(0, 200)}...' : response;
+      print('🔥🔥🔥 AI CHAT: generateInsights returned (${response.length} chars): $responsePreview');
+      
+      // Ensure we have a valid response
+      if (response.trim().isEmpty) {
+        throw Exception('Empty response from AI service');
+      }
       
       // Add assistant response to conversation
       await activeConversation.addAssistantMessage(response);
       
-      // Add AI response to chat
+      // Add AI response to chat with proper formatting
       if (mounted) {
-      setState(() {
-        _messages.add(ChatMessage(
-          content: response,
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-      });
+        setState(() {
+          _messages.add(ChatMessage(
+            content: response.trim(), // Ensure no extra whitespace
+            isUser: false,
+            timestamp: DateTime.now(),
+          ));
+        });
       }
       
       _scrollToBottom();
+    
     } catch (e) {
       // Handle error
+      print('🔴 Error in AI chat: $e');
       if (mounted) {
       setState(() {
         _messages.add(ChatMessage(
@@ -725,6 +772,80 @@ class _AIChatPanelState extends State<AIChatPanel> {
         });
         }
       }
+    }
+  }
+
+  Future<void> _showDeleteAllConfirmation() async {
+    final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+    final conversationCount = conversationProvider.conversations.length;
+    
+    if (conversationCount == 0) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'Delete All Chats',
+          style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 14),
+        ),
+        content: Text(
+          'Are you sure you want to delete all $conversationCount chat${conversationCount == 1 ? '' : 's'}?\n\nThis action cannot be undone.',
+          style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Delete All',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12,
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      print('🗑️ Attempting to delete all conversations ($conversationCount total)');
+      
+      try {
+        await conversationProvider.clearAllConversations();
+        
+        // Clear the UI messages
+        if (mounted) {
+          setState(() {
+            _messages.clear();
+          });
+        }
+        
+        // Create a new default conversation
+        await conversationProvider.createConversation('Chat 1');
+        
+        print('🗑️ All conversations deleted and new default created');
+      } catch (e) {
+        print('🔴 Error deleting all conversations: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting conversations: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } else {
+      print('🗑️ Delete all cancelled by user');
     }
   }
 
