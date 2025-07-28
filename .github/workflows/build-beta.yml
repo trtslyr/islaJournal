@@ -82,44 +82,10 @@ jobs:
           name: windows-build
           path: IslaJournal-Windows.zip
 
-  build-android:
-    name: Build Android
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: 'stable'
-          cache: true
-
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Build Android APK
-        run: flutter build apk --release
-
-      - name: Rename APK
-        run: cp build/app/outputs/flutter-apk/app-release.apk IslaJournal-Android.apk
-
-      - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-build
-          path: IslaJournal-Android.apk
 
   create-release:
     name: Create GitHub Release
-    needs: [build-macos, build-windows, build-android]
+    needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -137,11 +103,7 @@ jobs:
           name: windows-build
           path: ./artifacts/
 
-      - name: Download Android build
-        uses: actions/download-artifact@v4
-        with:
-          name: android-build
-          path: ./artifacts/
+
 
       - name: Get version
         id: version
@@ -160,7 +122,6 @@ jobs:
           files: |
             ./artifacts/IslaJournal-macOS.zip
             ./artifacts/IslaJournal-Windows.zip
-            ./artifacts/IslaJournal-Android.apk
           draft: false
           prerelease: true
           generate_release_notes: true
@@ -173,13 +134,11 @@ jobs:
             
             - 🍎 **macOS**: `IslaJournal-macOS.zip`
             - 🪟 **Windows**: `IslaJournal-Windows.zip`
-            - 🤖 **Android**: `IslaJournal-Android.apk`
             
             ## Installation
             
             **macOS**: Extract → Right-click app → "Open" → "Open"  
-            **Windows**: Extract → Run `isla_journal.exe` (click "Run anyway" if warned)  
-            **Android**: Enable "Unknown Sources" → Install APK
+            **Windows**: Extract → Run `isla_journal.exe` (click "Run anyway" if warned)
             
             ## Features
             - ✅ Beautiful JetBrains Mono interface
