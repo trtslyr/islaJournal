@@ -1,0 +1,145 @@
+name: 🚀 Build Beta Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version'
+        required: false
+        default: 'beta-1'
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+
+jobs:
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build macOS app
+        run: flutter build macos --release
+
+      - name: Create macOS ZIP
+        run: |
+          cd build/macos/Build/Products/Release/
+          zip -r IslaJournal-macOS.zip isla_journal.app/
+          mv IslaJournal-macOS.zip $GITHUB_WORKSPACE/
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: IslaJournal-macOS.zip
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows app
+        run: flutter build windows --release
+
+      - name: Create Windows ZIP
+        run: |
+          cd build/windows/x64/runner/Release/
+          7z a IslaJournal-Windows.zip *
+          move IslaJournal-Windows.zip $env:GITHUB_WORKSPACE\
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: IslaJournal-Windows.zip
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-build
+          path: ./artifacts/
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: ./artifacts/
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ inputs.version }}" != "" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=beta-1" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "🧪 Isla Journal Beta 1"
+          files: |
+            ./artifacts/IslaJournal-macOS.zip
+            ./artifacts/IslaJournal-Windows.zip
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            # 🧪 Isla Journal Beta 1
+            
+            **Ready for your paying customers!**
+            
+            ## Download
+            
+            - 🍎 **macOS**: `IslaJournal-macOS.zip`
+            - 🪟 **Windows**: `IslaJournal-Windows.zip`
+            
+            ## Installation
+            
+            **macOS**: Extract → Right-click app → "Open" → "Open"  
+            **Windows**: Extract → Run `isla_journal.exe` (click "Run anyway" if warned)
+            
+            ## Features
+            - ✅ Beautiful JetBrains Mono interface
+            - ✅ File & folder organization  
+            - ✅ Rich text editing
+            - ✅ Full-text search
+            - ✅ 100% offline
+            
+            Built from commit: `${{ github.sha }}`
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
