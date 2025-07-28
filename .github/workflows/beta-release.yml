@@ -131,12 +131,14 @@ jobs:
           tag_name: ${{ steps.version.outputs.version }}
           name: "🧪 Isla Journal Beta ${{ steps.version.outputs.version }}"
           files: |
-            IslaJournal-macOS-Beta/IslaJournal-macOS-Beta.zip
-            IslaJournal-Windows-Beta/IslaJournal-Windows-Beta.zip  
-            IslaJournal-Linux-Beta/IslaJournal-Linux-Beta.tar.gz
+            IslaJournal-macOS-Beta/*.zip
+            IslaJournal-Windows-Beta/*.zip  
+            IslaJournal-Linux-Beta/*.tar.gz
           draft: false
           prerelease: true
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           body: |
             # 🧪 Isla Journal Beta Release
             
