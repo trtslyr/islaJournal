@@ -10,6 +10,7 @@ import '../widgets/resize_handle.dart';
 import '../widgets/search_widget.dart';
 
 import '../screens/settings_screen.dart';
+import '../screens/mobile_home_screen.dart';
 import '../core/theme/app_theme.dart';
 import '../models/journal_file.dart';
 import '../services/validation_service.dart';
@@ -89,6 +90,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Check if we're on mobile (screen width < 768)
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+    
+    if (isMobile) {
+      return const MobileHomeScreen();
+    }
+    
     return Scaffold(
       body: _buildBody(),
     );
