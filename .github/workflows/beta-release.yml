@@ -1,0 +1,201 @@
+name: Beta Release - Desktop Platforms
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - '*.md'
+      - '.gitignore'
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      version:
+        description: 'Beta version (e.g., v1.0.0-beta.1)'
+        required: true
+        default: 'v1.0.0-beta.1'
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+
+jobs:
+  build-beta:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+            artifact-name: IslaJournal-macOS-Beta
+            executable-path: build/macos/Build/Products/Release/isla_journal.app
+            
+          - os: windows-latest
+            platform: windows
+            artifact-name: IslaJournal-Windows-Beta
+            executable-path: build/windows/x64/runner/Release/
+            
+          - os: ubuntu-latest
+            platform: linux
+            artifact-name: IslaJournal-Linux-Beta
+            executable-path: build/linux/x64/release/bundle/
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Get Flutter version info
+        run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: Build ${{ matrix.platform }} release
+        run: flutter build ${{ matrix.platform }} --release
+
+      - name: Create version info file
+        run: |
+          echo "Isla Journal Beta" > version_info.txt
+          echo "Built: $(date)" >> version_info.txt
+          echo "Commit: ${{ github.sha }}" >> version_info.txt
+          echo "Platform: ${{ matrix.platform }}" >> version_info.txt
+          echo "Flutter: ${{ env.FLUTTER_VERSION }}" >> version_info.txt
+
+      - name: Package macOS app
+        if: matrix.platform == 'macos'
+        run: |
+          cd build/macos/Build/Products/Release/
+          # Include version info
+          cp ../../../../../version_info.txt ./
+          zip -r ../../../../../${{ matrix.artifact-name }}.zip isla_journal.app version_info.txt
+          # Create DMG (optional, more professional)
+          # hdiutil create -format UDZO -srcfolder isla_journal.app ../../../../../${{ matrix.artifact-name }}.dmg
+
+      - name: Package Windows app  
+        if: matrix.platform == 'windows'
+        run: |
+          cd build/windows/x64/runner/Release/
+          copy ..\..\..\..\..\version_info.txt .
+          7z a ../../../../../${{ matrix.artifact-name }}.zip * version_info.txt
+
+      - name: Package Linux app
+        if: matrix.platform == 'linux'
+        run: |
+          cd build/linux/x64/release/bundle/
+          cp ../../../../../version_info.txt ./
+          tar -czf ../../../../../${{ matrix.artifact-name }}.tar.gz *
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: |
+            ${{ matrix.artifact-name }}.zip
+            ${{ matrix.artifact-name }}.tar.gz
+          retention-days: 30
+
+  create-beta-release:
+    needs: build-beta
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event.inputs.version }}" != "" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # Auto-generate beta version based on date
+            echo "version=v1.0.0-beta.$(date +%Y%m%d.%H%M)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Beta Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "🧪 Isla Journal Beta ${{ steps.version.outputs.version }}"
+          files: |
+            IslaJournal-macOS-Beta/IslaJournal-macOS-Beta.zip
+            IslaJournal-Windows-Beta/IslaJournal-Windows-Beta.zip  
+            IslaJournal-Linux-Beta/IslaJournal-Linux-Beta.tar.gz
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            # 🧪 Isla Journal Beta Release
+            
+            **This is a BETA version for testing purposes.**
+            
+            ## 📥 Download for Your Platform
+            
+            | Platform | Download | Size |
+            |----------|----------|------|
+            | 🍎 **macOS** | [IslaJournal-macOS-Beta.zip](../../releases/download/${{ steps.version.outputs.version }}/IslaJournal-macOS-Beta.zip) | ~50MB |
+            | 🪟 **Windows** | [IslaJournal-Windows-Beta.zip](../../releases/download/${{ steps.version.outputs.version }}/IslaJournal-Windows-Beta.zip) | ~40MB |
+            | 🐧 **Linux** | [IslaJournal-Linux-Beta.tar.gz](../../releases/download/${{ steps.version.outputs.version }}/IslaJournal-Linux-Beta.tar.gz) | ~45MB |
+            
+            ## 🚀 Installation Instructions
+            
+            ### macOS
+            1. Download and extract `IslaJournal-macOS-Beta.zip`
+            2. **Right-click** the app → **"Open"** (bypass Gatekeeper warning)
+            3. Click **"Open"** again in the dialog
+            
+            ### Windows  
+            1. Download and extract `IslaJournal-Windows-Beta.zip`
+            2. If Windows SmartScreen appears → **"More info"** → **"Run anyway"**
+            3. Run `isla_journal.exe`
+            
+            ### Linux
+            1. Download and extract `IslaJournal-Linux-Beta.tar.gz`
+            2. Make executable: `chmod +x isla_journal`
+            3. Run: `./isla_journal`
+            
+            ## ✨ What's New in This Beta
+            - Phase 1 complete: Core journaling features
+            - Beautiful analog-inspired UI with JetBrains Mono
+            - File & folder organization
+            - Full-text search across entries
+            - Rich text editing
+            - Complete offline functionality
+            
+            ## 🐛 Found a Bug?  
+            [**Report it here**](../../issues/new) or email `beta@islajournal.app`
+            
+            ## 📊 Beta Testing Goals
+            - [ ] Test file creation/editing
+            - [ ] Test search functionality  
+            - [ ] Test folder organization
+            - [ ] Performance on your system
+            - [ ] UI/UX feedback
+            
+            ---
+            
+            **Build Info:**
+            - Commit: `${{ github.sha }}`
+            - Built: $(date)
+            - Flutter: ${{ env.FLUTTER_VERSION }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post to Discussions (optional)
+        if: success()
+        run: |
+          echo "🎉 New beta release created: ${{ steps.version.outputs.version }}"
+          echo "You could set up automatic notifications to Discord/Slack here" 

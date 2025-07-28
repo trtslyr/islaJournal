@@ -6,28 +6,37 @@ A fully offline AI-powered journaling application with a simple, Notion-like UI 
 
 **Want to try Isla Journal?** We're currently in beta testing!
 
-### 📱 **Mobile Beta (Recommended)**
-- **iOS**: Join our [TestFlight Beta](https://testflight.apple.com/join/YOUR_CODE) 
-- **Android**: Join our [Play Store Beta](https://play.google.com/apps/testing/com.islajournal.app)
+### 💻 **Desktop Beta** *(Recommended - All Platforms)*
 
-### 💻 **Desktop Beta**
-1. **Visit our [Releases page](https://github.com/YOUR_USERNAME/isla-journal/releases)**
-2. **Download** the latest version for your platform:
-   - 🍎 **macOS**: `IslaJournal-macOS.zip`
-   - 🪟 **Windows**: `IslaJournal-Windows.zip` 
-   - 🐧 **Linux**: `IslaJournal-Linux.tar.gz`
-3. **Extract** the downloaded file
-4. **Run** the application
+**[📥 Download Latest Beta →](../../releases)**
 
-#### ⚠️ **First-time Setup**
-Since these are unsigned beta builds, you may see security warnings:
+| Platform | Download | Installation |
+|----------|----------|-------------|
+| 🍎 **macOS** | `IslaJournal-macOS-Beta.zip` | Right-click app → "Open" → "Open" |
+| 🪟 **Windows** | `IslaJournal-Windows-Beta.zip` | "More info" → "Run anyway" |
+| 🐧 **Linux** | `IslaJournal-Linux-Beta.tar.gz` | `chmod +x isla_journal && ./isla_journal` |
 
-**macOS**: Right-click the app → "Open" → "Open" (bypass Gatekeeper)
-**Windows**: Click "More info" → "Run anyway" (bypass SmartScreen)  
-**Linux**: Make the file executable: `chmod +x isla_journal`
+### ✨ **Why Desktop First?**
+- ✅ **No app store delays** - Instant beta releases
+- ✅ **All platforms supported** - macOS, Windows, Linux  
+- ✅ **No signing complications** - Direct downloads
+- ✅ **Automatic updates** - New betas on every code change
+- ✅ **Professional experience** - Full-featured desktop app
+
+### 📱 **Mobile Beta** *(Coming Soon)*
+- **iOS**: TestFlight beta (Phase 2)
+- **Android**: Play Store internal testing (Phase 2)
+
+### 🚀 **Beta Release Schedule**
+- **Automatic**: New beta on every `main` branch update
+- **Manual**: On-demand releases for testing specific features
+- **Versioning**: `v1.0.0-beta.YYYYMMDD.HHMM`
 
 ### 🐛 **Report Issues**
-Found a bug or have feedback? [Create an issue](https://github.com/YOUR_USERNAME/isla-journal/issues/new) or email us at beta@islajournal.app
+Found a bug or have feedback? 
+- [**Create an issue**](../../issues/new) 
+- Email: `beta@islajournal.app`
+- **Include**: Your platform, version, and steps to reproduce
 
 ---
 
