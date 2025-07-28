@@ -404,8 +404,8 @@ class _AIChatPanelState extends State<AIChatPanel> {
         _buildQuickActionButton('summarize', () {
           _sendQuickMessage('Summarize my recent journal entries and key themes');
         }),
-        _buildQuickActionButton('continue writing', () {
-          _sendQuickMessage('Help me continue writing based on my current entry');
+        _buildQuickActionButton('dig deeper', () {
+          _sendQuickMessage('Ask me an insightful question to help me reflect deeper on my recent journal entries');
         }),
       ],
     );

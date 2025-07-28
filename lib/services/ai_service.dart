@@ -484,7 +484,7 @@ class AIService {
       final messages = <Message>[];
       
       // Add a default system prompt if none provided
-      final defaultSystemPrompt = systemPrompt ?? '''You are a close friend who knows this person well. Respond naturally and directly, like you would in any normal conversation. Be warm, authentic, and helpful.''';
+      final defaultSystemPrompt = systemPrompt ?? '''You are a helpful AI assistant. Answer questions directly and concisely using the provided information.''';
       
       messages.add(Message(Role.system, defaultSystemPrompt));
       messages.add(Message(Role.user, prompt));
@@ -565,10 +565,7 @@ class AIService {
       final messages = <Message>[];
       
       // Add system prompt emphasizing natural completion
-      final defaultSystemPrompt = systemPrompt ?? '''You are a helpful friend who has read someone's journal. 
-Respond naturally and directly to their questions. 
-Answer completely but concisely - say what needs to be said, then stop naturally.
-Never mention that you are an AI or language model.''';
+      final defaultSystemPrompt = systemPrompt ?? '''Complete the text naturally and concisely. Continue the thought or idea without unnecessary elaboration. Don't mention being an AI.''';
       
       messages.add(Message(Role.system, defaultSystemPrompt));
       messages.add(Message(Role.user, prompt));
@@ -700,7 +697,7 @@ Never mention that you are an AI or language model.''';
       final messages = <Message>[];
       
       // Add a default system prompt if none provided
-      final defaultSystemPrompt = systemPrompt ?? '''You are a close friend who knows this person well. Respond naturally and directly, like you would in any normal conversation. Be warm, authentic, and helpful.''';
+      final defaultSystemPrompt = systemPrompt ?? '''You are a helpful AI assistant. Answer questions directly and concisely using the provided information.''';
       
       messages.add(Message(Role.system, defaultSystemPrompt));
       messages.add(Message(Role.user, prompt));

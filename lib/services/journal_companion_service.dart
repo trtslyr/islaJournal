@@ -42,17 +42,17 @@ class JournalCompanionService {
       // 1. CORE CONTEXT (Always included, minimal tokens)
       final conversationContext = _getConversationHistory(conversation, 300);
       
-      // 2. PINNED CONTEXT (User-selected important content)
-      final pinnedContext = await _getPinnedContent(userTokens ~/ 3); // Use up to 1/3 of tokens for pinned content
+      // 2. PINNED CONTEXT (Background info, limited allocation)
+      final pinnedContext = await _getPinnedContent(userTokens ~/ 8); // Only 1/8 of tokens for pinned content
       final pinnedTokensUsed = _estimateTokens(pinnedContext);
       
-      // 3. CUSTOM CONTEXT (Use what's actually needed, not a fixed budget)
-      final customContext = await _getCustomContext(settings, userTokens); 
+      // 3. CUSTOM CONTEXT (User-selected files, moderate allocation)
+      final customContext = await _getCustomContext(settings, userTokens ~/ 4); // Cap at 1/4 of tokens
       final customTokensUsed = _estimateTokens(customContext);
       
-      // 4. EMBEDDINGS (Gets remaining tokens)
-      final coreTokensUsed = 300 + pinnedTokensUsed; // conversation(300) + pinned(actual usage)
-      final remainingTokensForEmbeddings = userTokens - coreTokensUsed - customTokensUsed;
+      // 4. EMBEDDINGS (Query-relevant content gets majority of remaining tokens)
+      final coreTokensUsed = 300 + pinnedTokensUsed + customTokensUsed; // conversation + pinned + custom
+      final remainingTokensForEmbeddings = userTokens - coreTokensUsed;
       
       final relevantEntries = await _getRelevantEntriesFromEmbeddings(userQuery, remainingTokensForEmbeddings);
       
@@ -95,7 +95,7 @@ class JournalCompanionService {
       print('   💬 Building conversation context...');
       
       // Get recent messages (last 3 exchanges = 6 messages max) - reduced to avoid confusion
-      final recentHistory = conversation!.history.reversed.take(6).toList().reversed.toList();
+      final recentHistory = conversation!.history.reversed.take(10).toList().reversed.toList();
       
       final conversationLines = <String>[];
       int usedTokens = 0;
@@ -377,7 +377,8 @@ class JournalCompanionService {
     required String pinnedContext,
   }) async {
       
-    final systemPrompt = '''You are a close friend who knows this person well. Respond naturally and directly, like you would in any normal conversation. Be warm, authentic, and helpful.''';
+    final systemPrompt = '''YOU ARE A JOURNAL ANALYST AI ASSISTANT. YOU PROVIDE INSIGHT TO HELP USER MAKE DECISIONS, SET GOALS, AND MOVE FORWARD. USE PROVIDED CONTEXT to  CONVERSATIONALLY respond to the QUESTION/COMMENT at the end of the prompt, taking into account any previous conversation had. YOU ARE TALKING TO THE USER!!! NEVER REFER TO USER IN THE THIRD PERSON. RULES:1.Be conversational, ask follow up questions. 2. Don't acknowledge reading their journal or thank them for sharing. 3. ROUGHLY 200 WORD MAX RESPONSE LENGTH''';
+
 
     // Build a conversational prompt that weaves context naturally
     final prompt = _buildConversationalPrompt(
@@ -401,47 +402,47 @@ class JournalCompanionService {
   }) {
     final parts = <String>[];
     
-    // Start with the user's actual question/statement
-    parts.add(userQuery);
-    
-    // Add conversational context if we have recent chat history
+    // Add context FIRST (in order of relevance to query)
     if (conversationContext.isNotEmpty) {
-      parts.add('\n--- Our Recent Conversation ---');
+      parts.add('--- Recent Conversation ---');
       parts.add(conversationContext);
+      parts.add('--- End Recent Conversation ---\n');
     }
     
-    // Integrate relevant background information naturally
-    final backgroundInfo = <String>[];
-    
-    if (pinnedContext.isNotEmpty) {
-      backgroundInfo.add('Important context you should know:\n$pinnedContext');
-    }
-    
-    if (customContext.isNotEmpty) {
-      backgroundInfo.add('Specific entries you wanted me to consider:\n$customContext');
-    }
-    
+    // Most relevant content first (query-specific results)
     if (relevantEntries.isNotEmpty) {
-      backgroundInfo.add('Related things you\'ve written about:\n$relevantEntries');
+      parts.add('--- Relevant Journal Entries ---');
+      parts.add(relevantEntries);
+      parts.add('--- End Relevant Entries ---\n');
     }
     
-    // Add background info conversationally
-    if (backgroundInfo.isNotEmpty) {
-      parts.add('\n--- Background Context ---');
-      parts.addAll(backgroundInfo);
-      parts.add('\n--- End Context ---');
-      parts.add('\nNow, knowing all of this about you and what you\'ve shared, here\'s what I think about your question...');
+    // User-selected content next
+    if (customContext.isNotEmpty) {
+      parts.add('--- Selected Files ---');
+      parts.add(customContext);
+      parts.add('--- End Selected Files ---\n');
     }
+    
+    // General background last (least priority)
+    if (pinnedContext.isNotEmpty) {
+      parts.add('--- Background Context ---');
+      parts.add(pinnedContext);
+      parts.add('--- End Background ---\n');
+    }
+    
+    // PUT USER QUERY LAST - this gets the most attention from LLM
+    parts.add('--- QUESTION ---');
+    parts.add(userQuery);
     
     return parts.join('\n');
   }
 
-  /// Generate a complete response with natural completion
+  /// Generate a complete response for Q&A
   Future<String> _generateCompleteResponse(String prompt, String systemPrompt) async {
-    // Let AI complete naturally with character limit
-    final response = await _aiService.generateTextNaturally(
+    // Use standard text generation for Q&A responses
+    final response = await _aiService.generateText(
       prompt,
-      temperature: 0.5, // LOWER - More focused and direct responses
+      temperature: 0.7, // LOWER - More focused and direct responses
       systemPrompt: systemPrompt,
     );
     
