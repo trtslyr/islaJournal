@@ -1,0 +1,126 @@
+name: Mac + Windows Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: false
+        default: 'beta-1'
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+            artifact-name: IslaJournal-macOS
+            
+          - os: windows-latest
+            platform: windows
+            artifact-name: IslaJournal-Windows
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build ${{ matrix.platform }} release
+        run: flutter build ${{ matrix.platform }} --release
+
+      - name: Package macOS app
+        if: matrix.platform == 'macos'
+        run: |
+          cd build/macos/Build/Products/Release/
+          zip -r ../../../../../${{ matrix.artifact-name }}.zip isla_journal.app
+
+      - name: Package Windows app  
+        if: matrix.platform == 'windows'
+        run: |
+          cd build/windows/x64/runner/Release/
+          7z a ../../../../../${{ matrix.artifact-name }}.zip *
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-name }}.zip
+          retention-days: 30
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event.inputs.version }}" != "" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=beta-1" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "🧪 Isla Journal Beta 1 - Mac + Windows"
+          files: |
+            IslaJournal-macOS/IslaJournal-macOS.zip
+            IslaJournal-Windows/IslaJournal-Windows.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            # 🧪 Isla Journal Beta 1 - Ready for Your Customers!
+            
+            **Professional journaling app with beautiful analog interface**
+            
+            ## 📥 Download for Your Platform
+            
+            | Platform | Download | Installation |
+            |----------|----------|-------------|
+            | 🍎 **macOS** | IslaJournal-macOS.zip | Right-click app → "Open" → "Open" |
+            | 🪟 **Windows** | IslaJournal-Windows.zip | Extract & run `isla_journal.exe` |
+            
+            ## ✨ Features
+            - ✅ **Beautiful JetBrains Mono interface** 
+            - ✅ **File & folder organization**
+            - ✅ **Rich text editing**
+            - ✅ **Full-text search**
+            - ✅ **100% offline** - Complete privacy
+            - ✅ **Cross-platform** - Mac and Windows
+            
+            ## 🔒 Security Note
+            These are unsigned builds. Users may see security warnings:
+            - **macOS**: Right-click → "Open" (bypass Gatekeeper)
+            - **Windows**: "More info" → "Run anyway" (bypass SmartScreen)
+            
+            **Build Info:**
+            - Commit: ${{ github.sha }}
+            - Built: $(date)
+            - Flutter: ${{ env.FLUTTER_VERSION }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

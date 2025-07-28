@@ -1,0 +1,184 @@
+name: Firebase Beta Distribution
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - '*.md'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to build (comma-separated: android,ios,macos,windows,linux)'
+        required: false
+        default: 'android,macos'
+      release_notes:
+        description: 'Release notes for this beta'
+        required: false
+        default: 'New beta release with latest changes'
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+
+jobs:
+  # Mobile builds (Firebase App Distribution primary use case)
+  build-mobile:
+    runs-on: macos-latest  # macOS can build both iOS and Android
+    if: contains(github.event.inputs.platforms || 'android,macos', 'android') || contains(github.event.inputs.platforms || 'android,macos', 'ios')
+    strategy:
+      matrix:
+        platform: 
+          - ${{ contains(github.event.inputs.platforms || 'android,macos', 'android') && 'android' || '' }}
+          - ${{ contains(github.event.inputs.platforms || 'android,macos', 'ios') && 'ios' || '' }}
+        exclude:
+          - platform: ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Android APK
+        if: matrix.platform == 'android'
+        run: |
+          flutter build apk --release
+          echo "APK_PATH=build/app/outputs/flutter-apk/app-release.apk" >> $GITHUB_ENV
+
+      - name: Build iOS IPA  
+        if: matrix.platform == 'ios'
+        run: |
+          flutter build ios --release --no-codesign
+          # Create IPA manually since we're not code signing
+          mkdir -p build/ios/ipa
+          cp -r build/ios/Runner.app build/ios/ipa/
+          cd build/ios/ipa && zip -r ../Runner.ipa .
+          echo "IPA_PATH=build/ios/Runner.ipa" >> $GITHUB_ENV
+
+      - name: Upload to Firebase App Distribution
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          groups: beta-testers
+          file: ${{ matrix.platform == 'android' && env.APK_PATH || env.IPA_PATH }}
+          releaseNotes: |
+            🧪 Isla Journal Beta - ${{ matrix.platform }}
+            
+            ${{ github.event.inputs.release_notes || 'New beta release with latest changes' }}
+            
+            Built from commit: ${{ github.sha }}
+            Platform: ${{ matrix.platform }}
+            Flutter: ${{ env.FLUTTER_VERSION }}
+
+  # Desktop builds (Firebase Web App Distribution - less common but possible)
+  build-desktop:
+    runs-on: ${{ matrix.os }}
+    if: contains(github.event.inputs.platforms || 'android,macos', 'macos') || contains(github.event.inputs.platforms || 'android,macos', 'windows') || contains(github.event.inputs.platforms || 'android,macos', 'linux')
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+            enabled: ${{ contains(github.event.inputs.platforms || 'android,macos', 'macos') }}
+          - os: windows-latest  
+            platform: windows
+            enabled: ${{ contains(github.event.inputs.platforms || 'android,macos', 'windows') }}
+          - os: ubuntu-latest
+            platform: linux  
+            enabled: ${{ contains(github.event.inputs.platforms || 'android,macos', 'linux') }}
+        exclude:
+          - enabled: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build ${{ matrix.platform }} release
+        run: flutter build ${{ matrix.platform }} --release
+
+      - name: Create desktop app bundle
+        run: |
+          VERSION=$(date +%Y%m%d.%H%M)
+          echo "Creating bundle for ${{ matrix.platform }}"
+          
+          if [ "${{ matrix.platform }}" = "macos" ]; then
+            cd build/macos/Build/Products/Release/
+            zip -r ../../../../../IslaJournal-macOS-${VERSION}.zip isla_journal.app
+            echo "BUNDLE_PATH=IslaJournal-macOS-${VERSION}.zip" >> $GITHUB_ENV
+          elif [ "${{ matrix.platform }}" = "windows" ]; then
+            cd build/windows/x64/runner/Release/
+            7z a ../../../../../IslaJournal-Windows-${VERSION}.zip *
+            echo "BUNDLE_PATH=IslaJournal-Windows-${VERSION}.zip" >> $GITHUB_ENV
+          elif [ "${{ matrix.platform }}" = "linux" ]; then
+            cd build/linux/x64/release/bundle/
+            tar -czf ../../../../../IslaJournal-Linux-${VERSION}.tar.gz *
+            echo "BUNDLE_PATH=IslaJournal-Linux-${VERSION}.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Upload desktop build to Firebase
+        # Note: This is a workaround - Firebase App Distribution primarily supports mobile
+        # For desktop, we'll upload as a "generic" file to Firebase Storage
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          groups: beta-testers
+          file: ${{ env.BUNDLE_PATH }}
+          releaseNotes: |
+            🖥️ Isla Journal Desktop Beta - ${{ matrix.platform }}
+            
+            ${{ github.event.inputs.release_notes || 'New beta release with latest changes' }}
+            
+            Installation:
+            ${{ matrix.platform == 'macos' && '1. Download and extract ZIP\n2. Right-click app → "Open" → "Open"' || '' }}
+            ${{ matrix.platform == 'windows' && '1. Download and extract ZIP\n2. Run isla_journal.exe\n3. If SmartScreen appears: "More info" → "Run anyway"' || '' }}
+            ${{ matrix.platform == 'linux' && '1. Download and extract tar.gz\n2. chmod +x isla_journal\n3. ./isla_journal' || '' }}
+            
+            Built from commit: ${{ github.sha }}
+            Platform: ${{ matrix.platform }}
+            Flutter: ${{ env.FLUTTER_VERSION }}
+
+  # Create summary
+  summary:
+    needs: [build-mobile, build-desktop]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Beta Release Summary
+        run: |
+          echo "🧪 Firebase Beta Distribution Complete!"
+          echo "📱 Mobile builds: ${{ needs.build-mobile.result }}"  
+          echo "🖥️ Desktop builds: ${{ needs.build-desktop.result }}"
+          echo ""
+          echo "🔗 Check Firebase App Distribution:"
+          echo "https://console.firebase.google.com/project/${{ secrets.FIREBASE_PROJECT_ID }}/appdistribution"
+          echo ""
+          echo "📱 Testers can install via Firebase App Distribution:"
+          echo "- Mobile: Firebase app notifications"
+          echo "- Desktop: Download links in Firebase console" 
