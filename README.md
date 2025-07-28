@@ -2,19 +2,25 @@
 
 A fully offline AI-powered journaling application with a simple, Notion-like UI built with Flutter.
 
-## 🧪 **Beta Testing** 
+## 🚀 **Download Isla Journal v1.0.0** 
 
-**Want to try Isla Journal?** We're currently in beta testing!
+**Ready to start journaling?** Isla Journal is now available for download!
 
-### 💻 **Desktop Beta** *(Recommended - All Platforms)*
+### 💻 **Desktop Release** *(Available Now!)*
 
-**[📥 Download Latest Beta →](../../releases)**
+**[📥 Download Latest Release →](../../releases)**
 
-| Platform | Download | Installation |
-|----------|----------|-------------|
-| 🍎 **macOS** | `IslaJournal-macOS-Beta.zip` | Right-click app → "Open" → "Open" |
-| 🪟 **Windows** | `IslaJournal-Windows-Beta.zip` | "More info" → "Run anyway" |
-| 🐧 **Linux** | `IslaJournal-Linux-Beta.tar.gz` | `chmod +x isla_journal && ./isla_journal` |
+| Platform | Download | Status | Installation |
+|----------|----------|--------|-------------|
+| 🍎 **macOS** | `IslaJournal-macOS-v1.0.0.zip` | ✅ **Available** | Right-click app → "Open" → "Open" |
+| 🪟 **Windows** | `IslaJournal-Windows.zip` | 🔄 Building... | "More info" → "Run anyway" |
+| 🐧 **Linux** | `IslaJournal-Linux.tar.gz` | 🔄 Building... | `chmod +x isla_journal && ./isla_journal` |
+
+### 🎉 **Version 1.0.0 - Ready for Use!**
+- ✅ **Complete journaling experience** - File management, rich text, search
+- ✅ **Beautiful JetBrains Mono interface** - Analog typewriter aesthetic  
+- ✅ **100% offline** - No internet required, all data stored locally
+- ✅ **Cross-platform** - Works on macOS, Windows, Linux
 
 ### ✨ **Why Desktop First?**
 - ✅ **No app store delays** - Instant beta releases
@@ -186,5 +192,6 @@ This project is part of the Isla Journal development plan. See the main tech sta
 
 ---
 
-**Current Status**: Phase 1 Complete ✅  
-**Next**: Phase 2 - AI Integration 🤖
+**Current Status**: 🚀 **Version 1.0.0 Released!** ✅  
+**Next**: Phase 2 - AI Integration 🤖  
+**Download**: [Get Isla Journal →](../../releases)
