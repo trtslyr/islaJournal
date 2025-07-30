@@ -86,6 +86,16 @@ app.get('/admin/lifetime-licenses', (req, res) => {
   });
 });
 
+// Get all device licenses (for debugging subscriptions)
+app.get('/admin/device-licenses', (req, res) => {
+  db.all('SELECT * FROM device_licenses ORDER BY created_at DESC', (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
 // Validate lifetime license
 app.post('/validate-lifetime-key', (req, res) => {
   const { license_key } = req.body;
