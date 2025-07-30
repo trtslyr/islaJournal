@@ -334,3 +334,4 @@ app.listen(PORT, () => {
 });
 
 module.exports = app; // Force deployment trigger
+console.log('✅ Railway deployment active');
