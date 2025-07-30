@@ -335,4 +335,4 @@ app.listen(PORT, () => {
   console.log(`🔑 Admin endpoint: http://localhost:${PORT}/admin/lifetime-licenses`);
 });
 
-module.exports = app; 
+module.exports = app; // Force deployment trigger
