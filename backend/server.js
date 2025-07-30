@@ -9,10 +9,8 @@ const { v4: uuidv4 } = require('uuid');
 const app = express();
 app.use(cors());
 
-// For Stripe webhooks - MUST be before express.json()
+// CRITICAL: Raw body parsing for webhooks BEFORE json parsing
 app.use('/stripe/webhook', express.raw({type: 'application/json'}));
-
-// For all other routes
 app.use(express.json());
 
 // Initialize Database
