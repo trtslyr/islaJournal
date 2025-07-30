@@ -64,6 +64,12 @@ dependencies:
   http: ^1.1.0
   dio: ^5.4.0  # For progressive downloads
   crypto: ^3.0.3  # For model verification
+  
+  # License System Dependencies
+  flutter_secure_storage: ^9.0.0
+  url_launcher: ^6.1.12
+  webview_flutter: ^4.4.2
+  device_info_plus: ^9.1.0
 
 dev_dependencies:
   flutter_test:

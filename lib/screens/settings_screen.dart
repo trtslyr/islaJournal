@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../providers/ai_provider.dart';
 import '../providers/layout_provider.dart';
 import '../providers/journal_provider.dart';
+import '../providers/license_provider.dart';
+import '../widgets/license_dialog.dart';
 import '../services/journal_companion_service.dart';
 import '../services/ai_service.dart';
 import '../services/database_service.dart';
@@ -21,6 +25,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   static const String _tokenUsageKey = 'context_token_usage';
   double _currentTokens = 4000.0; // Updated default value to match new range
+  bool _showLicenseKey = false;
+  String? _currentLicenseKey;
   
   @override
   void initState() {
@@ -97,25 +103,493 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
-      body: Consumer<AIProvider>(
-        builder: (context, aiProvider, child) {
-          return ListView(
-            padding: const EdgeInsets.all(16.0),
-            children: [
-              _buildAISection(aiProvider),
-              const SizedBox(height: 24),
-              _buildContextSection(),
-              const SizedBox(height: 24),
-              _buildImportExportSection(),
-              const SizedBox(height: 24),
-              _buildStorageSection(aiProvider),
-              const SizedBox(height: 24),
-              _buildAboutSection(),
-            ],
-          );
+      body: Consumer2<AIProvider, LicenseProvider>(
+        builder: (context, aiProvider, licenseProvider, child) {
+                      return ListView(
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                _buildAISection(aiProvider),
+                const SizedBox(height: 24),
+                _buildContextSection(),
+                const SizedBox(height: 24),
+                _buildImportExportSection(),
+                const SizedBox(height: 24),
+                _buildStorageSection(aiProvider),
+                const SizedBox(height: 24),
+                _buildLicenseSection(licenseProvider),
+                const SizedBox(height: 24),
+                _buildAboutSection(),
+              ],
+            );
         },
       ),
     );
+  }
+
+  /// License Status section showing current subscription/license info
+  Widget _buildLicenseSection(LicenseProvider licenseProvider) {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      color: AppTheme.darkerCream,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header
+          Row(
+            children: [
+              Text(
+                _getLicenseIcon(licenseProvider),
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
+                  color: AppTheme.warmBrown,
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Account Status',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.warmBrown,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          // License status display
+          _buildLicenseStatusCard(licenseProvider),
+          
+          const SizedBox(height: 16),
+          
+          // Action buttons
+          _buildLicenseActions(licenseProvider),
+        ],
+      ),
+    );
+  }
+
+  String _getLicenseIcon(LicenseProvider licenseProvider) {
+    if (licenseProvider.isLifetime) return '⭐';
+    if (licenseProvider.isSubscription) return '💎';
+    if (licenseProvider.isTrial) return '⏰';
+    return '🔑';
+  }
+
+  Widget _buildLicenseStatusCard(LicenseProvider licenseProvider) {
+    final status = licenseProvider.licenseStatus;
+    
+    return Container(
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: _getLicenseCardColor(licenseProvider),
+        borderRadius: BorderRadius.circular(4.0),
+        border: Border.all(
+          color: AppTheme.warmBrown.withOpacity(0.3),
+          width: 1.0,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // License type
+          Text(
+            _getLicenseTitle(licenseProvider),
+            style: const TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.darkText,
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // License details
+          Text(
+            _getLicenseDescription(licenseProvider),
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              color: AppTheme.mediumGray,
+            ),
+          ),
+          
+          // License key display (if shown)
+          if (_showLicenseKey && _currentLicenseKey != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+              decoration: BoxDecoration(
+                color: AppTheme.darkerBrown.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4.0),
+                border: Border.all(color: AppTheme.darkerBrown.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'License Key:',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 10.0,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.darkerBrown,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    _currentLicenseKey!,
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 11.0,
+                      color: AppTheme.darkText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          
+          // Trial countdown if applicable
+          if (licenseProvider.isTrial && status?.trialHoursRemaining != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+              decoration: BoxDecoration(
+                color: AppTheme.warmBrown.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(2.0),
+              ),
+              child: Text(
+                '${status!.trialHoursRemaining} hours remaining',
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 10.0,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.warmBrown,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Color _getLicenseCardColor(LicenseProvider licenseProvider) {
+    if (licenseProvider.isLifetime) return AppTheme.warmBrown.withOpacity(0.1);
+    if (licenseProvider.isSubscription) return AppTheme.darkerBrown.withOpacity(0.1);
+    if (licenseProvider.isTrial) return AppTheme.creamBeige;
+    return AppTheme.warningRed.withOpacity(0.1);
+  }
+
+  String _getLicenseTitle(LicenseProvider licenseProvider) {
+    final status = licenseProvider.licenseStatus;
+    
+    if (licenseProvider.isLifetime) {
+      return 'Lifetime License${status?.customerName != null ? ' - ${status!.customerName}' : ''}';
+    }
+    if (licenseProvider.isSubscription) {
+      final planType = status?.planType ?? '';
+      return '${planType.toUpperCase()} Subscription';
+    }
+    if (licenseProvider.isTrial) {
+      return 'Free Trial Active';
+    }
+    return 'Unlicensed';
+  }
+
+  String _getLicenseDescription(LicenseProvider licenseProvider) {
+    final status = licenseProvider.licenseStatus;
+    
+    if (licenseProvider.isLifetime) {
+      return 'Full access forever • No expiration • Works offline';
+    }
+    if (licenseProvider.isSubscription) {
+      if (status?.expiresAt != null) {
+        final expiryDate = status!.expiresAt!;
+        final daysUntilExpiry = expiryDate.difference(DateTime.now()).inDays;
+        return 'Renews in $daysUntilExpiry days • Full access • Manage via customer portal';
+      }
+      return 'Active subscription • Full access';
+    }
+    if (licenseProvider.isTrial) {
+      return 'Full access during trial period • Upgrade anytime';
+    }
+    return 'Trial expired • Please upgrade to continue using';
+  }
+
+  Widget _buildLicenseActions(LicenseProvider licenseProvider) {
+    return Row(
+      children: [
+        // Manage subscription button (subscription users only)
+        if (licenseProvider.isSubscription) ...[
+          ElevatedButton(
+            onPressed: () => _openSubscriptionManagement(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.warmBrown,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: const Text(
+              'Manage Subscription',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        
+        // Show license key for subscription users only
+        if (licenseProvider.isSubscription) ...[
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _toggleLicenseKeyVisibility,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _showLicenseKey ? AppTheme.mediumGray : AppTheme.darkerBrown,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              child: Text(
+                _showLicenseKey ? 'Hide Key' : 'Show Key',
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12.0,
+                ),
+              ),
+            ),
+          ],
+        
+        // Upgrade button (for trial users)
+        if (licenseProvider.isTrial) ...[
+          ElevatedButton(
+            onPressed: () => _openUpgradeOptions(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.darkerBrown,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: const Text(
+              'Upgrade Now',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+        ],
+        
+        // License expired - upgrade button
+        if (licenseProvider.needsLicense) ...[
+          ElevatedButton(
+            onPressed: () => _openUpgradeOptions(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.warningRed,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: const Text(
+              'Activate License',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+        ],
+        
+        // Add some space before debug section
+        const Spacer(),
+        
+        // 🧪 TESTING: Logout button (for testing different license states)
+        ElevatedButton(
+          onPressed: () => _logoutForTesting(licenseProvider),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.mediumGray,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          child: const Text(
+            '🧪 Logout (Testing)',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              color: Colors.black54,
+            ),
+          ),
+        ),
+        
+        const SizedBox(width: 8),
+        
+        // 🧪 TESTING: Reset trial button  
+        ElevatedButton(
+          onPressed: () => _resetTrialForTesting(licenseProvider),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.mediumGray,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          child: const Text(
+            '🔄 Reset Trial',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              color: Colors.black54,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Open subscription management (Stripe customer portal)
+  Future<void> _openSubscriptionManagement() async {
+    try {
+      const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
+      await launchUrl(Uri.parse(portalUrl), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening subscription management: $e'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openUpgradeOptions() async {
+    // Show license dialog
+    showDialog(
+      context: context,
+      builder: (context) => LicenseDialog(canDismiss: true),
+    );
+  }
+
+  // 🧪 TESTING: Clear all license data and revert to trial
+  Future<void> _logoutForTesting(LicenseProvider licenseProvider) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.creamBeige,
+        title: const Text(
+          '🧪 Testing Logout',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: const Text(
+          'This will clear all license data and revert to trial mode.\n\nThis is for testing purposes only.',
+          style: TextStyle(fontFamily: 'JetBrainsMono'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warningRed),
+            child: const Text('Clear License Data'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        // Clear all license data
+        await licenseProvider.clearLicenseData();
+        
+        // Reinitialize to start fresh trial
+        await licenseProvider.initialize();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ License data cleared! Reverted to trial mode.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Error clearing license data: $e'),
+              backgroundColor: AppTheme.warningRed,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // 🧪 TESTING: Reset trial period
+  Future<void> _resetTrialForTesting(LicenseProvider licenseProvider) async {
+    try {
+      // Reset trial period
+      await licenseProvider.resetTrial();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔄 Trial period reset! Starting fresh 24-hour trial.'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error resetting trial: $e'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+      }
+    }
+  }
+  
+  // Toggle license key visibility
+  Future<void> _toggleLicenseKeyVisibility() async {
+    if (!_showLicenseKey) {
+      // Load the license key from storage
+      try {
+        final storage = FlutterSecureStorage();
+        String? licenseKey;
+        
+        // Try lifetime key first
+        licenseKey = await storage.read(key: 'license_key');
+        
+        // If no lifetime key, try subscription key
+        if (licenseKey == null) {
+          licenseKey = await storage.read(key: 'subscription_key');
+        }
+        
+        // Fallback to SharedPreferences if secure storage fails
+        if (licenseKey == null) {
+          final prefs = await SharedPreferences.getInstance();
+          licenseKey = prefs.getString('license_key') ?? prefs.getString('subscription_key');
+        }
+        
+        setState(() {
+          _currentLicenseKey = licenseKey ?? 'No license key found';
+          _showLicenseKey = true;
+        });
+      } catch (e) {
+        debugPrint('Error loading license key: $e');
+        setState(() {
+          _currentLicenseKey = 'Error loading key';
+          _showLicenseKey = true;
+        });
+      }
+    } else {
+      setState(() {
+        _showLicenseKey = false;
+        _currentLicenseKey = null;
+      });
+    }
   }
 
   /// AI Models section with model management

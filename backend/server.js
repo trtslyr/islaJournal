@@ -326,6 +326,36 @@ app.post('/customer-portal', async (req, res) => {
   );
 });
 
+// TEMPORARY: Admin endpoint to add lifetime license
+app.post('/admin/add-lifetime-key', (req, res) => {
+  const { license_key, email, name } = req.body;
+  
+  if (!license_key || !email) {
+    return res.status(400).json({ error: 'License key and email are required' });
+  }
+  
+  const id = uuidv4();
+  
+  db.run(
+    'INSERT INTO lifetime_licenses (id, license_key, customer_email, customer_name) VALUES (?, ?, ?, ?)',
+    [id, license_key, email, name || 'Test User'],
+    function(err) {
+      if (err) {
+        console.error('Error adding lifetime license:', err);
+        return res.status(500).json({ error: 'Failed to add license' });
+      }
+      
+      console.log(`✅ Added lifetime license: ${license_key} for ${email}`);
+      res.json({ 
+        success: true, 
+        message: 'Lifetime license added successfully',
+        license_key: license_key,
+        email: email
+      });
+    }
+  );
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Isla Journal Backend running on port ${PORT}`);

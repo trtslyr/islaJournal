@@ -10,7 +10,6 @@ import '../widgets/resize_handle.dart';
 import '../widgets/search_widget.dart';
 
 import '../screens/settings_screen.dart';
-import '../screens/mobile_home_screen.dart';
 import '../core/theme/app_theme.dart';
 import '../models/journal_file.dart';
 import '../services/validation_service.dart';
@@ -90,14 +89,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Check if we're on mobile (screen width < 768)
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 768;
-    
-    if (isMobile) {
-      return const MobileHomeScreen();
-    }
-    
     return Scaffold(
       body: _buildBody(),
     );
@@ -201,43 +192,51 @@ class _HomeScreenState extends State<HomeScreen> {
                  ),
                ),
              ),
-             child: Row(
-               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-               children: [
-                 // Add folder
-                 TextButton(
-                   onPressed: _createNewFolder,
-                   style: TextButton.styleFrom(
-                     overlayColor: Colors.transparent,
-                   ),
-                   child: const Text(
-                     '+folder',
-                     style: TextStyle(
-                       fontFamily: 'JetBrainsMono',
-                       fontSize: 12.0,
-                       fontWeight: FontWeight.w400,
-                       color: AppTheme.warmBrown,
-                     ),
-                   ),
-                 ),
-                 // Add file
-                 TextButton(
-                   onPressed: _createNewFile,
-                   style: TextButton.styleFrom(
-                     overlayColor: Colors.transparent,
-                   ),
-                   child: const Text(
-                     '+entry',
-                     style: TextStyle(
-                       fontFamily: 'JetBrainsMono',
-                       fontSize: 12.0,
-                       fontWeight: FontWeight.w400,
-                       color: AppTheme.warmBrown,
-                     ),
-                   ),
-                 ),
-               ],
-             ),
+                         child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Add folder
+                Flexible(
+                  child: TextButton(
+                    onPressed: _createNewFolder,
+                    style: TextButton.styleFrom(
+                      overlayColor: Colors.transparent,
+                      minimumSize: Size.zero,
+                      padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                    ),
+                    child: const Text(
+                      '+',
+                      style: TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 12.0,
+                        fontWeight: FontWeight.w400,
+                        color: AppTheme.warmBrown,
+                      ),
+                    ),
+                  ),
+                ),
+                // Add file
+                Flexible(
+                  child: TextButton(
+                    onPressed: _createNewFile,
+                    style: TextButton.styleFrom(
+                      overlayColor: Colors.transparent,
+                      minimumSize: Size.zero,
+                      padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+                    ),
+                    child: const Text(
+                      '✎',
+                      style: TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 12.0,
+                        fontWeight: FontWeight.w400,
+                        color: AppTheme.warmBrown,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
            ),
           
                   // Content area
@@ -430,29 +429,24 @@ class _HomeScreenState extends State<HomeScreen> {
                          );
                        },
                      ),
-                     Expanded(
-                       child: Row(
-                         children: [
-                           const SizedBox(width: 8),
-                           Flexible(
-                             child: GestureDetector(
-                               onDoubleTap: () => _showEditFileDialog(context, selectedFile, provider),
-                               child: Text(
-                                 selectedFile.name,
-                                 style: const TextStyle(
-                                   fontFamily: 'JetBrainsMono',
-                                   fontSize: 14.0,
-                                   fontWeight: FontWeight.w500,
-                                   color: AppTheme.darkText,
-                                 ),
-                                 overflow: TextOverflow.ellipsis,
-                               ),
-                             ),
-                           ),
-                           const Spacer(),
-                         ],
-                       ),
-                     ),
+                                         Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: GestureDetector(
+                          onDoubleTap: () => _showEditFileDialog(context, selectedFile, provider),
+                          child: Text(
+                            selectedFile.name,
+                            style: const TextStyle(
+                              fontFamily: 'JetBrainsMono',
+                              fontSize: 14.0,
+                              fontWeight: FontWeight.w500,
+                              color: AppTheme.darkText,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ),
                      const SizedBox(width: 4),
                                             // AI chat toggle (far right)
                        Consumer<LayoutProvider>(
