@@ -437,12 +437,11 @@ class JournalCompanionService {
 
   /// Generate a complete response for Q&A
   Future<String> _generateCompleteResponse(String prompt, String systemPrompt) async {
+    // Combine system prompt with user prompt for the simplified AI service
+    final combinedPrompt = '$systemPrompt\n\n$prompt';
+    
     // Use standard text generation for Q&A responses
-    final response = await _aiService.generateText(
-      prompt,
-      temperature: 0.7, // LOWER - More focused and direct responses
-      systemPrompt: systemPrompt,
-    );
+    final response = await _aiService.generateText(combinedPrompt, maxTokens: 500);
     
     // Apply character limit with smart truncation
     return _applyResponseLimit(response.trim());

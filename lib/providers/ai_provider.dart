@@ -4,273 +4,174 @@ import '../services/ai_service.dart';
 class AIProvider with ChangeNotifier {
   final AIService _aiService = AIService();
   
-  // State variables
-  bool _isInitialized = false;
-  String? _currentModelId;
-  Map<String, ModelStatus> _modelStatuses = {};
-  DownloadProgress? _currentDownload;
+  // State
   String _aiResponse = '';
-  bool _isGenerating = false;
-  String? _error;
-  
-  // AI Features state
-  String? _currentMoodAnalysis;
-  String? _currentWritingAnalysis;
+  String _moodAnalysis = '';
+  String _writingAnalysis = '';
   List<String> _writingPrompts = [];
-  bool _showAISuggestions = true;
+  
+  // Download progress
+  DownloadProgress? _downloadProgress;
   
   // Getters
-  bool get isInitialized => _isInitialized;
-  String? get currentModelId => _currentModelId;
-  Map<String, ModelStatus> get modelStatuses => _modelStatuses;
-  Map<String, AIModelInfo> get availableModels => _aiService.availableModels;
-  DownloadProgress? get currentDownload => _currentDownload;
   String get aiResponse => _aiResponse;
-  bool get isGenerating => _isGenerating;
-  String? get error => _error;
-  
-  // AI Features getters
-  String? get currentMoodAnalysis => _currentMoodAnalysis;
-  String? get currentWritingAnalysis => _currentWritingAnalysis;
+  String get moodAnalysis => _moodAnalysis;
+  String get writingAnalysis => _writingAnalysis;
   List<String> get writingPrompts => _writingPrompts;
-  bool get showAISuggestions => _showAISuggestions;
+  DownloadProgress? get downloadProgress => _downloadProgress;
   
-  // Computed getters
-  bool get hasDownloadedModel => _modelStatuses.values.any(
-    (status) => status == ModelStatus.downloaded || status == ModelStatus.loaded
-  );
-  
-  bool get isModelLoaded => _currentModelId != null && 
-    _modelStatuses[_currentModelId] == ModelStatus.loaded;
-  
-  int get downloadedModelsCount => _modelStatuses.values
-    .where((status) => status == ModelStatus.downloaded || status == ModelStatus.loaded)
-    .length;
+  // AI Service getters
+  Map<String, ModelStatus> get modelStatuses => _aiService.modelStatuses;
+  Map<String, DeviceOptimizedModel> get availableModels => _aiService.availableModels;
+  bool get isGenerating => _aiService.isGenerating;
+  bool get hasDownloadedModel => _aiService.hasDownloadedModel;
+  bool get isModelLoaded => _aiService.isModelLoaded;
+  String? get currentModelId => _aiService.currentModelId;
+  String? get deviceType => _aiService.deviceType;
+  int get deviceRAMGB => _aiService.deviceRAMGB;
 
   Future<void> initialize() async {
-    try {
-      _error = null;
-      await _aiService.initialize();
-      
-      // Set up listeners
-      _aiService.downloadProgress.listen((progress) {
-        _currentDownload = progress;
-        notifyListeners();
-      });
-      
-      _aiService.aiResponse.listen((response) {
-        _aiResponse = response;
-        notifyListeners();
-      });
-      
-      _currentModelId = _aiService.currentModelId;
-      _modelStatuses = Map.from(_aiService.modelStatuses);
-      _isInitialized = true;
+    await _aiService.initialize();
+    _listenToDownloadProgress();
+    notifyListeners();
+  }
+
+  void _listenToDownloadProgress() {
+    _aiService.downloadProgress.listen((progress) {
+      _downloadProgress = progress;
       notifyListeners();
-    } catch (e) {
-      _error = 'Failed to initialize AI: $e';
-      notifyListeners();
-    }
+    });
+  }
+
+  List<DeviceOptimizedModel> getRecommendedModels() {
+    return _aiService.getRecommendedModels();
+  }
+  
+  DeviceOptimizedModel? getBestModelForDevice() {
+    return _aiService.getBestModelForDevice();
   }
 
   Future<void> downloadModel(String modelId) async {
     try {
-      _error = null;
-      
-      // Immediately update status to show downloading in UI
-      _modelStatuses = Map.from(_aiService.modelStatuses);
-      _modelStatuses[modelId] = ModelStatus.downloading;
-      notifyListeners();
-      
       await _aiService.downloadModel(modelId);
-      _modelStatuses = Map.from(_aiService.modelStatuses);
       notifyListeners();
+      print('✅ Model $modelId downloaded successfully! Click "Load Model" to use it.');
     } catch (e) {
-      _error = 'Failed to download model: $e';
-      _modelStatuses = Map.from(_aiService.modelStatuses);
+      print('❌ Failed to download model: $e');
       notifyListeners();
+      rethrow;
     }
-  }
-
-  void cancelDownload() {
-    _aiService.cancelDownload();
-    _currentDownload = null;
-    notifyListeners();
   }
 
   Future<void> loadModel(String modelId) async {
     try {
-      _error = null;
-      notifyListeners();
-      
       await _aiService.loadModel(modelId);
-      _currentModelId = _aiService.currentModelId;
-      _modelStatuses = Map.from(_aiService.modelStatuses);
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to load model: $e';
-      notifyListeners();
+      print('❌ Failed to load model: $e');
+      rethrow;
     }
   }
 
   Future<void> unloadModel() async {
     try {
-      _error = null;
       await _aiService.unloadModel();
-      _currentModelId = null;
-      _modelStatuses = Map.from(_aiService.modelStatuses);
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to unload model: $e';
-      notifyListeners();
+      print('❌ Failed to unload model: $e');
+      rethrow;
     }
   }
 
   Future<void> deleteModel(String modelId) async {
     try {
-      _error = null;
       await _aiService.deleteModel(modelId);
-      _modelStatuses = Map.from(_aiService.modelStatuses);
-      
-      if (_currentModelId == modelId) {
-        _currentModelId = null;
-      }
-      
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to delete model: $e';
-      notifyListeners();
-    }
-  }
-
-  Future<String> generateText(String prompt, {
-    int maxTokens = 256,
-    double temperature = 0.7,
-    String? systemPrompt,
-  }) async {
-    if (!isModelLoaded) {
-      throw Exception('No model loaded');
-    }
-
-    try {
-      _error = null;
-      _isGenerating = true;
-      notifyListeners();
-
-      final response = await _aiService.generateText(
-        prompt,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        systemPrompt: systemPrompt,
-      );
-
-      return response;
-    } catch (e) {
-      _error = 'Failed to generate text: $e';
+      print('❌ Failed to delete model: $e');
       rethrow;
-    } finally {
-      _isGenerating = false;
+    }
+  }
+
+  Future<void> generateText(String prompt, {int maxTokens = 100}) async {
+    try {
+      _aiResponse = await _aiService.generateText(prompt, maxTokens: maxTokens);
+      notifyListeners();
+    } catch (e) {
+      print('❌ Text generation failed: $e');
+      _aiResponse = 'Error generating response: $e';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  // Placeholder methods - these would need re-implementation with the new AI service
+  Future<void> analyzeMood(String text) async {
+    try {
+      _moodAnalysis = await _aiService.generateText(
+        'Analyze the mood of this text briefly: $text',
+        maxTokens: 50,
+      );
+      notifyListeners();
+    } catch (e) {
+      print('❌ Mood analysis failed: $e');
+      _moodAnalysis = 'Error analyzing mood: $e';
       notifyListeners();
     }
   }
 
-  // AI Feature Methods
-  Future<void> analyzeCurrentText(String text) async {
-    if (!isModelLoaded || text.trim().isEmpty) return;
-
+  Future<void> analyzeWritingStyle(String text) async {
     try {
-      _error = null;
-      
-      // Run mood and writing analysis in parallel
-      final futures = await Future.wait([
-        _aiService.analyzeMood(text),
-        _aiService.analyzeWritingStyle(text),
-      ]);
-      
-      _currentMoodAnalysis = futures[0];
-      _currentWritingAnalysis = futures[1];
+      _writingAnalysis = await _aiService.generateText(
+        'Analyze the writing style of this text briefly: $text',
+        maxTokens: 80,
+      );
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to analyze text: $e';
+      print('❌ Writing analysis failed: $e');
+      _writingAnalysis = 'Error analyzing writing style: $e';
       notifyListeners();
     }
   }
 
   Future<void> generateWritingPrompts(String context) async {
-    if (!isModelLoaded) return;
-
     try {
-      _error = null;
-      _writingPrompts = await _aiService.generateWritingPrompts(context);
-      notifyListeners();
-    } catch (e) {
-      _error = 'Failed to generate prompts: $e';
-      notifyListeners();
-    }
-  }
-
-  Future<String> suggestContinuation(String text) async {
-    if (!isModelLoaded) {
-      throw Exception('No model loaded');
-    }
-
-    return await _aiService.suggestContinuation(text);
-  }
-
-  Future<String> generateResponse(String prompt) async {
-    if (!isModelLoaded) {
-      throw Exception('No model loaded');
-    }
-
-    try {
-      _error = null;
-      _isGenerating = true;
-      notifyListeners();
-
       final response = await _aiService.generateText(
-        prompt,
-        maxTokens: 200,
-        temperature: 0.7,
-        systemPrompt: 'You are a helpful AI assistant. Provide concise, helpful responses to user questions and requests.',
+        'Generate 3 creative writing prompts based on: $context',
+        maxTokens: 100,
       );
-
-      return response;
+      _writingPrompts = response.split('\n').where((line) => line.trim().isNotEmpty).toList();
+      notifyListeners();
     } catch (e) {
-      _error = 'Failed to generate response: $e';
-      rethrow;
-    } finally {
-      _isGenerating = false;
+      print('❌ Writing prompts generation failed: $e');
+      _writingPrompts = ['Error generating writing prompts: $e'];
       notifyListeners();
     }
   }
 
-  void toggleAISuggestions() {
-    _showAISuggestions = !_showAISuggestions;
+  // Clear methods
+  void clearAIResponse() {
+    _aiResponse = '';
     notifyListeners();
   }
 
-  void clearError() {
-    _error = null;
+  void clearMoodAnalysis() {
+    _moodAnalysis = '';
     notifyListeners();
   }
 
-  void clearAIAnalysis() {
-    _currentMoodAnalysis = null;
-    _currentWritingAnalysis = null;
+  void clearWritingAnalysis() {
+    _writingAnalysis = '';
+    notifyListeners();
+  }
+
+  void clearWritingPrompts() {
     _writingPrompts = [];
     notifyListeners();
   }
 
-  Future<String> getStorageUsageFormatted() async {
-    final bytes = await _aiService.getStorageUsage();
-    return _formatBytes(bytes);
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  Future<String> getStorageUsage() async {
+    return await _aiService.getStorageUsage();
   }
 
   @override
