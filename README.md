@@ -196,3 +196,4 @@ This project is part of the Isla Journal development plan. See the main tech sta
 **Next**: Phase 2 - AI Integration 🤖  
 **Download**: [Get Isla Journal →](../../releases)
 
+# Clean build trigger - no trial getters
