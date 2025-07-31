@@ -7,7 +7,7 @@ import '../models/journal_file.dart';
 import '../models/file_sort_option.dart';
 import '../core/theme/app_theme.dart';
 import '../services/validation_service.dart';
-
+import '../services/database_service.dart';
 
 
 class FileTreeWidget extends StatefulWidget {
@@ -967,25 +967,15 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                       )
                     : null,
                 child: _HoverableTile(
-                  leading: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        hasChildren
-                            ? (isExpanded ? '▼' : '▶')
-                            : '•',
-                        style: const TextStyle(
-                          fontFamily: 'JetBrainsMono',
-                          fontSize: 12.0,
-                          color: AppTheme.warmBrown,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        '📁',
-                        style: TextStyle(fontSize: 12.0),
-                      ),
-                    ],
+                  leading: Text(
+                    hasChildren
+                        ? (isExpanded ? '▼' : '▶')
+                        : '•',
+                    style: const TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      color: AppTheme.warmBrown,
+                    ),
                   ),
                   title: Text(
                     folder.name,
@@ -1081,18 +1071,13 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
       childWhenDragging: Opacity(
         opacity: 0.5,
         child: _HoverableTile(
-          leading: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                file.isPinned ? '📌' : '📄',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 12.0,
-                  color: file.isPinned ? AppTheme.warmBrown : AppTheme.mediumGray,
-                ),
-              ),
-            ],
+          leading: const Text(
+            '•',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              color: AppTheme.mediumGray,
+            ),
           ),
           title: Text(
             file.name,
@@ -1109,18 +1094,13 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
         ),
       ),
       child: _HoverableTile(
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              file.isPinned ? '📌' : '📄',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 12.0,
-                color: file.isPinned ? AppTheme.warmBrown : AppTheme.mediumGray,
-              ),
-            ),
-          ],
+        leading: const Text(
+          '•',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 12.0,
+            color: AppTheme.mediumGray,
+          ),
         ),
         title: Text(
           file.name,

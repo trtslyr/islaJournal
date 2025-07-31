@@ -204,14 +204,29 @@ class _HomeScreenState extends State<HomeScreen> {
                       minimumSize: Size.zero,
                       padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
                     ),
-                    child: const Text(
-                      '+',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12.0,
-                        fontWeight: FontWeight.w400,
-                        color: AppTheme.warmBrown,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          '+',
+                          style: TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 12.0,
+                            fontWeight: FontWeight.w400,
+                            color: AppTheme.warmBrown,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'folder',
+                          style: TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 12.0,
+                            fontWeight: FontWeight.w400,
+                            color: AppTheme.warmBrown,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -224,14 +239,29 @@ class _HomeScreenState extends State<HomeScreen> {
                       minimumSize: Size.zero,
                       padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
                     ),
-                    child: const Text(
-                      '✎',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12.0,
-                        fontWeight: FontWeight.w400,
-                        color: AppTheme.warmBrown,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          '✎',
+                          style: TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 12.0,
+                            fontWeight: FontWeight.w400,
+                            color: AppTheme.warmBrown,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'file',
+                          style: TextStyle(
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 12.0,
+                            fontWeight: FontWeight.w400,
+                            color: AppTheme.warmBrown,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
