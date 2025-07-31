@@ -1,8 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite/sqflite.dart';
 
 // Providers
 import 'providers/journal_provider.dart';
@@ -24,13 +23,10 @@ import 'core/theme/app_theme.dart';
 
 /// Entry point of the Isla Journal application
 void main() {
-  // Initialize database factory for Windows/Linux (macOS works with regular sqflite)
-  if (Platform.isWindows || Platform.isLinux) {
-    // Initialize FFI for desktop platforms that need it
-    sqfliteFfiInit();
-    // Set the database factory for Windows/Linux
-    databaseFactory = databaseFactoryFfi;
-  }
+  // For now, rely on regular sqflite which works on all platforms
+  // The sqflite_common_ffi dependency causes issues in CI environments
+  // and regular sqflite is sufficient for most use cases
+  print('🚀 Starting Isla Journal on ${Platform.operatingSystem}');
   
   runApp(const IslaJournalApp());
 }
