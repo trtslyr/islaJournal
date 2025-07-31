@@ -1,0 +1,129 @@
+name: Windows Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.0'  # Use your Flutter version
+        channel: 'stable'
+    
+    - name: Install Flutter Dependencies
+      run: flutter pub get
+    
+    - name: Build Windows Release
+      run: flutter build windows --release
+    
+    - name: Bundle VC++ Runtime DLLs
+      shell: cmd
+      run: |
+        echo "🔄 Bundling Visual C++ Runtime DLLs..."
+        set BUILD_DIR=build\windows\runner\Release
+        set SYSTEM32=C:\Windows\System32
+        
+        echo "📁 Build directory: %BUILD_DIR%"
+        
+        rem Copy required DLLs
+        if exist "%SYSTEM32%\msvcp140.dll" (
+            copy "%SYSTEM32%\msvcp140.dll" "%BUILD_DIR%\"
+            echo "✅ Copied msvcp140.dll"
+        ) else (
+            echo "⚠️ msvcp140.dll not found in System32"
+        )
+        
+        if exist "%SYSTEM32%\vcruntime140.dll" (
+            copy "%SYSTEM32%\vcruntime140.dll" "%BUILD_DIR%\"
+            echo "✅ Copied vcruntime140.dll"
+        ) else (
+            echo "⚠️ vcruntime140.dll not found in System32"
+        )
+        
+        if exist "%SYSTEM32%\vcruntime140_1.dll" (
+            copy "%SYSTEM32%\vcruntime140_1.dll" "%BUILD_DIR%\"
+            echo "✅ Copied vcruntime140_1.dll"
+        ) else (
+            echo "ℹ️ vcruntime140_1.dll not found (optional)"
+        )
+        
+        echo "📦 Listing bundled files:"
+        dir "%BUILD_DIR%\*.dll"
+    
+    - name: Verify DLL Bundle
+      shell: cmd
+      run: |
+        set BUILD_DIR=build\windows\runner\Release
+        echo "🔍 Verifying critical DLLs are bundled..."
+        
+        if exist "%BUILD_DIR%\msvcp140.dll" (
+            echo "✅ msvcp140.dll is bundled"
+        ) else (
+            echo "❌ msvcp140.dll is missing!"
+            exit /b 1
+        )
+        
+        if exist "%BUILD_DIR%\vcruntime140.dll" (
+            echo "✅ vcruntime140.dll is bundled"
+        ) else (
+            echo "❌ vcruntime140.dll is missing!"
+            exit /b 1
+        )
+        
+        echo "🎉 All critical DLLs are properly bundled!"
+    
+    - name: Create Release Archive
+      shell: cmd
+      run: |
+        echo "📦 Creating release archive..."
+        cd build\windows\runner\Release
+        tar -czf ..\..\..\..\isla-journal-windows.tar.gz *
+        cd ..\..\..\..\
+        echo "✅ Created isla-journal-windows.tar.gz"
+    
+    - name: Upload Release Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: isla-journal-windows
+        path: isla-journal-windows.tar.gz
+        retention-days: 30
+    
+    - name: Create GitHub Release (if tag)
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: isla-journal-windows.tar.gz
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## 🚀 Isla Journal Windows Release
+          
+          ### What's Included:
+          - ✅ **Complete Windows executable** (`isla_journal.exe`)
+          - ✅ **Bundled VC++ Runtime DLLs** (no user installation required)
+          - ✅ **All Flutter dependencies** included
+          
+          ### Installation:
+          1. Download `isla-journal-windows.tar.gz`
+          2. Extract the archive
+          3. Run `isla_journal.exe` directly - no installation needed!
+          
+          ### System Requirements:
+          - Windows 10 (1903+) or Windows 11
+          - 64-bit architecture
+          - No additional software installation required
+          
+          **Note:** This build includes all necessary runtime libraries, so it should work on any Windows machine without requiring users to install Visual C++ Redistributable.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

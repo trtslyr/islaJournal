@@ -1,0 +1,47 @@
+name: Test Windows Build with DLLs
+
+on:
+  workflow_dispatch:  # Manual trigger only
+  push:
+    branches:
+      - main  # Also trigger on main branch pushes
+
+jobs:
+  test-windows-build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.0'
+        channel: 'stable'
+    
+    - name: Install Dependencies
+      run: flutter pub get
+    
+    - name: Build Windows Release
+      run: flutter build windows --release
+    
+    - name: Bundle VC++ Runtime DLLs
+      shell: cmd
+      run: |
+        echo "🔄 Bundling VC++ Runtime DLLs..."
+        set BUILD_DIR=build\windows\runner\Release
+        
+        copy "C:\Windows\System32\msvcp140.dll" "%BUILD_DIR%\" 2>nul && echo "✅ Copied msvcp140.dll" || echo "⚠️ msvcp140.dll not found"
+        copy "C:\Windows\System32\vcruntime140.dll" "%BUILD_DIR%\" 2>nul && echo "✅ Copied vcruntime140.dll" || echo "⚠️ vcruntime140.dll not found"  
+        copy "C:\Windows\System32\vcruntime140_1.dll" "%BUILD_DIR%\" 2>nul && echo "✅ Copied vcruntime140_1.dll" || echo "ℹ️ vcruntime140_1.dll not found (optional)"
+        
+        echo "📦 Final build contents:"
+        dir "%BUILD_DIR%"
+    
+    - name: Upload Test Build
+      uses: actions/upload-artifact@v4
+      with:
+        name: isla-journal-windows-test
+        path: build/windows/runner/Release/
+        retention-days: 7 
