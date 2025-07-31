@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'ai_service.dart';
@@ -324,6 +325,11 @@ class EmbeddingService {
     if (embeddingBytes == null) return [];
     try {
       if (embeddingBytes is Uint8List) {
+        // Windows-safe parsing: avoid Float32List.view() which can crash on Windows
+        if (Platform.isWindows) {
+          return _parseEmbeddingWindowsSafe(embeddingBytes);
+        }
+        
         // FIXED: Use Float32List.fromList with proper length constraint
         final expectedFloats = 100; // Our embeddings should be 100 dimensions
         final maxFloats = embeddingBytes.length ~/ 4; // 4 bytes per float
@@ -342,6 +348,34 @@ class EmbeddingService {
       return [];
     } catch (e) {
       print('Error parsing chunked embedding: $e');
+      return [];
+    }
+  }
+  
+  // Windows-safe embedding parsing to prevent crashes
+  List<double> _parseEmbeddingWindowsSafe(Uint8List embeddingBytes) {
+    try {
+      final expectedFloats = 100; // Our embeddings should be 100 dimensions
+      final maxFloats = embeddingBytes.length ~/ 4; // 4 bytes per float
+      final actualFloats = math.min(expectedFloats, maxFloats);
+      
+      final result = <double>[];
+      
+      // Manually parse each float to avoid memory alignment issues
+      for (int i = 0; i < actualFloats; i++) {
+        final byteIndex = i * 4;
+        if (byteIndex + 3 < embeddingBytes.length) {
+          // Safely extract 4 bytes and convert to float (little-endian)
+          final bytes = ByteData.sublistView(embeddingBytes, byteIndex, byteIndex + 4);
+          final floatValue = bytes.getFloat32(0, Endian.little);
+          result.add(floatValue.toDouble());
+        }
+      }
+      
+      print('🔍 WINDOWS SAFE PARSE: Parsed ${result.length} floats from ${embeddingBytes.length} bytes');
+      return result;
+    } catch (e) {
+      print('🔍 WINDOWS SAFE PARSE ERROR: $e');
       return [];
     }
   }
