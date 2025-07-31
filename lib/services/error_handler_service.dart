@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'windows_stability_service.dart';
 import '../core/theme/app_theme.dart';
 
 class ErrorHandlerService {
@@ -125,6 +127,39 @@ class ErrorHandlerService {
     String message = 'An unexpected error occurred.';
     String? details = error.toString();
     List<ErrorAction> actions = [];
+    
+    // Handle Windows-specific errors first
+    if (Platform.isWindows && error.toString().isNotEmpty) {
+      final windowsGuidance = WindowsStabilityService.getWindowsErrorGuidance(error.toString());
+      if (windowsGuidance.isNotEmpty) {
+        title = 'Windows Error';
+        message = windowsGuidance;
+        
+        // Add Windows-specific actions
+        if (error.toString().contains('dll')) {
+          actions.add(ErrorAction(
+            label: 'Download VC++ Redistributable',
+            onPressed: () async {
+              // Could open the download URL
+            },
+          ));
+        }
+        
+        actions.add(ErrorAction(
+          label: 'Restart in Safe Mode',
+          onPressed: () async {
+            await WindowsStabilityService.recordCrash();
+          },
+        ));
+        
+        return ErrorInfo(
+          title: title,
+          message: message,
+          details: details,
+          actions: actions,
+        );
+      }
+    }
 
     if (error.toString().contains('DatabaseException')) {
       title = 'Database Error';

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'windows_stability_service.dart';
 
 enum ModelStatus { notDownloaded, downloading, downloaded, loaded, error }
 
@@ -139,6 +140,9 @@ class AIService {
   int get deviceRAMGB => _deviceRAMGB;
 
   Future<void> initialize() async {
+    // Initialize Windows stability service first
+    await WindowsStabilityService.initialize();
+    
     await _detectDeviceCapabilities();
     await _checkExistingModels();
     await _loadPreviouslyLoadedModel();
@@ -445,7 +449,16 @@ class AIService {
   }
 
   int _getContextSize() {
-    // Fixed context sizes - the previous optimization was too aggressive
+    // Windows-specific ultra conservative context sizes
+    if (Platform.isWindows) {
+      // Much smaller context sizes for Windows stability
+      if (_deviceRAMGB >= 32) return 1536; // Was 4096
+      if (_deviceRAMGB >= 16) return 1024; // Was 3072  
+      if (_deviceRAMGB >= 8) return 768;   // Was 2048
+      return 512;  // Ultra minimal for low-end Windows
+    }
+    
+    // Normal sizes for other platforms
     if (_deviceRAMGB >= 32) return 4096;
     if (_deviceRAMGB >= 16) return 3072;
     if (_deviceRAMGB >= 8) return 2048;
@@ -468,10 +481,9 @@ class AIService {
       // Mac - can handle more GPU layers
       return _deviceRAMGB >= 16 ? 35 : 25;
     } else if (Platform.isWindows) {
-      // Windows - MUCH more conservative due to driver/GPU compatibility issues
-      if (_deviceRAMGB >= 32) return 8;   // Even high-end Windows: very conservative
-      if (_deviceRAMGB >= 16) return 5;   // 16GB Windows: minimal GPU
-      return 2;  // Lower RAM: CPU-only essentially
+      // Windows - ULTRA conservative to prevent crashes
+      // Completely disable GPU layers for maximum stability
+      return 0;  // CPU-only for Windows to prevent driver crashes
     } else if (Platform.isLinux) {
       // Linux - moderate approach
       return _deviceRAMGB >= 16 ? 15 : 10;
@@ -542,6 +554,21 @@ class AIService {
   }
 
   Future<String> generateText(String prompt, {int maxTokens = 100}) async {
+    // Check Windows system health before proceeding
+    if (Platform.isWindows) {
+      final isHealthy = await WindowsStabilityService.isSystemHealthy();
+      if (!isHealthy) {
+        throw Exception('Windows system not ready for AI operation - insufficient memory');
+      }
+      
+      final inSafeMode = await WindowsStabilityService.shouldRunInSafeMode();
+      if (inSafeMode) {
+        // Use safe configuration for Windows
+        maxTokens = 25; // Much smaller for safety
+        debugPrint('⚠️ Windows safe mode: using reduced parameters');
+      }
+    }
+    
     // Adaptive token optimization based on prompt complexity
     if (maxTokens == 100) {  // Only optimize default calls
       if (prompt.length < 50) {
@@ -570,16 +597,20 @@ class AIService {
       
       debugPrint('🖥️ GPU Layers: $gpuLayers, Context: $contextSize, RAM: ${_deviceRAMGB}GB');
       
+      // Use Windows-safe parameters if needed
+      final temperature = Platform.isWindows ? 0.3 : 0.5;
+      final topP = Platform.isWindows ? 0.8 : 0.8;
+      
       final request = OpenAiRequest(
         maxTokens: maxTokens,
         messages: messages,
         numGpuLayers: gpuLayers,
         modelPath: _currentModelPath!,
-        temperature: 0.5,              // Reduced from 0.7 for faster, more focused responses
-        topP: 0.8,                     // Reduced from 0.9 for better performance
+        temperature: temperature,        // More conservative for Windows
+        topP: topP,                     
         contextSize: contextSize,
-        frequencyPenalty: 0.1,         // Slight penalty to avoid repetition
-        presencePenalty: 0.6,          // Reduced from 1.1 for faster inference
+        frequencyPenalty: 0.1,         
+        presencePenalty: 0.6,          
       );
 
       String fullResponse = '';
@@ -592,9 +623,21 @@ class AIService {
         }
       });
 
-      return await completer.future;
+      final result = await completer.future;
+      
+      // Mark successful operation for Windows stability tracking
+      if (Platform.isWindows) {
+        await WindowsStabilityService.markSuccessfulOperation();
+      }
+      
+      return result;
     } catch (e) {
       debugPrint('❌ Generation failed: $e');
+      
+      // Record crash for Windows stability tracking
+      if (Platform.isWindows) {
+        await WindowsStabilityService.recordCrash();
+      }
       
       // If generation fails, the model might be corrupted or incompatible
       if (_currentModelId != null) {
@@ -607,7 +650,14 @@ class AIService {
       await _clearLoadedModelId();
       }
       
-      throw Exception('AI generation failed: ${e.toString()}. Model may be incompatible with this device.');
+      String errorMessage = 'AI generation failed: ${e.toString()}.';
+      if (Platform.isWindows) {
+        errorMessage += ' ${WindowsStabilityService.getWindowsErrorGuidance(e.toString())}';
+      } else {
+        errorMessage += ' Model may be incompatible with this device.';
+      }
+      
+      throw Exception(errorMessage);
     } finally {
       _isGenerating = false;
     }
