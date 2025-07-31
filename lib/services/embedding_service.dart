@@ -188,14 +188,19 @@ class EmbeddingService {
     final queryEmbedding = await generateEmbedding(query);
 
     
-    // Get all file chunks with embeddings from file_embeddings table
+    // Get file chunks with embeddings - Windows optimization to reduce lag
     final db = await _dbService.database;
+    
+    // Windows-specific optimization: limit chunks to prevent lag
+    final limitClause = Platform.isWindows ? 'LIMIT 500' : ''; // Max 500 chunks on Windows
+    
     final chunkRows = await db.rawQuery('''
       SELECT fe.file_id, fe.content, fe.embedding, f.name, f.file_path, f.folder_id, 
              f.created_at, f.updated_at, f.last_opened, f.word_count, f.journal_date
       FROM file_embeddings fe
       JOIN files f ON fe.file_id = f.id
       ORDER BY fe.file_id, fe.chunk_index
+      $limitClause
     ''');
     
     if (chunkRows.isEmpty) {
