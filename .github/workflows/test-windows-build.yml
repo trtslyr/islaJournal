@@ -51,9 +51,15 @@ jobs:
         dir "C:\Windows\System32\msvcp140*.dll" 2>nul || echo "No msvcp140 DLLs found"
         dir "C:\Windows\System32\vcruntime140*.dll" 2>nul || echo "No vcruntime140 DLLs found"
         
-        copy "C:\Windows\System32\msvcp140.dll" "%BUILD_DIR%\" 2>nul && echo "✅ Copied msvcp140.dll" || echo "⚠️ msvcp140.dll not found"
-        copy "C:\Windows\System32\vcruntime140.dll" "%BUILD_DIR%\" 2>nul && echo "✅ Copied vcruntime140.dll" || echo "⚠️ vcruntime140.dll not found"  
-        copy "C:\Windows\System32\vcruntime140_1.dll" "%BUILD_DIR%\" 2>nul && echo "✅ Copied vcruntime140_1.dll" || echo "ℹ️ vcruntime140_1.dll not found (optional)"
+        echo "📋 Copying DLLs with robocopy (more reliable)..."
+        robocopy "C:\Windows\System32" "%BUILD_DIR%" "msvcp140.dll" /NFL /NDL /NJH /NJS /nc /ns /np
+        if exist "%BUILD_DIR%\msvcp140.dll" (echo "✅ Copied msvcp140.dll") else (echo "❌ Failed to copy msvcp140.dll")
+        
+        robocopy "C:\Windows\System32" "%BUILD_DIR%" "vcruntime140.dll" /NFL /NDL /NJH /NJS /nc /ns /np  
+        if exist "%BUILD_DIR%\vcruntime140.dll" (echo "✅ Copied vcruntime140.dll") else (echo "❌ Failed to copy vcruntime140.dll")
+        
+        robocopy "C:\Windows\System32" "%BUILD_DIR%" "vcruntime140_1.dll" /NFL /NDL /NJH /NJS /nc /ns /np
+        if exist "%BUILD_DIR%\vcruntime140_1.dll" (echo "✅ Copied vcruntime140_1.dll") else (echo "ℹ️ vcruntime140_1.dll not found (optional)")
         
         echo "📦 Final build contents:"
         dir "%BUILD_DIR%"
