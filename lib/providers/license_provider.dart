@@ -12,13 +12,12 @@ class LicenseProvider extends ChangeNotifier {
   bool get isValid => _licenseStatus?.isValid ?? false;
   bool get isLifetime => _licenseStatus?.isLifetime ?? false;
   bool get isSubscription => _licenseStatus?.isSubscription ?? false;
-  bool get isTrial => _licenseStatus?.isTrial ?? false;
-  bool get needsLicense => !isValid && _licenseStatus?.type != LicenseType.trial;
+  bool get needsLicense => !isValid;
 
   Future<void> initialize() async {
     debugPrint('🚀 LicenseProvider initializing...');
     await checkLicense();
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _isInitialized = true;
       notifyListeners();
@@ -28,19 +27,16 @@ class LicenseProvider extends ChangeNotifier {
   Future<void> checkLicense() async {
     try {
       _licenseStatus = await LicenseService().checkLicense();
-      debugPrint('✅ License Status: ${_licenseStatus?.type}, Valid: ${_licenseStatus?.isValid}');
-      
-      if (_licenseStatus?.isTrial == true) {
-        debugPrint('⏰ Trial Hours Remaining: ${_licenseStatus?.trialHoursRemaining}');
-      }
-      
+      debugPrint(
+          '✅ License Status: ${_licenseStatus?.type}, Valid: ${_licenseStatus?.isValid}');
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         notifyListeners();
       });
     } catch (e) {
       debugPrint('❌ License check error: $e');
       _licenseStatus = LicenseStatus(type: LicenseType.none, isValid: false);
-      
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         notifyListeners();
       });
@@ -51,7 +47,7 @@ class LicenseProvider extends ChangeNotifier {
   Future<bool> validateLifetimeKey(String licenseKey) async {
     try {
       final result = await LicenseService().validateLifetimeKey(licenseKey);
-      
+
       if (result.isValid) {
         _licenseStatus = result;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -59,7 +55,7 @@ class LicenseProvider extends ChangeNotifier {
         });
         return true;
       }
-      
+
       return false;
     } catch (e) {
       debugPrint('❌ Lifetime key validation error: $e');
@@ -71,7 +67,7 @@ class LicenseProvider extends ChangeNotifier {
   Future<bool> validateSubscriptionKey(String licenseKey) async {
     try {
       final result = await LicenseService().validateSubscriptionKey(licenseKey);
-      
+
       if (result.isValid) {
         _licenseStatus = result;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -79,7 +75,7 @@ class LicenseProvider extends ChangeNotifier {
         });
         return true;
       }
-      
+
       return false;
     } catch (e) {
       debugPrint('❌ Subscription key validation error: $e');
@@ -108,17 +104,20 @@ class LicenseProvider extends ChangeNotifier {
     }
   }
 
-  /// Clear license data for testing
+  /// Clear license data
   Future<void> clearLicenseData() async {
-    await LicenseService().clearLicenseData();
-    _licenseStatus = null;
-    _isInitialized = false;
-    notifyListeners();
-  }
+    debugPrint('🧹 LicenseProvider: Clearing license data...');
 
-  /// Reset trial for testing
-  Future<void> resetTrial() async {
-    await LicenseService().resetTrialForTesting();
-    await checkLicense();
+    // Clear all data from storage
+    await LicenseService().clearLicenseData();
+
+    // Set to invalid state immediately
+    _licenseStatus = LicenseStatus(type: LicenseType.none, isValid: false);
+    debugPrint('🔒 License set to invalid, notifying listeners...');
+
+    // Notify UI immediately that license is now invalid
+    notifyListeners();
+
+    debugPrint('✅ License data cleared and UI notified');
   }
-} 
+}

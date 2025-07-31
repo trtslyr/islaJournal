@@ -10,7 +10,6 @@ import 'package:http/http.dart' as http;
 // License Types
 enum LicenseType {
   none,
-  trial,
   lifetime,
   subscription,
 }
@@ -24,7 +23,6 @@ class LicenseStatus {
   final DateTime? expiresAt;
   final DateTime? grantedAt;
   final DateTime? lastValidated;
-  final int? trialHoursRemaining;
   final String? stripeCustomerId;
   final bool neverExpires;
 
@@ -36,14 +34,12 @@ class LicenseStatus {
     this.expiresAt,
     this.grantedAt,
     this.lastValidated,
-    this.trialHoursRemaining,
     this.stripeCustomerId,
     this.neverExpires = false,
   });
 
   bool get isLifetime => type == LicenseType.lifetime;
   bool get isSubscription => type == LicenseType.subscription;
-  bool get isTrial => type == LicenseType.trial;
 
   Map<String, dynamic> toJson() {
     return {
@@ -54,7 +50,6 @@ class LicenseStatus {
       'expiresAt': expiresAt?.toIso8601String(),
       'grantedAt': grantedAt?.toIso8601String(),
       'lastValidated': lastValidated?.toIso8601String(),
-      'trialHoursRemaining': trialHoursRemaining,
       'stripeCustomerId': stripeCustomerId,
       'neverExpires': neverExpires,
     };
@@ -66,10 +61,13 @@ class LicenseStatus {
       isValid: json['isValid'] ?? false,
       customerName: json['customerName'],
       planType: json['planType'],
-      expiresAt: json['expiresAt'] != null ? DateTime.parse(json['expiresAt']) : null,
-      grantedAt: json['grantedAt'] != null ? DateTime.parse(json['grantedAt']) : null,
-      lastValidated: json['lastValidated'] != null ? DateTime.parse(json['lastValidated']) : null,
-      trialHoursRemaining: json['trialHoursRemaining'],
+      expiresAt:
+          json['expiresAt'] != null ? DateTime.parse(json['expiresAt']) : null,
+      grantedAt:
+          json['grantedAt'] != null ? DateTime.parse(json['grantedAt']) : null,
+      lastValidated: json['lastValidated'] != null
+          ? DateTime.parse(json['lastValidated'])
+          : null,
       stripeCustomerId: json['stripeCustomerId'],
       neverExpires: json['neverExpires'] ?? false,
     );
@@ -77,23 +75,23 @@ class LicenseStatus {
 }
 
 class LicenseService {
-  static const String baseUrl = 'https://islajournalbackend-production.up.railway.app';
+  static const String baseUrl =
+      'https://islajournalbackend-production.up.railway.app';
   static const _storage = FlutterSecureStorage();
-  
+
   // Storage keys
   static const String _licenseStatusKey = 'license_status';
   static const String _licenseKeyKey = 'license_key';
   static const String _deviceIdKey = 'device_id';
-  static const String _trialStartKey = 'trial_start';
 
   /// Main license check - smart validation based on license type
   Future<LicenseStatus> checkLicense() async {
     debugPrint('🔍 Checking license status...');
-    
+
     try {
       // 1. Check for cached license status
       final cachedStatus = await _getCachedLicenseStatus();
-      
+
       if (cachedStatus != null) {
         // 2. Determine if we need to validate online
         if (_shouldValidateOnline(cachedStatus)) {
@@ -104,33 +102,34 @@ class LicenseService {
           return cachedStatus;
         }
       }
-      
+
       // 3. No cached license - check for lifetime key
       final lifetimeKey = await _getStoredLifetimeKey();
       if (lifetimeKey != null) {
         debugPrint('🔑 Found stored lifetime key, validating...');
         return await validateLifetimeKey(lifetimeKey);
       }
-      
-             // 4. Check for stored subscription key
-       final subscriptionKey = await _getStoredSubscriptionKey();
-       if (subscriptionKey != null) {
-         debugPrint('🔑 Found stored subscription key, validating...');
-         final subscriptionStatus = await validateSubscriptionKey(subscriptionKey);
-         if (subscriptionStatus.isValid) {
-           await _cacheLicenseStatus(subscriptionStatus);
-           return subscriptionStatus;
-         }
-       }
-      
-      // 5. Fall back to trial
-      return await _handleTrialLogic();
-      
+
+      // 4. Check for stored subscription key
+      final subscriptionKey = await _getStoredSubscriptionKey();
+      if (subscriptionKey != null) {
+        debugPrint('🔑 Found stored subscription key, validating...');
+        final subscriptionStatus =
+            await validateSubscriptionKey(subscriptionKey);
+        if (subscriptionStatus.isValid) {
+          await _cacheLicenseStatus(subscriptionStatus);
+          return subscriptionStatus;
+        }
+      }
+
+      // 5. No valid license found - return none
+      return LicenseStatus(type: LicenseType.none, isValid: false);
     } catch (e) {
       debugPrint('❌ License check error: $e');
-      // Return cached status if available, otherwise trial
+      // Return cached status if available, otherwise none
       final cachedStatus = await _getCachedLicenseStatus();
-      return cachedStatus ?? await _handleTrialLogic();
+      return cachedStatus ??
+          LicenseStatus(type: LicenseType.none, isValid: false);
     }
   }
 
@@ -140,7 +139,7 @@ class LicenseService {
       debugPrint('🔑 Validating subscription key online...');
       debugPrint('🌐 Calling: $baseUrl/validate-subscription-key');
       debugPrint('📝 Key: ${licenseKey.substring(0, 10)}...');
-      
+
       final response = await http.post(
         Uri.parse('$baseUrl/validate-subscription-key'),
         headers: {'Content-Type': 'application/json'},
@@ -152,25 +151,27 @@ class LicenseService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         if (data['valid'] == true) {
           debugPrint('✅ Online subscription validation successful');
-          
+
           // Store the key securely
           await _storeSubscriptionKey(licenseKey);
-          
+
           final status = LicenseStatus(
             type: LicenseType.subscription,
             isValid: true,
             planType: data['plan_type'],
-            expiresAt: data['expires_at'] != null ? DateTime.parse(data['expires_at']) : null,
+            expiresAt: data['expires_at'] != null
+                ? DateTime.parse(data['expires_at'])
+                : null,
             stripeCustomerId: data['stripe_customer_id'],
             lastValidated: DateTime.now(),
           );
-          
+
           // Cache the status
           await _cacheLicenseStatus(status);
-          
+
           return status;
         } else {
           debugPrint('❌ Backend says key is invalid: ${data['reason']}');
@@ -178,7 +179,7 @@ class LicenseService {
       } else {
         debugPrint('❌ HTTP error: ${response.statusCode}');
       }
-      
+
       return LicenseStatus(type: LicenseType.none, isValid: false);
     } catch (e) {
       debugPrint('❌ Subscription key validation error: $e');
@@ -192,7 +193,7 @@ class LicenseService {
       debugPrint('🔑 Validating lifetime key online...');
       debugPrint('🌐 Calling: $baseUrl/validate-lifetime-key');
       debugPrint('📝 Key: ${licenseKey.substring(0, 10)}...');
-      
+
       final response = await http.post(
         Uri.parse('$baseUrl/validate-lifetime-key'),
         headers: {'Content-Type': 'application/json'},
@@ -204,25 +205,27 @@ class LicenseService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         if (data['valid'] == true) {
           debugPrint('✅ Online lifetime validation successful');
-          
+
           // Store the key securely
           await _storeLifetimeKey(licenseKey);
-          
+
           final status = LicenseStatus(
             type: LicenseType.lifetime,
             isValid: true,
             customerName: data['customer_name'],
-            grantedAt: data['granted_at'] != null ? DateTime.parse(data['granted_at']) : null,
+            grantedAt: data['granted_at'] != null
+                ? DateTime.parse(data['granted_at'])
+                : null,
             lastValidated: DateTime.now(),
             neverExpires: true,
           );
-          
+
           // Cache the status - lifetime keys are valid forever
           await _cacheLicenseStatus(status);
-          
+
           return status;
         } else {
           debugPrint('❌ Backend says key is invalid: ${data['reason']}');
@@ -230,7 +233,7 @@ class LicenseService {
       } else {
         debugPrint('❌ HTTP error: ${response.statusCode}');
       }
-      
+
       return LicenseStatus(type: LicenseType.none, isValid: false);
     } catch (e) {
       debugPrint('❌ Lifetime key validation error: $e');
@@ -252,7 +255,7 @@ class LicenseService {
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
-      
+
       throw Exception('Failed to create checkout session');
     } catch (e) {
       debugPrint('❌ Checkout session error: $e');
@@ -265,7 +268,7 @@ class LicenseService {
     try {
       final subscriptionKey = await _getStoredSubscriptionKey();
       if (subscriptionKey == null) return null;
-      
+
       final response = await http.post(
         Uri.parse('$baseUrl/customer-portal'),
         headers: {'Content-Type': 'application/json'},
@@ -276,7 +279,7 @@ class LicenseService {
         final data = jsonDecode(response.body);
         return data['url'];
       }
-      
+
       return null;
     } catch (e) {
       debugPrint('❌ Customer portal error: $e');
@@ -284,19 +287,32 @@ class LicenseService {
     }
   }
 
-  /// Clear all license data (for testing)
+  /// Clear all license data
   Future<void> clearLicenseData() async {
-    await _storage.deleteAll();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_licenseStatusKey);
-    await prefs.remove(_trialStartKey);
-  }
+    debugPrint('🧹 LicenseService: Clearing all license data...');
 
-  /// Reset trial (for testing)
-  Future<void> resetTrialForTesting() async {
+    // Clear all secure storage
+    try {
+      await _storage.deleteAll();
+      debugPrint('✅ Secure storage cleared');
+    } catch (e) {
+      debugPrint('⚠️ Secure storage clear failed (expected on debug): $e');
+    }
+
+    // Clear all SharedPreferences license-related keys
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_trialStartKey);
-    await prefs.remove(_licenseStatusKey);
+    await prefs.remove(_licenseStatusKey); // Cached license status
+    await prefs.remove(_licenseKeyKey); // 'license_key' for lifetime keys
+    await prefs.remove('subscription_key'); // Subscription keys
+    await prefs.remove(_deviceIdKey); // Device ID
+
+    // Clear any legacy keys that might exist
+    await prefs.remove('license_type');
+    await prefs.remove('license_valid');
+    await prefs.remove('trial_start');
+    await prefs.remove('trial_start_time');
+
+    debugPrint('✅ All license data cleared from storage');
   }
 
   // Private helper methods
@@ -305,27 +321,23 @@ class LicenseService {
   bool _shouldValidateOnline(LicenseStatus status) {
     final now = DateTime.now();
     final lastValidated = status.lastValidated ?? DateTime(2000);
-    
+
     switch (status.type) {
       case LicenseType.lifetime:
         // Lifetime keys: NEVER validate again after first successful validation
         return false;
-        
+
       case LicenseType.subscription:
         if (status.planType == 'monthly') {
-          // Monthly: validate once per month on anniversary date
-          return _shouldValidateOnAnniversary(status, 30); // 30 days
+          // Monthly: validate every 30 days
+          return now.difference(lastValidated).inDays > 30;
         } else if (status.planType == 'annual') {
-          // Annual: validate once per year on anniversary date  
-          return _shouldValidateOnAnniversary(status, 365); // 365 days
+          // Annual: validate every 365 days
+          return now.difference(lastValidated).inDays > 365;
         }
         // Default: validate weekly for unknown subscription types
         return now.difference(lastValidated).inDays > 7;
-        
-      case LicenseType.trial:
-        // Trial: validate every 24 hours
-        return now.difference(lastValidated).inHours > 24;
-        
+
       case LicenseType.none:
         return true;
     }
@@ -335,27 +347,29 @@ class LicenseService {
   bool _shouldValidateOnAnniversary(LicenseStatus status, int intervalDays) {
     final now = DateTime.now();
     final lastValidated = status.lastValidated ?? DateTime(2000);
-    
+
     // If we have an expiration date, use it to calculate the payment cycle
     if (status.expiresAt != null) {
       final expiresAt = status.expiresAt!;
-      
+
       // Calculate when the next validation should occur
       // For monthly: 30 days before expiration (around payment date)
       // For annual: 365 days before expiration (around payment date)
       final validationWindow = expiresAt.subtract(Duration(days: intervalDays));
-      
+
       // Only validate if we're past the validation window AND haven't validated recently
-      return now.isAfter(validationWindow) && 
-             now.difference(lastValidated).inDays > (intervalDays - 5); // 5-day buffer
+      return now.isAfter(validationWindow) &&
+          now.difference(lastValidated).inDays >
+              (intervalDays - 5); // 5-day buffer
     }
-    
+
     // Fallback: if no expiration date, use simple time-based validation
     return now.difference(lastValidated).inDays > intervalDays;
   }
 
   /// Validate online and update cache
-  Future<LicenseStatus> _validateOnlineAndCache(LicenseStatus cachedStatus) async {
+  Future<LicenseStatus> _validateOnlineAndCache(
+      LicenseStatus cachedStatus) async {
     try {
       if (cachedStatus.type == LicenseType.lifetime) {
         // Re-validate lifetime key
@@ -363,26 +377,26 @@ class LicenseService {
         if (lifetimeKey != null) {
           return await validateLifetimeKey(lifetimeKey);
         }
-             } else if (cachedStatus.type == LicenseType.subscription) {
-         // Re-validate subscription key
-         final subscriptionKey = await _getStoredSubscriptionKey();
-         if (subscriptionKey != null) {
-           return await validateSubscriptionKey(subscriptionKey);
-         }
-       }
-      
+      } else if (cachedStatus.type == LicenseType.subscription) {
+        // Re-validate subscription key
+        final subscriptionKey = await _getStoredSubscriptionKey();
+        if (subscriptionKey != null) {
+          return await validateSubscriptionKey(subscriptionKey);
+        }
+      }
+
       // If validation fails, return cached status if still within grace period
       final now = DateTime.now();
       final lastValidated = cachedStatus.lastValidated ?? DateTime(2000);
-      
+
       if (now.difference(lastValidated).inDays < 7) {
-        debugPrint('⚠️ Online validation failed, using cached status (grace period)');
+        debugPrint(
+            '⚠️ Online validation failed, using cached status (grace period)');
         return cachedStatus;
       }
-      
+
       // Grace period expired
       return LicenseStatus(type: LicenseType.none, isValid: false);
-      
     } catch (e) {
       debugPrint('❌ Online validation error: $e');
       return cachedStatus; // Return cached on error
@@ -400,57 +414,26 @@ class LicenseService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         if (data['licensed'] == true) {
           return LicenseStatus(
             type: LicenseType.subscription,
             isValid: true,
             planType: data['plan_type'],
-            expiresAt: data['expires_at'] != null ? DateTime.parse(data['expires_at']) : null,
+            expiresAt: data['expires_at'] != null
+                ? DateTime.parse(data['expires_at'])
+                : null,
             stripeCustomerId: data['stripe_customer_id'],
             lastValidated: DateTime.now(),
           );
         }
       }
-      
+
       return LicenseStatus(type: LicenseType.none, isValid: false);
     } catch (e) {
       debugPrint('❌ Device subscription check error: $e');
       return LicenseStatus(type: LicenseType.none, isValid: false);
     }
-  }
-
-  /// Handle trial logic
-  Future<LicenseStatus> _handleTrialLogic() async {
-    final prefs = await SharedPreferences.getInstance();
-    final trialStartStr = prefs.getString(_trialStartKey);
-    
-    DateTime trialStart;
-    if (trialStartStr != null) {
-      trialStart = DateTime.parse(trialStartStr);
-    } else {
-      // Start new trial
-      trialStart = DateTime.now();
-      await prefs.setString(_trialStartKey, trialStart.toIso8601String());
-      debugPrint('🆕 Starting new 24-hour trial');
-    }
-    
-    final now = DateTime.now();
-    final trialHours = 24;
-    final hoursElapsed = now.difference(trialStart).inHours;
-    final hoursRemaining = trialHours - hoursElapsed;
-    
-    final isValid = hoursRemaining > 0;
-    
-    final status = LicenseStatus(
-      type: LicenseType.trial,
-      isValid: isValid,
-      trialHoursRemaining: hoursRemaining > 0 ? hoursRemaining : 0,
-      lastValidated: now,
-    );
-    
-    await _cacheLicenseStatus(status);
-    return status;
   }
 
   /// Cache license status
@@ -468,12 +451,12 @@ class LicenseService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cachedJson = prefs.getString(_licenseStatusKey);
-      
+
       if (cachedJson != null) {
         final data = jsonDecode(cachedJson);
         return LicenseStatus.fromJson(data);
       }
-      
+
       return null;
     } catch (e) {
       debugPrint('❌ Error loading cached license status: $e');
@@ -501,12 +484,13 @@ class LicenseService {
       // Try secure storage first
       final key = await _storage.read(key: _licenseKeyKey);
       if (key != null && key.startsWith('ij_life_')) return key;
-      
+
       // Fallback to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final storedKey = prefs.getString(_licenseKeyKey);
-      if (storedKey != null && storedKey.startsWith('ij_life_')) return storedKey;
-      
+      if (storedKey != null && storedKey.startsWith('ij_life_'))
+        return storedKey;
+
       return null;
     } catch (e) {
       debugPrint('❌ Error loading stored lifetime key: $e');
@@ -534,12 +518,13 @@ class LicenseService {
       // Try secure storage first
       final key = await _storage.read(key: 'subscription_key');
       if (key != null && key.startsWith('ij_sub_')) return key;
-      
+
       // Fallback to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final storedKey = prefs.getString('subscription_key');
-      if (storedKey != null && storedKey.startsWith('ij_sub_')) return storedKey;
-      
+      if (storedKey != null && storedKey.startsWith('ij_sub_'))
+        return storedKey;
+
       return null;
     } catch (e) {
       debugPrint('❌ Error loading stored subscription key: $e');
@@ -554,13 +539,13 @@ class LicenseService {
       final prefs = await SharedPreferences.getInstance();
       String? deviceId = prefs.getString(_deviceIdKey);
       if (deviceId != null) return deviceId;
-      
+
       // Generate new device ID with simpler approach
       String uniqueId;
-      
+
       try {
         final deviceInfo = DeviceInfoPlugin();
-        
+
         if (Platform.isMacOS) {
           final macInfo = await deviceInfo.macOsInfo;
           // Use only computer name and avoid systemGUID (requires entitlements)
@@ -582,18 +567,20 @@ class LicenseService {
         }
       } catch (e) {
         debugPrint('⚠️ DeviceInfo failed, using fallback: $e');
-        uniqueId = 'fallback_${Platform.operatingSystem}_${DateTime.now().millisecondsSinceEpoch}';
+        uniqueId =
+            'fallback_${Platform.operatingSystem}_${DateTime.now().millisecondsSinceEpoch}';
       }
-      
+
       // Hash the unique ID for privacy and add timestamp for uniqueness
-      final bytes = utf8.encode('$uniqueId${DateTime.now().millisecondsSinceEpoch}');
+      final bytes =
+          utf8.encode('$uniqueId${DateTime.now().millisecondsSinceEpoch}');
       final digest = sha256.convert(bytes);
       deviceId = digest.toString();
-      
+
       // Cache in SharedPreferences (more reliable than secure storage)
       await prefs.setString(_deviceIdKey, deviceId);
       debugPrint('✅ Generated new device ID: ${deviceId.substring(0, 8)}...');
-      
+
       return deviceId;
     } catch (e) {
       debugPrint('❌ Error generating device ID: $e');
@@ -602,4 +589,4 @@ class LicenseService {
       return fallbackId;
     }
   }
-} 
+}

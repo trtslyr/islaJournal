@@ -26,23 +26,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _currentLicenseKey;
   bool _isModelsExpanded = false; // AI Models section collapsed by default
 
-  
   // License key input controller
   final TextEditingController _licenseKeyController = TextEditingController();
-  
+
   @override
   void initState() {
     super.initState();
     _loadTokenUsage();
     _loadStoredLicenseKey();
   }
-  
+
   @override
   void dispose() {
     _licenseKeyController.dispose();
     super.dispose();
   }
-  
+
   /// Load saved token usage from SharedPreferences
   Future<void> _loadTokenUsage() async {
     try {
@@ -51,15 +50,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (savedTokens != null) {
         // Clamp to new efficient range (2K-8K)
         final clampedTokens = savedTokens.clamp(2000.0, 8000.0);
-        
+
         setState(() {
           _currentTokens = clampedTokens;
         });
-        
+
         // If we clamped the value, save the new clamped value
         if (clampedTokens != savedTokens) {
           await prefs.setDouble(_tokenUsageKey, clampedTokens);
-          print('📱 Clamped token usage from ${savedTokens.toInt()} to ${clampedTokens.toInt()} for efficiency');
+          print(
+              '📱 Clamped token usage from ${savedTokens.toInt()} to ${clampedTokens.toInt()} for efficiency');
         }
       } else {
         setState(() {
@@ -73,7 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
     }
   }
-  
+
   /// Save token usage to SharedPreferences
   Future<void> _saveTokenUsage(double tokens) async {
     try {
@@ -92,33 +92,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final storage = FlutterSecureStorage();
       String? licenseKey;
-      
+
       // Try lifetime key first
       licenseKey = await storage.read(key: 'license_key');
-      
+
       // If no lifetime key, try subscription key
       if (licenseKey == null) {
         licenseKey = await storage.read(key: 'subscription_key');
       }
-      
+
       // Fallback to SharedPreferences if secure storage fails
       if (licenseKey == null) {
         final prefs = await SharedPreferences.getInstance();
-        licenseKey = prefs.getString('license_key') ?? prefs.getString('subscription_key');
+        licenseKey = prefs.getString('license_key') ??
+            prefs.getString('subscription_key');
       }
-      
+
       if (licenseKey != null && mounted) {
         setState(() {
           _currentLicenseKey = licenseKey;
-          _showLicenseKey = false; // Hide by default  
-          _licenseKeyController.text = licenseKey!; // Use null assertion since we checked above
+          _showLicenseKey = false; // Hide by default
+          _licenseKeyController.text =
+              licenseKey!; // Use null assertion since we checked above
         });
       }
     } catch (e) {
       debugPrint('Error loading stored license key: $e');
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -147,7 +148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       body: Consumer2<AIProvider, LicenseProvider>(
         builder: (context, aiProvider, licenseProvider, child) {
-                                return ListView(
+          return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
               _buildLicenseSection(licenseProvider),
@@ -200,27 +201,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          
+
           // License status display
           _buildLicenseStatusCard(licenseProvider),
-          
+
           const SizedBox(height: 16),
-          
+
           // License key input section (for all users)
           _buildLicenseKeyInput(licenseProvider),
-          
+
           const SizedBox(height: 16),
-          
+
           // License Management buttons
           _buildLicenseManagement(),
-          
+
           const SizedBox(height: 16),
-          
+
           // Independent login button (always visible)
           _buildIndependentLoginButton(),
-          
+
           const SizedBox(height: 16),
-          
+
           // Action buttons based on license type
           _buildLicenseActions(licenseProvider),
         ],
@@ -231,13 +232,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _getLicenseIcon(LicenseProvider licenseProvider) {
     if (licenseProvider.isLifetime) return '⭐';
     if (licenseProvider.isSubscription) return '💎';
-    if (licenseProvider.isTrial) return '⏰';
     return '🔑';
   }
 
   Widget _buildLicenseStatusCard(LicenseProvider licenseProvider) {
     final status = licenseProvider.licenseStatus;
-    
+
     return Container(
       padding: const EdgeInsets.all(12.0),
       decoration: BoxDecoration(
@@ -262,7 +262,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          
+
           // License details
           Text(
             _getLicenseDescription(licenseProvider),
@@ -272,28 +272,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: AppTheme.mediumGray,
             ),
           ),
-          
-          
-          // Trial countdown if applicable
-          if (licenseProvider.isTrial && status?.trialHoursRemaining != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-              decoration: BoxDecoration(
-                color: AppTheme.warmBrown.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(2.0),
-              ),
-              child: Text(
-                '${status!.trialHoursRemaining} hours remaining',
-                style: const TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 10.0,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.warmBrown,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -301,14 +279,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Color _getLicenseCardColor(LicenseProvider licenseProvider) {
     if (licenseProvider.isLifetime) return AppTheme.warmBrown.withOpacity(0.1);
-    if (licenseProvider.isSubscription) return AppTheme.darkerBrown.withOpacity(0.1);
-    if (licenseProvider.isTrial) return AppTheme.creamBeige;
+    if (licenseProvider.isSubscription)
+      return AppTheme.darkerBrown.withOpacity(0.1);
     return AppTheme.warningRed.withOpacity(0.1);
   }
 
   String _getLicenseTitle(LicenseProvider licenseProvider) {
     final status = licenseProvider.licenseStatus;
-    
+
     if (licenseProvider.isLifetime) {
       return 'Lifetime License${status?.customerName != null ? ' - ${status!.customerName}' : ''}';
     }
@@ -316,15 +294,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final planType = status?.planType ?? '';
       return '${planType.toUpperCase()} Subscription';
     }
-    if (licenseProvider.isTrial) {
-      return 'Free Trial Active';
-    }
+
     return 'Unlicensed';
   }
 
   String _getLicenseDescription(LicenseProvider licenseProvider) {
     final status = licenseProvider.licenseStatus;
-    
+
     if (licenseProvider.isLifetime) {
       return 'Full access forever • No expiration • Works offline';
     }
@@ -336,16 +312,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       return 'Active subscription • Full access';
     }
-    if (licenseProvider.isTrial) {
-      return 'Full access during trial period • Upgrade anytime';
-    }
-    return 'Trial expired • Please upgrade to continue using';
+
+    return 'License required • Please enter a valid license key';
   }
 
   /// License key input section (visible for all users)
   Widget _buildLicenseKeyInput(LicenseProvider licenseProvider) {
     final hasValidKey = licenseProvider.isValid;
-    
+
     return Container(
       padding: const EdgeInsets.all(12.0),
       decoration: BoxDecoration(
@@ -354,7 +328,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+        children: [
           Row(
             children: [
               Text(
@@ -388,7 +362,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Expanded(
                 child: TextFormField(
                   controller: _licenseKeyController,
-                  readOnly: hasValidKey, // Make read-only when license is active
+                  readOnly:
+                      hasValidKey, // Make read-only when license is active
                   obscureText: !_showLicenseKey && hasValidKey,
                   style: TextStyle(
                     fontFamily: 'JetBrainsMono',
@@ -396,71 +371,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: hasValidKey ? AppTheme.darkText : AppTheme.darkText,
                   ),
                   decoration: InputDecoration(
-                    hintText: hasValidKey ? null : 'Enter your license key (ij_life_... or ij_sub_...)',
+                    hintText: hasValidKey
+                        ? null
+                        : 'Enter your license key (ij_life_... or ij_sub_...)',
                     hintStyle: TextStyle(
                       fontFamily: 'JetBrainsMono',
                       fontSize: 12.0,
                       color: AppTheme.mediumGray,
                     ),
                     border: OutlineInputBorder(
-                      borderSide: BorderSide(color: hasValidKey ? Colors.green : AppTheme.mediumGray),
+                      borderSide: BorderSide(
+                          color:
+                              hasValidKey ? Colors.green : AppTheme.mediumGray),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: hasValidKey ? Colors.green : AppTheme.mediumGray),
+                      borderSide: BorderSide(
+                          color:
+                              hasValidKey ? Colors.green : AppTheme.mediumGray),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: hasValidKey ? Colors.green : AppTheme.warmBrown),
+                      borderSide: BorderSide(
+                          color:
+                              hasValidKey ? Colors.green : AppTheme.warmBrown),
                     ),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     filled: true,
-                    fillColor: hasValidKey ? Colors.green.withOpacity(0.1) : Colors.white,
+                    fillColor: hasValidKey
+                        ? Colors.green.withOpacity(0.1)
+                        : Colors.white,
                   ),
-                  onChanged: hasValidKey ? null : (value) {
-                    setState(() {
-                      if (value.isEmpty) {
-                        _currentLicenseKey = null;
-                      }
-                    });
-                  },
+                  onChanged: hasValidKey
+                      ? null
+                      : (value) {
+                          setState(() {
+                            if (value.isEmpty) {
+                              _currentLicenseKey = null;
+                            }
+                          });
+                        },
                 ),
               ),
               const SizedBox(width: 8),
               if (!hasValidKey) ...[
-          ElevatedButton(
+                ElevatedButton(
                   onPressed: () => _validateManualKey(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.warmBrown,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: const Text(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.warmBrown,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  child: const Text(
                     'Validate',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 12.0,
-              ),
-            ),
-          ),
-              ],
-            ],
-          ),
-          if (hasValidKey) ...[
-            SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 16),
-                SizedBox(width: 8),
-                Text(
-                  'License key active and stored securely',
-                  style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12.0,
-                    color: Colors.green,
-                    fontWeight: FontWeight.w500,
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                    ),
                   ),
                 ),
               ],
-            ),
-          ],
+            ],
+          ),
+          // License key status message removed
         ],
       ),
     );
@@ -480,9 +452,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     try {
-      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+      final licenseProvider =
+          Provider.of<LicenseProvider>(context, listen: false);
       bool success = false;
-      
+
       // Determine key type and validate accordingly
       if (key.startsWith('ij_life_')) {
         success = await licenseProvider.validateLifetimeKey(key);
@@ -491,7 +464,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Invalid key format. Must start with ij_life_ or ij_sub_'),
+            content:
+                Text('Invalid key format. Must start with ij_life_ or ij_sub_'),
             backgroundColor: AppTheme.warningRed,
           ),
         );
@@ -531,70 +505,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  /// TEMP: Clear all stored license keys (comprehensive version)
+  /// Clear all stored license keys
   Future<void> _clearAllStoredKeys() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Clear ALL license-related keys from SharedPreferences
-      // These are the actual storage keys used by LicenseService
-      await prefs.remove('license_key');           // Lifetime keys
-      await prefs.remove('subscription_key');      // Subscription keys  
-      await prefs.remove('license_status');        // Cached license status
-      await prefs.remove('trial_start');           // Trial start time
-      await prefs.remove('device_id');             // Device ID
-      
-      // Also clear any legacy keys that might exist
-      await prefs.remove('license_type');
-      await prefs.remove('license_valid');
-      await prefs.remove('trial_start_time');
-      
-      // Try to clear secure storage but ignore errors (expected to fail on debug builds)
-      try {
-        final storage = FlutterSecureStorage();
-        await storage.deleteAll(); // Clear everything from keychain
-      } catch (secureStorageError) {
-        // Expected to fail - ignore it
-        print('Secure storage clear failed (expected on debug builds): $secureStorageError');
-      }
-      
-      // Clear local state
+      debugPrint('🧹 Settings: Clearing all license keys...');
+
+      // Clear local UI state first
       setState(() {
         _currentLicenseKey = null;
         _showLicenseKey = false;
         _licenseKeyController.clear();
       });
-      
-      // Force complete license provider reset
+
+      // Clear all license data through the provider
+      // (This will clear storage and set invalid state)
       final provider = Provider.of<LicenseProvider>(context, listen: false);
-      
-      // Reset the provider's internal state
-      provider.clearLicenseData();
-      
-      // Force a fresh license check (should start new trial)
-      await provider.checkLicense();
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ All license data completely cleared! Starting fresh trial.'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 4),
-        ),
-      );
+      await provider.clearLicenseData();
+
+      debugPrint('✅ All license keys cleared - navigating to license screen');
+
+      // Navigate back to the license check wrapper (root)
+      // This ensures the Consumer pattern works correctly
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error clearing keys: $e'),
-          backgroundColor: AppTheme.warningRed,
-        ),
-      );
+      debugPrint('❌ Error clearing keys: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error clearing keys: $e'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+      }
     }
   }
 
   /// TEMP: Input and validate manual key
   Future<void> _inputAndValidateKey() async {
     final keyController = TextEditingController();
-    
+
     final key = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -619,19 +570,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () => Navigator.of(context).pop(null),
             child: Text('Cancel'),
           ),
-            ElevatedButton(
+          ElevatedButton(
             onPressed: () => Navigator.of(context).pop(keyController.text),
             child: Text('Validate'),
           ),
         ],
       ),
     );
-    
+
     if (key == null || key.isEmpty) return;
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Store the key in SharedPreferences
       if (key.startsWith('ij_life_')) {
         await prefs.setString('license_key', key);
@@ -640,29 +591,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Invalid key format. Must start with ij_life_ or ij_sub_'),
+            content: Text(
+                '❌ Invalid key format. Must start with ij_life_ or ij_sub_'),
             backgroundColor: AppTheme.warningRed,
           ),
         );
         return;
       }
-      
+
       // Update local state
       setState(() {
         _currentLicenseKey = key;
         _licenseKeyController.text = key;
       });
-      
+
       // Validate the key through license provider
       final provider = Provider.of<LicenseProvider>(context, listen: false);
       bool isValid = false;
-      
+
       if (key.startsWith('ij_life_')) {
         isValid = await provider.validateLifetimeKey(key);
       } else if (key.startsWith('ij_sub_')) {
         isValid = await provider.validateSubscriptionKey(key);
       }
-      
+
       if (isValid) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -673,7 +625,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Key stored but validation failed - may be invalid or expired'),
+            content: Text(
+                '❌ Key stored but validation failed - may be invalid or expired'),
             backgroundColor: AppTheme.warningRed,
           ),
         );
@@ -703,7 +656,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         SizedBox(height: 8),
-        
         Row(
           children: [
             Expanded(
@@ -800,42 +752,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        
-        // Trial users: Purchase options
-        if (licenseProvider.isTrial) ...[
-          Text(
-            'Upgrade Options',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 14.0,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.darkText,
-            ),
-          ),
-          SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => _openUpgradeOptions(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.warmBrown,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              child: Text(
-                'View Pricing Options',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 14.0,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
-        ],
-        
+        // No trial - license key required from start
 
-        
         // Expired license: Upgrade button
         if (licenseProvider.needsLicense) ...[
           SizedBox(height: 8),
@@ -866,7 +784,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
-        
+
         // Lifetime users: No additional buttons needed (they have permanent access)
         if (licenseProvider.isLifetime) ...[
           SizedBox(height: 8),
@@ -895,7 +813,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
-        
+
         // Emergency: Clear invalid key button (for debugging)
         if (!licenseProvider.isValid) ...[
           SizedBox(height: 8),
@@ -931,8 +849,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Open user portal (Stripe customer portal) inline
   Future<void> _openUserPortal() async {
     try {
-      const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
-      
+      const portalUrl =
+          'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
+
       // Open portal in inline webview dialog
       final result = await showDialog<bool>(
         context: context,
@@ -941,15 +860,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           portalUrl: portalUrl,
         ),
       );
-      
+
       if (result == true) {
         // User completed login and accessed their key, refresh license status
         final provider = Provider.of<LicenseProvider>(context, listen: false);
         await provider.checkLicense();
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Portal accessed! Your license key should be visible there.'),
+            content: Text(
+                '✅ Portal accessed! Your license key should be visible there.'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 3),
           ),
@@ -974,94 +894,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => LicenseDialog(canDismiss: true),
     );
   }
-
-  // 🧪 TESTING: Clear all license data and revert to trial
-  Future<void> _logoutForTesting(LicenseProvider licenseProvider) async {
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.creamBeige,
-        title: const Text(
-          '🧪 Testing Logout',
-          style: TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: const Text(
-          'This will clear all license data and revert to trial mode.\n\nThis is for testing purposes only.',
-          style: TextStyle(fontFamily: 'JetBrainsMono'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warningRed),
-            child: const Text('Clear License Data'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        // Clear all license data
-        await licenseProvider.clearLicenseData();
-        
-        // Reinitialize to start fresh trial
-        await licenseProvider.initialize();
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ License data cleared! Reverted to trial mode.'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Error clearing license data: $e'),
-              backgroundColor: AppTheme.warningRed,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  // 🧪 TESTING: Reset trial period
-  Future<void> _resetTrialForTesting(LicenseProvider licenseProvider) async {
-    try {
-      // Reset trial period
-      await licenseProvider.resetTrial();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🔄 Trial period reset! Starting fresh 24-hour trial.'),
-            backgroundColor: Colors.blue,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Error resetting trial: $e'),
-            backgroundColor: AppTheme.warningRed,
-          ),
-        );
-      }
-    }
-  }
-  
 
   /// AI Models section with model management
   Widget _buildAISection(AIProvider aiProvider) {
@@ -1123,11 +955,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            
+
             // Expandable content
             AnimatedCrossFade(
-              crossFadeState: _isModelsExpanded 
-                  ? CrossFadeState.showSecond 
+              crossFadeState: _isModelsExpanded
+                  ? CrossFadeState.showSecond
                   : CrossFadeState.showFirst,
               duration: Duration(milliseconds: 200),
               firstChild: SizedBox.shrink(),
@@ -1144,15 +976,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   SizedBox(height: 16),
-                  
+
                   // Current model status
                   _buildCurrentModelStatus(aiProvider),
                   SizedBox(height: 24),
-                  
+
                   // Available models
                   _buildAvailableModelsList(aiProvider),
                   SizedBox(height: 16),
-                  
+
                   // Storage info
                   _buildStorageInfo(aiProvider),
                 ],
@@ -1165,7 +997,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildCurrentModelStatus(AIProvider aiProvider) {
-    final currentModel = aiProvider.currentModelId != null 
+    final currentModel = aiProvider.currentModelId != null
         ? aiProvider.availableModels[aiProvider.currentModelId!]
         : null;
 
@@ -1187,10 +1019,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: AppTheme.warmBrown,
               ),
               SizedBox(width: 8),
-          Text(
+              Text(
                 'Current Model',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
                   fontSize: 14.0,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.darkText,
@@ -1278,10 +1110,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildAvailableModelsList(AIProvider aiProvider) {
     final recommendedModels = aiProvider.getRecommendedModels();
     final allModels = aiProvider.availableModels.values.toList();
-    
+
     // Sort models by RAM requirement (ascending)
     allModels.sort((a, b) => a.minRAMGB.compareTo(b.minRAMGB));
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1304,21 +1136,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         SizedBox(height: 12),
-        
+
         // Individual model cards with buttons
         ...allModels.map((model) {
           final isRecommended = recommendedModels.contains(model);
-          return _buildModelCard(model, aiProvider, isRecommended: isRecommended);
+          return _buildModelCard(model, aiProvider,
+              isRecommended: isRecommended);
         }).toList(),
-        
+
         SizedBox(height: 16),
       ],
     );
   }
 
-
-
-  void _handleModelAction(DeviceOptimizedModel model, ModelStatus status, AIProvider aiProvider) {
+  void _handleModelAction(
+      DeviceOptimizedModel model, ModelStatus status, AIProvider aiProvider) {
     switch (status) {
       case ModelStatus.notDownloaded:
         _downloadModel(model.id, aiProvider);
@@ -1401,29 +1233,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Widget _buildModelCard(DeviceOptimizedModel model, AIProvider aiProvider, {required bool isRecommended}) {
-    final status = aiProvider.modelStatuses[model.id] ?? ModelStatus.notDownloaded;
+  Widget _buildModelCard(DeviceOptimizedModel model, AIProvider aiProvider,
+      {required bool isRecommended}) {
+    final status =
+        aiProvider.modelStatuses[model.id] ?? ModelStatus.notDownloaded;
     final canDownload = model.minRAMGB <= aiProvider.deviceRAMGB;
-    
+
     return Container(
       margin: EdgeInsets.only(bottom: 12),
       padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.darkerCream,
-            borderRadius: BorderRadius.circular(8),
+      decoration: BoxDecoration(
+        color: AppTheme.darkerCream,
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isRecommended && model.isRecommended 
+          color: isRecommended && model.isRecommended
               ? AppTheme.warmBrown.withOpacity(0.3)
               : AppTheme.mediumGray.withOpacity(0.3),
           width: isRecommended && model.isRecommended ? 2 : 1,
         ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1432,24 +1266,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Text(
                           model.name,
                           style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
+                            fontFamily: 'JetBrainsMono',
                             fontSize: 13.0,
-                        fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w500,
                             color: AppTheme.darkText,
                           ),
                         ),
                         if (model.isRecommended) ...[
                           SizedBox(width: 8),
                           Container(
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
                               color: AppTheme.warmBrown,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                             child: Text(
                               'RECOMMENDED',
-                          style: TextStyle(
-                            fontFamily: 'JetBrainsMono',
+                              style: TextStyle(
+                                fontFamily: 'JetBrainsMono',
                                 fontSize: 8.0,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.white,
@@ -1468,8 +1303,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         color: AppTheme.mediumGray,
                       ),
                     ),
-                ],
-              ),
+                  ],
+                ),
               ),
               _buildModelStatusIndicator(status),
             ],
@@ -1510,16 +1345,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildModelControls(DeviceOptimizedModel model, ModelStatus status, AIProvider aiProvider, bool canDownload) {
+  Widget _buildModelControls(DeviceOptimizedModel model, ModelStatus status,
+      AIProvider aiProvider, bool canDownload) {
     final downloadProgress = aiProvider.downloadProgress;
-    
+
     // Show progress bar only if downloading AND progress is valid
-    if (status == ModelStatus.downloading && downloadProgress != null && downloadProgress.total > 0) {
+    if (status == ModelStatus.downloading &&
+        downloadProgress != null &&
+        downloadProgress.total > 0) {
       return _buildDownloadProgress(downloadProgress);
     }
 
     return Row(
-                children: [
+      children: [
         if (status == ModelStatus.notDownloaded && canDownload) ...[
           ElevatedButton(
             onPressed: () => _downloadModel(model.id, aiProvider),
@@ -1532,11 +1370,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Icon(Icons.download, size: 14, color: Colors.white),
                 SizedBox(width: 4),
-                  Text(
+                Text(
                   'Download',
                   style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
-                      fontSize: 12.0,
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 12.0,
                     color: Colors.white,
                   ),
                 ),
@@ -1555,16 +1393,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Icon(Icons.play_arrow, size: 14, color: Colors.white),
                 SizedBox(width: 4),
-                  Text(
+                Text(
                   'Load',
                   style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
+                    fontFamily: 'JetBrainsMono',
                     fontSize: 12.0,
                     color: Colors.white,
-                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
           ),
           SizedBox(width: 8),
           _buildDeleteModelButton(model.id, aiProvider),
@@ -1577,13 +1415,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-                  children: [
+              children: [
                 Icon(Icons.stop, size: 14, color: Colors.white),
                 SizedBox(width: 4),
-                    Text(
+                Text(
                   'Unload',
                   style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
+                    fontFamily: 'JetBrainsMono',
                     fontSize: 12.0,
                     color: Colors.white,
                   ),
@@ -1595,7 +1433,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildDeleteModelButton(model.id, aiProvider),
         ] else if (status == ModelStatus.error) ...[
           ElevatedButton(
-            onPressed: canDownload ? () => _downloadModel(model.id, aiProvider) : null,
+            onPressed:
+                canDownload ? () => _downloadModel(model.id, aiProvider) : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1605,19 +1444,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Icon(Icons.refresh, size: 14, color: Colors.white),
                 SizedBox(width: 4),
-                    Text(
+                Text(
                   'Retry',
                   style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
+                    fontFamily: 'JetBrainsMono',
                     fontSize: 12.0,
                     color: Colors.white,
-                      ),
-                    ),
-                  ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-        
         if (!canDownload && status == ModelStatus.notDownloaded) ...[
           Text(
             'Insufficient RAM',
@@ -1635,7 +1473,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildModelStatusIndicator(ModelStatus status) {
     Color color;
     IconData icon;
-    
+
     switch (status) {
       case ModelStatus.downloaded:
         color = Colors.blue;
@@ -1659,13 +1497,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon = Icons.cloud_download;
         break;
     }
-    
+
     return Icon(icon, color: color, size: 20);
   }
 
   Widget _buildDownloadProgress(DownloadProgress progress) {
     final isComplete = progress.percentage >= 100.0;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1676,8 +1514,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 value: progress.percentage / 100,
                 backgroundColor: AppTheme.mediumGray.withOpacity(0.3),
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  isComplete ? Colors.green : AppTheme.warmBrown
-                ),
+                    isComplete ? Colors.green : AppTheme.warmBrown),
               ),
             ),
             SizedBox(width: 8),
@@ -1694,9 +1531,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         SizedBox(height: 4),
         Text(
-          isComplete 
-            ? 'Download complete! Preparing...' 
-            : '${progress.speed.toStringAsFixed(1)} MB/s • ${progress.remainingTime}s remaining',
+          isComplete
+              ? 'Download complete! Preparing...'
+              : '${progress.speed.toStringAsFixed(1)} MB/s • ${progress.remainingTime}s remaining',
           style: TextStyle(
             fontFamily: 'JetBrainsMono',
             fontSize: 10.0,
@@ -1754,9 +1591,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   fontFamily: 'JetBrainsMono',
                   fontSize: 11.0,
                   color: AppTheme.mediumGray,
-          ),
-        ),
-      ],
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -1769,7 +1606,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Model downloaded successfully! Click "Load" to activate.'),
+            content: Text(
+                'Model downloaded successfully! Click "Load" to activate.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -1842,38 +1680,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return AlertDialog(
           title: Text(
             'Delete Model',
-          style: TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 16.0,
-            fontWeight: FontWeight.w600,
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 16.0,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
           content: Text(
             'Are you sure you want to delete "${model.name}"?\n\nThis will free up ${model.sizeGB}GB of storage but you\'ll need to download it again to use it.',
-          style: TextStyle(
-            fontFamily: 'JetBrainsMono',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
               fontSize: 13.0,
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
+          actions: [
+            TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'Cancel',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
                   fontSize: 13.0,
                   color: AppTheme.mediumGray,
+                ),
               ),
             ),
-          ),
-          TextButton(
+            TextButton(
               onPressed: () async {
                 Navigator.of(context).pop();
                 try {
                   await aiProvider.deleteModel(modelId);
                   if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Model deleted'),
                         backgroundColor: Colors.red,
@@ -1893,15 +1731,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
               child: Text(
                 'Delete',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
                   fontSize: 13.0,
                   color: Colors.red,
                   fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
         );
       },
     );
@@ -1939,14 +1777,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          
+
           // Token usage slider
           _buildTokenUsageSlider(),
-          
-          const SizedBox(height: 16),
-          
 
-          
+          const SizedBox(height: 16),
+
           // Explanation text
           Text(
             'Higher token usage = more recent files included in full text (not summarized). '
@@ -1977,7 +1813,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        
+
         Row(
           children: [
             Text(
@@ -2012,9 +1848,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
-        
+
         const SizedBox(height: 4),
-        
+
         // Current value display
         Center(
           child: Text(
@@ -2027,14 +1863,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
-        
+
         const SizedBox(height: 8),
-        
+
         // Device recommendations
         _buildDeviceRecommendations(_currentTokens),
-        
+
         const SizedBox(height: 8),
-        
+
         // System explanation
         Container(
           padding: const EdgeInsets.all(8),
@@ -2043,8 +1879,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             borderRadius: BorderRadius.circular(6),
           ),
           child: Text(
-                                'Core context (profile + conversation) uses ~400 tokens. Your setting controls embedding search depth - higher settings find more relevant journal entries. AI responses are capped at ~1024 tokens for thoughtful but complete answers.',
-                    style: TextStyle(
+            'Core context (profile + conversation) uses ~400 tokens. Your setting controls embedding search depth - higher settings find more relevant journal entries. AI responses are capped at ~1024 tokens for thoughtful but complete answers.',
+            style: TextStyle(
               fontSize: 11.0,
               color: AppTheme.mediumGray,
               height: 1.3,
@@ -2054,8 +1890,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
     );
   }
-
-
 
   /// Get current token usage setting (static method for other classes to use)
   static Future<double> getCurrentTokenUsage() async {
@@ -2072,7 +1906,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildDeviceRecommendations(double tokens) {
     String recommendation;
     Color color;
-    
+
     if (tokens <= 3000) {
       recommendation = '📱 Optimal for mobile devices';
       color = Colors.green;
@@ -2083,7 +1917,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       recommendation = '🖥️ High-performance devices';
       color = Colors.blue;
     }
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -2134,22 +1968,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          
+
           // Import files section
           _buildImportOption(),
-          
+
           const SizedBox(height: 12),
-          
+
           // Date refresh section
           _buildDateRefreshOption(),
-          
+
           const SizedBox(height: 12),
-          
+
           // Export section (placeholder for future implementation)
           _buildExportOption(),
-          
+
           const SizedBox(height: 24),
-          
+
           // Danger zone section
           _buildDangerZone(),
         ],
@@ -2207,7 +2041,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.warmBrown,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               ),
             ),
           ),
@@ -2266,7 +2101,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.warmBrown,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               ),
             ),
           ),
@@ -2327,7 +2163,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.mediumGray,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               ),
             ),
           ),
@@ -2371,12 +2208,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       // Refresh dates using the journal provider
-      final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+      final journalProvider =
+          Provider.of<JournalProvider>(context, listen: false);
       await journalProvider.refreshJournalDates();
-      
+
       // Close loading dialog
       Navigator.pop(context);
-      
+
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2390,7 +2228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       // Close loading dialog
       Navigator.pop(context);
-      
+
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -2444,7 +2282,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Delete all data button (most destructive)
           SizedBox(
             width: double.infinity,
@@ -2461,7 +2299,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               ),
             ),
           ),
@@ -2469,10 +2308,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
-
-
-
 
   Future<void> _showDeleteAllDataDialog() async {
     final confirmed = await showDialog<bool>(
@@ -2593,17 +2428,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       // Delete all data using the journal provider
-      final journalProvider = Provider.of<JournalProvider>(context, listen: false);
+      final journalProvider =
+          Provider.of<JournalProvider>(context, listen: false);
       await journalProvider.deleteAllData();
-      
+
       // Check if widget is still mounted before using context
       if (!mounted) return;
-      
+
       // Close loading dialog
       Navigator.pop(context);
-      
+
       if (!mounted) return;
-      
+
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2617,12 +2453,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       // Check if widget is still mounted before using context
       if (!mounted) return;
-      
+
       // Close loading dialog
       Navigator.pop(context);
-      
+
       if (!mounted) return;
-      
+
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -2639,13 +2475,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Storage management section
   Widget _buildStorageSection(AIProvider aiProvider) {
     return Container(
-        padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16.0),
       color: AppTheme.darkerCream,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           const Row(
-              children: [
+            children: [
               Text(
                 '💾',
                 style: TextStyle(
@@ -2655,27 +2491,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               SizedBox(width: 8),
-                Text(
+              Text(
                 'storage',
                 style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
+                  fontFamily: 'JetBrainsMono',
                   fontSize: 16.0,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  fontWeight: FontWeight.w600,
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-                            'downloaded models: ${aiProvider.modelStatuses.values.where((status) => status == ModelStatus.downloaded || status == ModelStatus.loaded).length}',
-              style: const TextStyle(
-                fontFamily: 'JetBrainsMono',
-              fontSize: 14.0,
               ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'downloaded models: ${aiProvider.modelStatuses.values.where((status) => status == ModelStatus.downloaded || status == ModelStatus.loaded).length}',
+            style: const TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
             ),
-            const SizedBox(height: 8),
+          ),
+          const SizedBox(height: 8),
           TextButton(
-              onPressed: () => _showStorageManagement(aiProvider),
+            onPressed: () => _showStorageManagement(aiProvider),
             child: const Text(
               'storage details',
               style: TextStyle(
@@ -2683,9 +2519,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 fontSize: 14.0,
                 fontWeight: FontWeight.w400,
               ),
-              ),
             ),
-          ],
+          ),
+        ],
       ),
     );
   }
@@ -2693,13 +2529,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// About section
   Widget _buildAboutSection() {
     return Container(
-        padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16.0),
       color: AppTheme.darkerCream,
       child: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
               Text(
                 'ℹ',
                 style: TextStyle(
@@ -2709,44 +2545,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               SizedBox(width: 8),
-                Text(
+              Text(
                 'about',
                 style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
+                  fontFamily: 'JetBrainsMono',
                   fontSize: 16.0,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  fontWeight: FontWeight.w600,
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
           SizedBox(height: 16),
           Text(
             'isla journal',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
               fontSize: 16.0,
-                fontWeight: FontWeight.w600,
-              ),
+              fontWeight: FontWeight.w600,
             ),
+          ),
           SizedBox(height: 8),
           Text(
             'a private, ai-enhanced journaling app with local model support.',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
               fontSize: 14.0,
-                color: AppTheme.mediumGray,
-              ),
+              color: AppTheme.mediumGray,
             ),
+          ),
           SizedBox(height: 16),
           Text(
             'version: 2.0.0 (phase 2)',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
               fontSize: 12.0,
-                color: AppTheme.mediumGray,
-              ),
+              color: AppTheme.mediumGray,
             ),
-          ],
+          ),
+        ],
       ),
     );
   }
@@ -2755,7 +2591,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showDeleteConfirmation(AIProvider aiProvider, String modelId) {
     final modelInfo = aiProvider.availableModels[modelId];
     if (modelInfo == null) return;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -2763,10 +2599,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'delete model',
           style: TextStyle(fontFamily: 'JetBrainsMono'),
         ),
-                 content: Text(
+        content: Text(
           'delete ${modelInfo.name}?\n\nthis will free up storage space but you\'ll need to download it again to use it.',
-           style: const TextStyle(fontFamily: 'JetBrainsMono'),
-         ),
+          style: const TextStyle(fontFamily: 'JetBrainsMono'),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -2827,38 +2663,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '${(bytes / 1073741824).toStringAsFixed(1)}gb';
   }
 
-  // Clear invalid stored key (emergency fix)
+  /// Clear invalid stored key
   Future<void> _clearInvalidKey(LicenseProvider licenseProvider) async {
     try {
+      debugPrint('🧹 Clearing invalid license key...');
       await licenseProvider.clearLicenseData();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Invalid key cleared! You can now enter your correct key.'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3),
-        ),
-      );
+      debugPrint('✅ Invalid key cleared - navigating to license screen');
+
+      // Navigate back to the license check wrapper (root)
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error clearing key: $e'),
-          backgroundColor: AppTheme.warningRed,
-        ),
-      );
+      debugPrint('❌ Error clearing invalid key: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error clearing key: $e'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+      }
     }
   }
-
-
 }
 
 class _CustomerPortalDialog extends StatefulWidget {
   final String portalUrl;
-  
+
   const _CustomerPortalDialog({
     Key? key,
     required this.portalUrl,
   }) : super(key: key);
-  
+
   @override
   State<_CustomerPortalDialog> createState() => _CustomerPortalDialogState();
 }
@@ -2866,7 +2703,7 @@ class _CustomerPortalDialog extends StatefulWidget {
 class _CustomerPortalDialogState extends State<_CustomerPortalDialog> {
   late final WebViewController controller;
   bool _isLoading = true;
-  
+
   @override
   void initState() {
     super.initState();
@@ -2884,7 +2721,7 @@ class _CustomerPortalDialogState extends State<_CustomerPortalDialog> {
       )
       ..loadRequest(Uri.parse(widget.portalUrl));
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -2898,7 +2735,9 @@ class _CustomerPortalDialogState extends State<_CustomerPortalDialog> {
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: AppTheme.darkerCream,
-                border: Border(bottom: BorderSide(color: AppTheme.mediumGray.withOpacity(0.3))),
+                border: Border(
+                    bottom: BorderSide(
+                        color: AppTheme.mediumGray.withOpacity(0.3))),
               ),
               child: Row(
                 children: [
@@ -2951,7 +2790,8 @@ class _CustomerPortalDialogState extends State<_CustomerPortalDialog> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  AppTheme.warmBrown),
                             ),
                             SizedBox(height: 16),
                             Text(
@@ -2974,4 +2814,4 @@ class _CustomerPortalDialogState extends State<_CustomerPortalDialog> {
       ),
     );
   }
-} 
+}
