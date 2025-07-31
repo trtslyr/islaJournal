@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/license_provider.dart';
 import '../core/theme/app_theme.dart';
-import '../widgets/license_dialog.dart';
+import '../services/browser_service.dart';
 
 class LicenseScreen extends StatefulWidget {
   @override
@@ -246,42 +245,23 @@ class _LicenseScreenState extends State<LicenseScreen> {
   }
 
   Future<void> _openCustomerPortal() async {
-    try {
-      const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
-      
-      // Open portal in inline webview dialog
-      final result = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => CustomerPortalDialog(
-          portalUrl: portalUrl,
-        ),
-      );
-      
-      if (result == true) {
-        // User completed login and accessed their key, refresh license status
-        final provider = Provider.of<LicenseProvider>(context, listen: false);
-        await provider.checkLicense();
-        if (provider.isValid) {
-          Navigator.of(context).pushReplacementNamed('/home');
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ Portal accessed! Copy your license key from the portal and enter it above.'),
-              backgroundColor: Colors.blue,
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error opening customer portal: $e'),
-          backgroundColor: AppTheme.warningRed,
-        ),
-      );
-    }
+    const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
+    
+    // Open in browser directly - simpler and more reliable!
+    await BrowserService.openUrlWithConfirmation(
+      context, 
+      portalUrl,
+      title: 'Open Customer Portal',
+    );
+    
+    // Show helpful message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Portal opened in browser! Copy your license key from there and enter it above.'),
+        backgroundColor: Colors.blue,
+        duration: Duration(seconds: 8),
+      ),
+    );
   }
   
   Widget _buildSubscriptionSection() {
@@ -415,199 +395,24 @@ class _LicenseScreenState extends State<LicenseScreen> {
   }
   
   Future<void> _startCheckout(String planType) async {
-    final provider = Provider.of<LicenseProvider>(context, listen: false);
-    final checkoutUrl = await provider.createCheckoutSession(planType);
+    // All purchases go to the same customer portal URL - simple and reliable!
+    const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
     
-    if (checkoutUrl != null) {
-      // Open Stripe checkout in partial-screen dialog
-      final result = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => StripeCheckoutDialog(
-          checkoutUrl: checkoutUrl,
-        ),
-      );
-      
-      if (result == true) {
-        // Payment successful, refresh license status
-        await provider.checkLicense();
-        if (provider.isValid) {
-          // Show success message with portal instructions
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '🎉 Payment successful!',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    '📧 Check your email for receipt details',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    '🔑 Access your license key at: Settings → Account → Login to User Portal',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 8),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          Navigator.of(context).pushReplacementNamed('/home');
-        }
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to start checkout. Please try again.'),
-          backgroundColor: AppTheme.warningRed,
-        ),
-      );
-    }
-  }
-}
-
-class CustomerPortalDialog extends StatefulWidget {
-  final String portalUrl;
-  
-  const CustomerPortalDialog({
-    Key? key,
-    required this.portalUrl,
-  }) : super(key: key);
-  
-  @override
-  State<CustomerPortalDialog> createState() => _CustomerPortalDialogState();
-}
-
-class _CustomerPortalDialogState extends State<CustomerPortalDialog> {
-  late final WebViewController controller;
-  bool _isLoading = true;
-  
-  @override
-  void initState() {
-    super.initState();
-    controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (url) {
-            setState(() => _isLoading = true);
-          },
-          onPageFinished: (url) {
-            setState(() => _isLoading = false);
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(widget.portalUrl));
-  }
-  
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        height: MediaQuery.of(context).size.height * 0.8,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          children: [
-            // Header with close button
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.darkerCream,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Customer Portal - Access Your License Key',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 16.0,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.darkText,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    icon: Icon(Icons.close, color: AppTheme.darkText),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Loading indicator
-            if (_isLoading)
-              Container(
-                height: 4,
-                child: LinearProgressIndicator(
-                  backgroundColor: AppTheme.mediumGray,
-                  valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
-                ),
-              ),
-              
-            // WebView
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(8),
-                  bottomRight: Radius.circular(8),
-                ),
-                child: WebViewWidget(controller: controller),
-              ),
-            ),
-            
-            // Footer with instructions
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.darkerCream,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(8),
-                  bottomRight: Radius.circular(8),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: AppTheme.warmBrown, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Copy your license key from the portal, then close this dialog and paste it above',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12.0,
-                        color: AppTheme.mediumGray,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+    // Open in browser directly
+    await BrowserService.openUrlWithConfirmation(
+      context, 
+      portalUrl,
+      title: 'Complete Purchase',
+    );
+    
+    // Show helpful message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Purchase page opened in browser! Complete your purchase and then enter your license key above.'),
+        backgroundColor: Colors.blue,
+        duration: Duration(seconds: 10),
       ),
     );
   }
 }
-
  

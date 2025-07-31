@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:flutter_secure_storage/flutter_secure_storage.dart';  // Removed for simpler Windows deployment
-import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/ai_provider.dart';
 import '../providers/journal_provider.dart';
 import '../providers/license_provider.dart';
-import '../widgets/license_dialog.dart';
 import '../services/ai_service.dart';
 import '../core/theme/app_theme.dart';
 import '../widgets/import_dialog.dart';
+import '../services/browser_service.dart';
 
 /// Settings screen for managing AI models and app preferences
 class SettingsScreen extends StatefulWidget {
@@ -833,52 +832,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // Open user portal (Stripe customer portal) inline
+  // Open user portal in browser - simple and reliable!
   Future<void> _openUserPortal() async {
-    try {
-      const portalUrl =
-          'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
+    const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
 
-      // Open portal in inline webview dialog
-      final result = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => _CustomerPortalDialog(
-          portalUrl: portalUrl,
-        ),
-      );
+    // Open in browser directly
+    await BrowserService.openUrlWithConfirmation(
+      context,
+      portalUrl,
+      title: 'Open Customer Portal',
+    );
 
-      if (result == true) {
-        // User completed login and accessed their key, refresh license status
-        final provider = Provider.of<LicenseProvider>(context, listen: false);
-        await provider.checkLicense();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                '✅ Portal accessed! Your license key should be visible there.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error opening user portal: $e'),
-            backgroundColor: AppTheme.warningRed,
-          ),
-        );
-      }
-    }
+    // Show helpful message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Portal opened in browser! Your license key should be visible there.'),
+        backgroundColor: Colors.blue,
+        duration: Duration(seconds: 6),
+      ),
+    );
   }
 
   Future<void> _openUpgradeOptions() async {
-    // Show license dialog
-    showDialog(
-      context: context,
-      builder: (context) => LicenseDialog(canDismiss: true),
+    // Just open the customer portal - same URL for everything!
+    const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
+
+    await BrowserService.openUrlWithConfirmation(
+      context,
+      portalUrl,
+      title: 'Upgrade License',
     );
   }
 
@@ -2672,133 +2654,5 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     }
-  }
-}
-
-class _CustomerPortalDialog extends StatefulWidget {
-  final String portalUrl;
-
-  const _CustomerPortalDialog({
-    Key? key,
-    required this.portalUrl,
-  }) : super(key: key);
-
-  @override
-  State<_CustomerPortalDialog> createState() => _CustomerPortalDialogState();
-}
-
-class _CustomerPortalDialogState extends State<_CustomerPortalDialog> {
-  late final WebViewController controller;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (url) {
-            setState(() => _isLoading = true);
-          },
-          onPageFinished: (url) {
-            setState(() => _isLoading = false);
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(widget.portalUrl));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      child: Container(
-        width: 600,
-        height: 500,
-        child: Column(
-          children: [
-            // Header bar
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.darkerCream,
-                border: Border(
-                    bottom: BorderSide(
-                        color: AppTheme.mediumGray.withOpacity(0.3))),
-              ),
-              child: Row(
-                children: [
-                  Text(
-                    'Customer Portal',
-                    style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
-                      fontSize: 16.0,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.warmBrown,
-                    ),
-                  ),
-                  Spacer(),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(
-                      'Close',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 14.0,
-                        color: AppTheme.warmBrown,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: Text(
-                      'Done',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 14.0,
-                        color: AppTheme.warmBrown,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // WebView content
-            Expanded(
-              child: Stack(
-                children: [
-                  WebViewWidget(controller: controller),
-                  if (_isLoading)
-                    Container(
-                      color: AppTheme.creamBeige,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  AppTheme.warmBrown),
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              'Loading customer portal...',
-                              style: TextStyle(
-                                fontFamily: 'JetBrainsMono',
-                                fontSize: 14.0,
-                                color: AppTheme.mediumGray,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
