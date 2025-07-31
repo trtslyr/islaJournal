@@ -1,14 +1,13 @@
 import 'dart:io';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+
 import 'package:path/path.dart' as path;
 import 'package:yaml/yaml.dart';
-import '../models/journal_file.dart';
-import '../models/journal_folder.dart';
+
 import '../services/database_service.dart';
 import '../services/embedding_service.dart';
 import '../services/date_parsing_service.dart';
-import '../services/journal_companion_service.dart';
+
 
 class ImportService {
   final DatabaseService _db = DatabaseService();

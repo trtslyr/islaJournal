@@ -764,7 +764,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
         
         
       } catch (e) {
-        print('🔴 Error deleting all conversations: $e');
+        debugPrint('🔴 Error deleting all conversations: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

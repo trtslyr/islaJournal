@@ -25,7 +25,7 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   @override
   Widget build(BuildContext context) {
     return Focus(
-      onKey: (node, event) {
+      onKeyEvent: (node, event) {
         final handled = _handleKeyPress(event, context);
         return handled ? KeyEventResult.handled : KeyEventResult.ignored;
       },
@@ -110,8 +110,8 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
             // File tree
             Expanded(
               child: DragTarget<JournalFile>(
-                onWillAccept: (data) => data != null && data.folderId != null,
-                onAccept: (file) => _moveFileToRoot(file, provider),
+                onWillAcceptWithDetails: (details) => details.data.folderId != null,
+                onAcceptWithDetails: (details) => _moveFileToRoot(details.data, provider),
                 builder: (context, candidateData, rejectedData) {
                   final isHighlighted = candidateData.isNotEmpty;
                   
@@ -839,8 +839,8 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   }
 
   /// Handle keyboard shortcuts
-  bool _handleKeyPress(RawKeyEvent event, BuildContext context) {
-    if (event is RawKeyDownEvent) {
+  bool _handleKeyPress(KeyEvent event, BuildContext context) {
+    if (event is KeyDownEvent) {
       final provider = Provider.of<JournalProvider>(context, listen: false);
       final isCtrlPressed = event.logicalKey == LogicalKeyboardKey.controlLeft ||
                            event.logicalKey == LogicalKeyboardKey.controlRight;
@@ -885,12 +885,12 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   /// Handle file tap with keyboard modifier support
   void _handleFileTap(String fileId, JournalProvider provider) {
     // Check for keyboard modifiers
-    final isShiftPressed = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
-                          RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftRight);
-    final isCtrlPressed = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
-                         RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlRight);
-    final isMetaPressed = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.metaLeft) ||
-                         RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.metaRight);
+    final isShiftPressed = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.shiftLeft) ||
+                          HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.shiftRight);
+    final isCtrlPressed = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.controlLeft) ||
+                         HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.controlRight);
+    final isMetaPressed = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.metaLeft) ||
+                         HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.metaRight);
     
     final isMultiSelectModifier = isCtrlPressed || isMetaPressed; // Ctrl on Windows/Linux, Cmd on Mac
     

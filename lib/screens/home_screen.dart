@@ -477,7 +477,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                     const SizedBox(width: 4),
+                     const SizedBox(width: 8),
+                     
+                     // No trial countdown - license key required
+                     
+                     const SizedBox(width: 8),
                                             // AI chat toggle (far right)
                        Consumer<LayoutProvider>(
                          builder: (context, layoutProvider, child) {

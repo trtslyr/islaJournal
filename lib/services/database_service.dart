@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/journal_file.dart';
 import '../models/journal_folder.dart';
@@ -26,12 +26,28 @@ class DatabaseService {
     Directory documentsDirectory = await getApplicationDocumentsDirectory();
     String path = join(documentsDirectory.path, 'isla_journal.db');
     
-    return await openDatabase(
-      path,
-      version: 12, // Keep current version but ensure compatibility
-      onCreate: _createDatabase,
-      onUpgrade: _upgradeDatabase,
-    );
+    // Use platform-specific database factory
+    if (Platform.isWindows || Platform.isLinux) {
+      // For Windows/Linux desktop platforms, use FFI (macOS works with regular sqflite)
+      sqfliteFfiInit();
+      final databaseFactory = databaseFactoryFfi;
+      return await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 12,
+          onCreate: _createDatabase,
+          onUpgrade: _upgradeDatabase,
+        ),
+      );
+    } else {
+      // For mobile platforms (iOS/Android) and macOS, use regular sqflite
+      return await openDatabase(
+        path,
+        version: 12, // Keep current version but ensure compatibility
+        onCreate: _createDatabase,
+        onUpgrade: _upgradeDatabase,
+      );
+    }
   }
 
   Future<void> _createDatabase(Database db, int version) async {
@@ -77,10 +93,10 @@ class DatabaseService {
           content
         )
       ''');
-      print('✅ FTS5 search index created successfully');
+      debugPrint('✅ FTS5 search index created successfully');
     } catch (e) {
-      print('⚠️ FTS5 not available on this system: $e');
-      print('⚠️ Search functionality will be limited but app will work normally');
+      debugPrint('⚠️ FTS5 not available on this system: $e');
+      debugPrint('⚠️ Search functionality will be limited but app will work normally');
       // App will continue to work, just without full-text search
     }
 
@@ -179,16 +195,16 @@ class DatabaseService {
         )
       ''');
       
-      print('Database upgraded: Added conversations and messages tables');
+      debugPrint('Database upgraded: Added conversations and messages tables');
     }
     
     if (oldVersion < 4) {
       // Version 4 upgrade: Add context settings to conversations
       try {
         await db.execute('ALTER TABLE conversations ADD COLUMN context_settings TEXT DEFAULT NULL');
-        print('Database upgraded: Added context settings to conversations');
+        debugPrint('Database upgraded: Added context settings to conversations');
       } catch (e) {
-        print('Database upgrade: context_settings column already exists');
+        debugPrint('Database upgrade: context_settings column already exists');
       }
     }
     if (oldVersion < 6) {
@@ -230,7 +246,7 @@ class DatabaseService {
         )
       ''');
       
-      print('Database upgraded: Added import functionality tables');
+      debugPrint('Database upgraded: Added import functionality tables');
     }
     
     if (oldVersion < 7) {
@@ -252,9 +268,9 @@ class DatabaseService {
           )
         ''');
         
-        print('Database upgraded: Fixed file_embeddings table schema');
+        debugPrint('Database upgraded: Fixed file_embeddings table schema');
       } catch (e) {
-        print('Error fixing file_embeddings table: $e');
+        debugPrint('Error fixing file_embeddings table: $e');
       }
     }
     
@@ -262,13 +278,13 @@ class DatabaseService {
       // Version 8 upgrade: Add journal_date field for chronological sorting
       try {
         await db.execute('ALTER TABLE files ADD COLUMN journal_date TEXT');
-        print('Database upgraded: Added journal_date field for chronological sorting');
+        debugPrint('Database upgraded: Added journal_date field for chronological sorting');
         
         // Backfill journal dates for existing files
         await _backfillJournalDates(db);
-        print('Database upgraded: Backfilled journal dates for existing files');
+        debugPrint('Database upgraded: Backfilled journal dates for existing files');
       } catch (e) {
-        print('Error adding journal_date field: $e');
+        debugPrint('Error adding journal_date field: $e');
       }
     }
     
@@ -281,16 +297,16 @@ class DatabaseService {
         
         if (!hasJournalDate) {
           await db.execute('ALTER TABLE files ADD COLUMN journal_date TEXT');
-          print('Database upgraded v9: Added journal_date field');
+          debugPrint('Database upgraded v9: Added journal_date field');
         } else {
-          print('Database upgraded v9: journal_date field already exists');
+          debugPrint('Database upgraded v9: journal_date field already exists');
         }
         
         // Always run backfill to ensure existing files have dates
         await _backfillJournalDates(db);
-        print('Database upgraded v9: Backfilled journal dates for existing files');
+        debugPrint('Database upgraded v9: Backfilled journal dates for existing files');
       } catch (e) {
-        print('Error in v9 upgrade: $e');
+        debugPrint('Error in v9 upgrade: $e');
       }
     }
 
@@ -303,17 +319,17 @@ class DatabaseService {
         
         if (!hasSummary) {
           await db.execute('ALTER TABLE files ADD COLUMN summary TEXT');
-          print('Database upgraded v10: Added summary field');
+          debugPrint('Database upgraded v10: Added summary field');
         }
         
         if (!hasKeywords) {
           await db.execute('ALTER TABLE files ADD COLUMN keywords TEXT');
-          print('Database upgraded v10: Added keywords field');
+          debugPrint('Database upgraded v10: Added keywords field');
         }
         
-        print('Database upgraded v10: Ready for optimized context system');
+        debugPrint('Database upgraded v10: Ready for optimized context system');
       } catch (e) {
-        print('Error in v10 upgrade: $e');
+        debugPrint('Error in v10 upgrade: $e');
       }
     }
 
@@ -325,12 +341,12 @@ class DatabaseService {
         
         if (!hasPinned) {
           await db.execute('ALTER TABLE files ADD COLUMN is_pinned INTEGER DEFAULT 0');
-          print('Database upgraded v11: Added is_pinned field for file pinning');
+          debugPrint('Database upgraded v11: Added is_pinned field for file pinning');
         }
         
-        print('Database upgraded v11: Pin functionality enabled');
+        debugPrint('Database upgraded v11: Pin functionality enabled');
       } catch (e) {
-        print('Error in v11 upgrade: $e');
+        debugPrint('Error in v11 upgrade: $e');
       }
     }
 
@@ -342,12 +358,12 @@ class DatabaseService {
         
         if (!hasPinned) {
           await db.execute('ALTER TABLE folders ADD COLUMN is_pinned INTEGER DEFAULT 0');
-          print('Database upgraded v12: Added is_pinned field to folders');
+          debugPrint('Database upgraded v12: Added is_pinned field to folders');
         }
         
-        print('Database upgraded v12: Folder pin functionality enabled');
+        debugPrint('Database upgraded v12: Folder pin functionality enabled');
       } catch (e) {
-        print('Error in v12 upgrade: $e');
+        debugPrint('Error in v12 upgrade: $e');
       }
     }
 
@@ -357,7 +373,7 @@ class DatabaseService {
   /// Backfill journal dates for existing files that don't have them
   Future<void> _backfillJournalDates(Database db) async {
     try {
-      print('🔄 Starting journal date backfill for existing files...');
+      debugPrint('🔄 Starting journal date backfill for existing files...');
       
       // Get all files that don't have journal_date set
       final files = await db.query(
@@ -365,14 +381,14 @@ class DatabaseService {
         where: 'journal_date IS NULL OR journal_date = ""',
       );
       
-      print('📋 Found ${files.length} files without journal dates');
+      debugPrint('📋 Found ${files.length} files without journal dates');
       
       for (final fileMap in files) {
         final fileId = fileMap['id'] as String;
         final fileName = fileMap['name'] as String;
         final filePath = fileMap['file_path'] as String?;
         
-        print('  📅 Processing file: $fileName');
+        debugPrint('  📅 Processing file: $fileName');
         
         String? content;
         try {
@@ -384,7 +400,7 @@ class DatabaseService {
             }
           }
         } catch (e) {
-          print('    ⚠️ Could not read file content: $e');
+          debugPrint('    ⚠️ Could not read file content: $e');
         }
         
         // Extract date using our universal date parsing service
@@ -402,15 +418,15 @@ class DatabaseService {
             where: 'id = ?',
             whereArgs: [fileId],
           );
-          print('    ✅ Set journal date: $extractedDate');
+          debugPrint('    ✅ Set journal date: $extractedDate');
         } else {
-          print('    ⚠️ No date found, keeping null');
+          debugPrint('    ⚠️ No date found, keeping null');
         }
       }
       
-      print('🎉 Journal date backfill completed');
+      debugPrint('🎉 Journal date backfill completed');
     } catch (e) {
-      print('🔴 Error during journal date backfill: $e');
+      debugPrint('🔴 Error during journal date backfill: $e');
     }
   }
   
@@ -429,19 +445,19 @@ class DatabaseService {
   Future<void> refreshJournalDatesForAllFiles() async {
     final db = await database;
     
-    print('🔄 Manual refresh: Starting journal date update for ALL files...');
+    debugPrint('🔄 Manual refresh: Starting journal date update for ALL files...');
     
     // Get all files (not just ones without dates, to allow re-parsing)
     final files = await db.query('files');
     
-    print('📋 Refreshing journal dates for ${files.length} files');
+    debugPrint('📋 Refreshing journal dates for ${files.length} files');
     
     for (final fileMap in files) {
       final fileId = fileMap['id'] as String;
       final fileName = fileMap['name'] as String;
       final filePath = fileMap['file_path'] as String?;
       
-      print('  📅 Processing file: $fileName');
+      debugPrint('  📅 Processing file: $fileName');
       
       String? content;
       try {
@@ -453,7 +469,7 @@ class DatabaseService {
           }
         }
       } catch (e) {
-        print('    ⚠️ Could not read file content: $e');
+        debugPrint('    ⚠️ Could not read file content: $e');
       }
       
       // Extract date using our universal date parsing service
@@ -471,7 +487,7 @@ class DatabaseService {
           where: 'id = ?',
           whereArgs: [fileId],
         );
-        print('    ✅ Set journal date: $extractedDate');
+        debugPrint('    ✅ Set journal date: $extractedDate');
       } else {
         // Explicitly set journal_date to null when no date is found
         await db.update(
@@ -480,18 +496,18 @@ class DatabaseService {
           where: 'id = ?',
           whereArgs: [fileId],
         );
-        print('    ⚠️ No date found, set journal_date to null');
+        debugPrint('    ⚠️ No date found, set journal_date to null');
       }
     }
     
-    print('🎉 Manual journal date refresh completed');
+    debugPrint('🎉 Manual journal date refresh completed');
   }
 
   /// Delete all user data - files, conversations, and clear file system
   /// Preserves the profile file but resets its content to default
   Future<void> deleteAllData() async {
     try {
-      print('🗑️ Starting complete data deletion...');
+      debugPrint('🗑️ Starting complete data deletion...');
       
       final db = await database;
       const profileId = 'profile_special_file';
@@ -505,7 +521,7 @@ class DatabaseService {
           .cast<String>()
           .toList();
       
-      print('📁 Found ${filePaths.length} files to delete from filesystem (excluding profile)');
+      debugPrint('📁 Found ${filePaths.length} files to delete from filesystem (excluding profile)');
       
       // Delete physical files from filesystem (EXCLUDING profile file)
       for (final filePath in filePaths) {
@@ -513,15 +529,15 @@ class DatabaseService {
           final file = File(filePath);
           if (await file.exists()) {
             await file.delete();
-            print('  🗑️ Deleted file: $filePath');
+            debugPrint('  🗑️ Deleted file: $filePath');
           }
         } catch (e) {
-          print('  ⚠️ Error deleting file $filePath: $e');
+          debugPrint('  ⚠️ Error deleting file $filePath: $e');
         }
       }
       
       // Don't delete the entire directory, just clean up the contents we deleted
-      print('📁 Preserved journal_files directory and profile file');
+      debugPrint('📁 Preserved journal_files directory and profile file');
       
       // Clear all database tables EXCEPT preserve profile file
       await db.transaction((txn) async {
@@ -539,21 +555,21 @@ class DatabaseService {
         try {
           await txn.delete('files_fts', where: 'file_id != ?', whereArgs: [profileId]);
         } catch (e) {
-          print('⚠️ FTS5 not available, skipping search index cleanup: $e');
+          debugPrint('⚠️ FTS5 not available, skipping search index cleanup: $e');
         }
         
         await txn.delete('folders');
         
-        print('🗃️ Cleared all database tables (preserved profile file)');
+        debugPrint('🗃️ Cleared all database tables (preserved profile file)');
       });
       
 
       
-      print('📁 Skipped recreating default folders');
+      debugPrint('📁 Skipped recreating default folders');
       
-      print('✅ Complete data deletion finished successfully');
+      debugPrint('✅ Complete data deletion finished successfully');
     } catch (e) {
-      print('🔴 Error during complete data deletion: $e');
+      debugPrint('🔴 Error during complete data deletion: $e');
       rethrow;
     }
   }
@@ -622,7 +638,7 @@ When you're ready, delete this instruction text and write your own introduction.
         'content': profileContent,
       });
     } catch (e) {
-      print('⚠️ FTS5 not available, skipping search index update: $e');
+      debugPrint('⚠️ FTS5 not available, skipping search index update: $e');
     }
   }
 
@@ -743,7 +759,7 @@ When you're ready, delete this instruction text and write your own introduction.
         'content': content,
       });
     } catch (e) {
-      print('⚠️ FTS5 not available, skipping search index update: $e');
+      debugPrint('⚠️ FTS5 not available, skipping search index update: $e');
     }
     
     
@@ -847,7 +863,7 @@ When you're ready, delete this instruction text and write your own introduction.
         final fileContent = await File(file.filePath).readAsString();
         pinnedFiles.add(file.copyWith(content: fileContent));
       } catch (e) {
-        print('Warning: Could not read pinned file ${file.name}: $e');
+        debugPrint('Warning: Could not read pinned file ${file.name}: $e');
         // Add without content rather than skipping entirely
         pinnedFiles.add(file);
       }
@@ -879,7 +895,7 @@ When you're ready, delete this instruction text and write your own introduction.
         'keywords': null,
       },
     );
-    print('   Cleared summaries for all files');
+    debugPrint('   Cleared summaries for all files');
   }
 
   /// Get files that need summaries (substantial content but no summary yet)
@@ -943,7 +959,7 @@ When you're ready, delete this instruction text and write your own introduction.
       try {
         await db.delete('files_fts', where: 'file_id = ?', whereArgs: [id]);
       } catch (e) {
-        print('⚠️ FTS5 not available, skipping search index cleanup: $e');
+        debugPrint('⚠️ FTS5 not available, skipping search index cleanup: $e');
       }
     }
   }
@@ -963,7 +979,7 @@ When you're ready, delete this instruction text and write your own introduction.
       
       return maps.map((map) => JournalFile.fromMap(map)).toList();
     } catch (e) {
-      print('⚠️ FTS5 search failed, using fallback: $e');
+      debugPrint('⚠️ FTS5 search failed, using fallback: $e');
       
       // Fallback to LIKE search (works on all SQLite versions)
       final List<Map<String, dynamic>> maps = await db.query(
@@ -1064,7 +1080,7 @@ When you're ready, delete this instruction text and write your own introduction.
         
         files.add(fileWithContent);
       } catch (e) {
-        print('Error loading file content for ${file.filePath}: $e');
+        debugPrint('Error loading file content for ${file.filePath}: $e');
         // Skip files we can't read
         continue;
       }

@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
-import 'package:fllama/fllama.dart';
 import 'package:flutter/foundation.dart';
+import 'package:fllama/fllama.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
@@ -172,9 +171,9 @@ class AIService {
         _deviceRAMGB = 16; // Conservative estimate for Linux PCs
       }
       
-      print('🔍 Device detected: $_deviceType with estimated ${_deviceRAMGB}GB RAM');
+      debugPrint('🔍 Device detected: $_deviceType with estimated ${_deviceRAMGB}GB RAM');
     } catch (e) {
-      print('⚠️ Could not detect device capabilities: $e');
+      debugPrint('⚠️ Could not detect device capabilities: $e');
       _deviceType = 'Unknown Device';
       _deviceRAMGB = 8; // Safe default
     }
@@ -313,11 +312,11 @@ class AIService {
       final modelFile = File('${modelsDir.path}/$modelId.gguf');
       if (await modelFile.exists()) {
         _modelStatuses[modelId] = ModelStatus.downloaded;
-        print('✅ Found existing model: $modelId');
+        debugPrint('✅ Found existing model: $modelId');
       }
     }
     
-    print('📊 Model status initialized: ${_modelStatuses.length} models checked');
+    debugPrint('📊 Model status initialized: ${_modelStatuses.length} models checked');
   }
 
   Future<Directory> _getModelsDirectory() async {
@@ -341,7 +340,7 @@ class AIService {
       final modelsDir = await _getModelsDirectory();
       final modelFile = File('${modelsDir.path}/$modelId.gguf');
       
-      print('📥 Downloading ${model.name} (${model.sizeGB}GB, ${model.quantization})...');
+      debugPrint('📥 Downloading ${model.name} (${model.sizeGB}GB, ${model.quantization})...');
       
       final request = http.Request('GET', Uri.parse(model.downloadUrl));
       final response = await request.send();
@@ -375,7 +374,7 @@ class AIService {
         onDone: () async {
           await sink.close();
           _modelStatuses[modelId] = ModelStatus.downloaded;
-          print('✅ Downloaded ${model.name} successfully');
+          debugPrint('✅ Downloaded ${model.name} successfully');
           
           // Ensure status is updated before method returns
           await Future.delayed(Duration(milliseconds: 100));
@@ -392,7 +391,7 @@ class AIService {
 
     } catch (e) {
       _modelStatuses[modelId] = ModelStatus.error;
-      print('❌ Failed to download ${model.name}: $e');
+      debugPrint('❌ Failed to download ${model.name}: $e');
       rethrow;
     }
   }
@@ -411,7 +410,7 @@ class AIService {
       final modelsDir = await _getModelsDirectory();
       final modelPath = '${modelsDir.path}/$modelId.gguf';
       
-      print('🔄 Loading model: $modelId');
+      debugPrint('🔄 Loading model: $modelId');
 
       // Simply verify the model file exists and set it as loaded
       // The actual loading will be validated when first used for generation
@@ -434,13 +433,13 @@ class AIService {
       await _saveLoadedModelId(modelId);
       
       final model = _availableModels[modelId]!;
-      print('✅ Successfully loaded ${model.name} (${model.quantization}) - ${(fileSize / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB');
+      debugPrint('✅ Successfully loaded ${model.name} (${model.quantization}) - ${(fileSize / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB');
       
     } catch (e) {
       _modelStatuses[modelId] = ModelStatus.error;
       _currentModelPath = null;
       _currentModelId = null;
-      print('❌ Failed to load model $modelId: $e');
+      debugPrint('❌ Failed to load model $modelId: $e');
       rethrow;
     }
   }
@@ -480,9 +479,9 @@ class AIService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('loaded_model_id', modelId);
-      print('💾 Saved loaded model ID: $modelId');
+      debugPrint('💾 Saved loaded model ID: $modelId');
     } catch (e) {
-      print('⚠️ Failed to save loaded model ID: $e');
+      debugPrint('⚠️ Failed to save loaded model ID: $e');
     }
   }
 
@@ -491,9 +490,9 @@ class AIService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('loaded_model_id');
-      print('🗑️ Cleared loaded model ID');
+      debugPrint('🗑️ Cleared loaded model ID');
     } catch (e) {
-      print('⚠️ Failed to clear loaded model ID: $e');
+      debugPrint('⚠️ Failed to clear loaded model ID: $e');
     }
   }
 
@@ -506,17 +505,17 @@ class AIService {
       if (savedModelId != null && _availableModels.containsKey(savedModelId)) {
         // Check if the model is downloaded and ready to load
         if (_modelStatuses[savedModelId] == ModelStatus.downloaded) {
-          print('🔄 Auto-loading previously loaded model: $savedModelId');
+          debugPrint('🔄 Auto-loading previously loaded model: $savedModelId');
           await loadModel(savedModelId);
-          print('✅ Successfully restored previously loaded model: $savedModelId');
+          debugPrint('✅ Successfully restored previously loaded model: $savedModelId');
         } else {
-          print('⚠️ Previously loaded model $savedModelId is not downloaded, skipping auto-load');
+          debugPrint('⚠️ Previously loaded model $savedModelId is not downloaded, skipping auto-load');
           // Clear the saved model ID since it's no longer valid
           await _clearLoadedModelId();
         }
       }
     } catch (e) {
-      print('⚠️ Failed to load previously loaded model: $e');
+      debugPrint('⚠️ Failed to load previously loaded model: $e');
       // Clear the saved model ID if there was an error
       await _clearLoadedModelId();
     }
@@ -524,7 +523,7 @@ class AIService {
 
   Future<void> unloadModel() async {
     if (_currentModelPath != null) {
-      print('🔄 Model unloaded');
+      debugPrint('🔄 Model unloaded');
     }
     
     if (_currentModelId != null && _modelStatuses[_currentModelId] == ModelStatus.loaded) {
@@ -564,7 +563,7 @@ class AIService {
       final gpuLayers = _getOptimalGpuLayers();
       final contextSize = _getContextSize();
       
-      print('🖥️ GPU Layers: $gpuLayers, Context: $contextSize, RAM: ${_deviceRAMGB}GB');
+      debugPrint('🖥️ GPU Layers: $gpuLayers, Context: $contextSize, RAM: ${_deviceRAMGB}GB');
       
       final request = OpenAiRequest(
         maxTokens: maxTokens,
@@ -590,11 +589,11 @@ class AIService {
 
       return await completer.future;
     } catch (e) {
-      print('❌ Generation failed: $e');
+      debugPrint('❌ Generation failed: $e');
       
       // If generation fails, the model might be corrupted or incompatible
       if (_currentModelId != null) {
-        print('⚠️ Marking model $_currentModelId as error due to generation failure');
+        debugPrint('⚠️ Marking model $_currentModelId as error due to generation failure');
               _modelStatuses[_currentModelId!] = ModelStatus.error;
       _currentModelPath = null;
       _currentModelId = null;
@@ -620,12 +619,12 @@ class AIService {
 
     if (await modelFile.exists()) {
       await modelFile.delete();
-        print('🗑️ Deleted model: $modelId');
+        debugPrint('🗑️ Deleted model: $modelId');
     }
 
     _modelStatuses[modelId] = ModelStatus.notDownloaded;
     } catch (e) {
-      print('❌ Failed to delete model $modelId: $e');
+      debugPrint('❌ Failed to delete model $modelId: $e');
       rethrow;
     }
   }
@@ -653,7 +652,7 @@ class AIService {
         return '${gb.toStringAsFixed(1)} GB';
       }
     } catch (e) {
-      print('❌ Failed to calculate storage usage: $e');
+      debugPrint('❌ Failed to calculate storage usage: $e');
       return 'Unknown';
     }
   }

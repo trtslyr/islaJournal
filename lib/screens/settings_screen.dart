@@ -58,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // If we clamped the value, save the new clamped value
         if (clampedTokens != savedTokens) {
           await prefs.setDouble(_tokenUsageKey, clampedTokens);
-          print(
+          debugPrint(
               '📱 Clamped token usage from ${savedTokens.toInt()} to ${clampedTokens.toInt()} for efficiency');
         }
       } else {
@@ -67,7 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     } catch (e) {
-      print('Error loading token usage: $e');
+      debugPrint('Error loading token usage: $e');
       setState(() {
         _currentTokens = 4000.0; // Fallback to default on error
       });
@@ -83,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _currentTokens = tokens;
       });
     } catch (e) {
-      print('Error saving token usage: $e');
+      debugPrint('Error saving token usage: $e');
     }
   }
 
@@ -1897,7 +1897,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getDouble(_tokenUsageKey) ?? 30000.0;
     } catch (e) {
-      print('Error loading token usage: $e');
+      debugPrint('Error loading token usage: $e');
       return 30000.0;
     }
   }

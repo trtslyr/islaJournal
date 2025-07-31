@@ -61,9 +61,9 @@ class AIProvider with ChangeNotifier {
     try {
       await _aiService.downloadModel(modelId);
       notifyListeners();
-      print('✅ Model $modelId downloaded successfully! Click "Load" to activate it.');
+      debugPrint('✅ Model $modelId downloaded successfully! Click "Load" to activate it.');
     } catch (e) {
-      print('❌ Failed to download model: $e');
+      debugPrint('❌ Failed to download model: $e');
       notifyListeners();
       rethrow;
     }
@@ -74,7 +74,7 @@ class AIProvider with ChangeNotifier {
       await _aiService.loadModel(modelId);
       notifyListeners();
     } catch (e) {
-      print('❌ Failed to load model: $e');
+      debugPrint('❌ Failed to load model: $e');
       rethrow;
     }
   }
@@ -84,7 +84,7 @@ class AIProvider with ChangeNotifier {
       await _aiService.unloadModel();
       notifyListeners();
     } catch (e) {
-      print('❌ Failed to unload model: $e');
+      debugPrint('❌ Failed to unload model: $e');
       rethrow;
     }
   }
@@ -93,9 +93,9 @@ class AIProvider with ChangeNotifier {
     try {
       await _aiService.deleteModel(modelId);
       notifyListeners();
-      print('✅ Model $modelId deleted successfully. Storage freed.');
+      debugPrint('✅ Model $modelId deleted successfully. Storage freed.');
     } catch (e) {
-      print('❌ Failed to delete model: $e');
+      debugPrint('❌ Failed to delete model: $e');
       rethrow;
     }
   }
@@ -105,7 +105,7 @@ class AIProvider with ChangeNotifier {
       _aiResponse = await _aiService.generateText(prompt, maxTokens: maxTokens);
       notifyListeners();
     } catch (e) {
-      print('❌ Text generation failed: $e');
+      debugPrint('❌ Text generation failed: $e');
       _aiResponse = 'Error generating response: $e';
       notifyListeners();
       rethrow;
@@ -121,7 +121,7 @@ class AIProvider with ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      print('❌ Mood analysis failed: $e');
+      debugPrint('❌ Mood analysis failed: $e');
       _moodAnalysis = 'Error analyzing mood: $e';
       notifyListeners();
     }
