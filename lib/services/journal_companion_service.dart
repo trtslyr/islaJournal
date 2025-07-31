@@ -75,7 +75,7 @@ class JournalCompanionService {
       final tokens = prefs.getDouble('context_token_usage') ?? 30000.0;
       return tokens.toInt();
     } catch (e) {
-      debugPrint('   Using default tokens (SharedPreferences error): $e');
+      print('   Using default tokens (SharedPreferences error): $e');
       return 30000; // Fallback to default
     }
   }
@@ -86,11 +86,11 @@ class JournalCompanionService {
   String _getConversationHistory(ConversationSession? conversation, int tokenBudget) {
     try {
       if (conversation?.history.isEmpty != false) {
-        debugPrint('   ⚠️ No conversation history');
+        print('   ⚠️ No conversation history');
         return '';
       }
       
-      debugPrint('   💬 Building conversation context...');
+      print('   💬 Building conversation context...');
       
       // Get recent messages (last 3 exchanges = 6 messages max) - reduced to avoid confusion
       final recentHistory = conversation!.history.reversed.take(10).toList().reversed.toList();
@@ -110,11 +110,11 @@ class JournalCompanionService {
         }
       }
       
-      debugPrint('   ✅ Conversation truncated: ${usedTokens} tokens');
+      print('   ✅ Conversation truncated: ${usedTokens} tokens');
       return conversationLines.join('\n');
       
     } catch (e) {
-      debugPrint('Error building conversation context: $e');
+      print('Error building conversation context: $e');
       return 'No conversation context available.';
     }
   }
@@ -122,34 +122,34 @@ class JournalCompanionService {
   /// Get relevant entries using embeddings search
   Future<String> _getRelevantEntriesFromEmbeddings(String userQuery, int tokenBudget) async {
     try {
-      debugPrint('   🔍 Searching embeddings for relevant entries...');
-      debugPrint('   Query: "$userQuery"');
-      debugPrint('   Token budget: $tokenBudget');
+      print('   🔍 Searching embeddings for relevant entries...');
+      print('   Query: "$userQuery"');
+      print('   Token budget: $tokenBudget');
       
       // First, check if any embeddings exist in the database
       final embeddingCount = await _dbService.getEmbeddingCount();
-      debugPrint('   📊 Total embeddings in database: $embeddingCount');
+      print('   📊 Total embeddings in database: $embeddingCount');
       
       if (embeddingCount == 0) {
-        debugPrint('   ⚠️ No embeddings found in database - files need to be imported first');
+        print('   ⚠️ No embeddings found in database - files need to be imported first');
         return 'No relevant entries found. Import some journal files to enable AI search.';
       }
       
       // Show sample of what embeddings exist
       final sampleEmbeddings = await _dbService.getEmbeddingSample(limit: 3);
-      debugPrint('   📋 Sample embeddings:');
+      print('   📋 Sample embeddings:');
       for (final sample in sampleEmbeddings) {
-        debugPrint('     - ${sample['name']}: chunk ${sample['chunk_index']}, ${sample['content_length']} chars, ${sample['embedding_size']} bytes');
+        print('     - ${sample['name']}: chunk ${sample['chunk_index']}, ${sample['content_length']} chars, ${sample['embedding_size']} bytes');
       }
       
       // Find most similar files using embeddings
-      debugPrint('   🎯 About to call findSimilarFiles with query: "$userQuery"');
+      print('   🎯 About to call findSimilarFiles with query: "$userQuery"');
       final similarFiles = await _embeddingService.findSimilarFiles(userQuery, topK: 10);
-      debugPrint('   🎯 Found ${similarFiles.length} similar files from chunked embeddings');
+      print('   🎯 Found ${similarFiles.length} similar files from chunked embeddings');
       
       if (similarFiles.isEmpty) {
-        debugPrint('   ⚠️ CRITICAL: Embedding search returned NO RESULTS');
-        debugPrint('   🔍 This suggests an issue with the similarity calculation or thresholds');
+        print('   ⚠️ CRITICAL: Embedding search returned NO RESULTS');
+        print('   🔍 This suggests an issue with the similarity calculation or thresholds');
         return 'No relevant entries found for your query.';
       }
       
@@ -158,27 +158,27 @@ class JournalCompanionService {
       int skippedDueToTokens = 0;
       int skippedDueToEmptyContent = 0;
       
-      debugPrint('   📄 Processing ${similarFiles.length} files:');
+      print('   📄 Processing ${similarFiles.length} files:');
       for (int i = 0; i < similarFiles.length && currentTokens < tokenBudget; i++) {
         final file = similarFiles[i];
-        debugPrint('   📄 Processing file ${i + 1}/${similarFiles.length}: ${file.name}');
-        debugPrint('       Content length: ${file.content.length} chars');
+        print('   📄 Processing file ${i + 1}/${similarFiles.length}: ${file.name}');
+        print('       Content length: ${file.content.length} chars');
         
         // Get clean content
         final cleanContent = _extractUserContentOnly(file.content);
         final entryTokens = _estimateTokens(cleanContent);
         
-        debugPrint('     📊 Clean content: ${cleanContent.length} chars, ~$entryTokens tokens');
-        debugPrint('     📊 Current tokens: $currentTokens, Budget: $tokenBudget, Would use: ${currentTokens + entryTokens}');
+        print('     📊 Clean content: ${cleanContent.length} chars, ~$entryTokens tokens');
+        print('     📊 Current tokens: $currentTokens, Budget: $tokenBudget, Would use: ${currentTokens + entryTokens}');
         
         if (cleanContent.isEmpty) {
-          debugPrint('     ❌ SKIPPED: Empty content after filtering');
+          print('     ❌ SKIPPED: Empty content after filtering');
           skippedDueToEmptyContent++;
           continue;
         }
         
         if (currentTokens + entryTokens > tokenBudget) {
-          debugPrint('     ❌ SKIPPED: Would exceed token budget ($tokenBudget)');
+          print('     ❌ SKIPPED: Would exceed token budget ($tokenBudget)');
           skippedDueToTokens++;
           break;
         }
@@ -186,34 +186,34 @@ class JournalCompanionService {
         final entry = '**${file.name}** (${file.journalDate?.toString().split(' ')[0] ?? 'No date'}):\n$cleanContent';
         relevantEntries.add(entry);
         currentTokens += entryTokens;
-        debugPrint('     ✅ Added to context (total tokens: $currentTokens)');
+        print('     ✅ Added to context (total tokens: $currentTokens)');
       }
       
-      debugPrint('   📊 FINAL STATS:');
-      debugPrint('     - Files processed: ${similarFiles.length}');
-      debugPrint('     - Files added to context: ${relevantEntries.length}');
-      debugPrint('     - Skipped due to empty content: $skippedDueToEmptyContent');
-      debugPrint('     - Skipped due to token budget: $skippedDueToTokens');
-      debugPrint('     - Total tokens used: $currentTokens');
+      print('   📊 FINAL STATS:');
+      print('     - Files processed: ${similarFiles.length}');
+      print('     - Files added to context: ${relevantEntries.length}');
+      print('     - Skipped due to empty content: $skippedDueToEmptyContent');
+      print('     - Skipped due to token budget: $skippedDueToTokens');
+      print('     - Total tokens used: $currentTokens');
       
       if (relevantEntries.isEmpty) {
-        debugPrint('   ⚠️ CRITICAL: No entries had usable content after filtering');
+        print('   ⚠️ CRITICAL: No entries had usable content after filtering');
         if (skippedDueToEmptyContent > 0) {
-          debugPrint('   🔍 Problem: All $skippedDueToEmptyContent files had empty content after filtering');
+          print('   🔍 Problem: All $skippedDueToEmptyContent files had empty content after filtering');
         }
         if (skippedDueToTokens > 0) {
-          debugPrint('   🔍 Problem: $skippedDueToTokens files skipped due to token budget');
+          print('   🔍 Problem: $skippedDueToTokens files skipped due to token budget');
         }
         return 'No relevant entries found for your query.';
       }
       
       final result = relevantEntries.join('\n\n');
-      debugPrint('   🎯 SUCCESS: Returning ${relevantEntries.length} relevant entries (~$currentTokens tokens)');
+      print('   🎯 SUCCESS: Returning ${relevantEntries.length} relevant entries (~$currentTokens tokens)');
       return result;
       
     } catch (e) {
-      debugPrint('   🔴 Error in embedding search: $e');
-      debugPrint('   🔴 Stack trace: ${StackTrace.current}');
+      print('   🔴 Error in embedding search: $e');
+      print('   🔴 Stack trace: ${StackTrace.current}');
       return 'Error searching for relevant entries: $e';
     }
   }
@@ -225,7 +225,7 @@ class JournalCompanionService {
         return '';
       }
       
-      debugPrint('   📁 Loading ${settings.selectedFileIds.length} selected files (needs-based system)...');
+      print('   📁 Loading ${settings.selectedFileIds.length} selected files (needs-based system)...');
       
       final selectedFiles = <String>[];
       int totalTokensNeeded = 0;
@@ -239,7 +239,7 @@ class JournalCompanionService {
             // Clean the content
             final cleanContent = _extractUserContentOnly(file!.content!);
             if (cleanContent.trim().isEmpty) {
-              debugPrint('   ⏭️ Skipping ${file.name} - no user content after cleaning');
+              print('   ⏭️ Skipping ${file.name} - no user content after cleaning');
               continue;
             }
             
@@ -247,32 +247,32 @@ class JournalCompanionService {
             
             // Check if adding this file would exceed reasonable limits
             if (totalTokensNeeded + fileTokens > maxReasonableLimit) {
-              debugPrint('   ⏹️ Stopping at ${file.name} - would exceed reasonable limit (${maxReasonableLimit} tokens)');
+              print('   ⏹️ Stopping at ${file.name} - would exceed reasonable limit (${maxReasonableLimit} tokens)');
               break;
             }
             
             selectedFiles.add('${file.name}:\n$cleanContent');
             totalTokensNeeded += fileTokens;
-            debugPrint('   ✅ Added ${file.name} (${fileTokens} tokens)');
+            print('   ✅ Added ${file.name} (${fileTokens} tokens)');
             
           } else {
-            debugPrint('   ⏭️ Skipping ${file?.name ?? 'unknown'} - no content');
+            print('   ⏭️ Skipping ${file?.name ?? 'unknown'} - no content');
           }
         } catch (e) {
-          debugPrint('   ❌ Error loading file $fileId: $e');
+          print('   ❌ Error loading file $fileId: $e');
         }
       }
       
       if (selectedFiles.isNotEmpty) {
         final result = selectedFiles.join('\n\n');
-        debugPrint('   ✅ Custom context: ${selectedFiles.length} files, ${totalTokensNeeded} tokens used');
+        print('   ✅ Custom context: ${selectedFiles.length} files, ${totalTokensNeeded} tokens used');
         return result;
       }
       
       return '';
       
     } catch (e) {
-      debugPrint('Error getting custom context: $e');
+      print('Error getting custom context: $e');
       return '';
     }
   }
@@ -280,18 +280,18 @@ class JournalCompanionService {
   /// Get pinned content for AI context (includes both files and folders)
   Future<String> _getPinnedContent(int tokenBudget) async {
     try {
-      debugPrint('   📌 Loading pinned content...');
+      print('   📌 Loading pinned content...');
       
       // Get both pinned files and folders
       final pinnedFiles = await _dbService.getPinnedFiles();
       final pinnedFolders = await _dbService.getPinnedFolders();
       
       if (pinnedFiles.isEmpty && pinnedFolders.isEmpty) {
-        debugPrint('   ⚠️ No pinned files or folders found');
+        print('   ⚠️ No pinned files or folders found');
         return '';
       }
       
-      debugPrint('   📌 Found ${pinnedFiles.length} pinned files and ${pinnedFolders.length} pinned folders');
+      print('   📌 Found ${pinnedFiles.length} pinned files and ${pinnedFolders.length} pinned folders');
       
       final pinnedEntries = <String>[];
       int usedTokens = 0;
@@ -309,9 +309,9 @@ class JournalCompanionService {
           if (usedTokens + entryTokens <= tokenBudget) {
             pinnedEntries.add(entry);
             usedTokens += entryTokens;
-            debugPrint('   ✅ Added pinned file: ${file.name} (${entryTokens} tokens)');
+            print('   ✅ Added pinned file: ${file.name} (${entryTokens} tokens)');
           } else {
-            debugPrint('   ⏹️ Pinned content budget reached, stopping at file ${file.name}');
+            print('   ⏹️ Pinned content budget reached, stopping at file ${file.name}');
             break;
           }
         }
@@ -320,13 +320,13 @@ class JournalCompanionService {
       // Process pinned folders (get all files within them)
       for (final folder in pinnedFolders) {
         if (usedTokens >= tokenBudget) {
-          debugPrint('   ⏹️ Pinned content budget reached, skipping folder ${folder.name}');
+          print('   ⏹️ Pinned content budget reached, skipping folder ${folder.name}');
           break;
         }
         
         try {
           final folderFiles = await _dbService.getFiles(folderId: folder.id);
-          debugPrint('   📁 Processing pinned folder "${folder.name}" with ${folderFiles.length} files');
+          print('   📁 Processing pinned folder "${folder.name}" with ${folderFiles.length} files');
           
           for (final file in folderFiles) {
             final fileContent = await _dbService.getFile(file.id);
@@ -340,28 +340,28 @@ class JournalCompanionService {
               if (usedTokens + entryTokens <= tokenBudget) {
                 pinnedEntries.add(entry);
                 usedTokens += entryTokens;
-                debugPrint('   ✅ Added file from pinned folder: ${folder.name}/${file.name} (${entryTokens} tokens)');
+                print('   ✅ Added file from pinned folder: ${folder.name}/${file.name} (${entryTokens} tokens)');
               } else {
-                debugPrint('   ⏹️ Pinned content budget reached, stopping at folder file ${folder.name}/${file.name}');
+                print('   ⏹️ Pinned content budget reached, stopping at folder file ${folder.name}/${file.name}');
                 break;
               }
             }
           }
         } catch (e) {
-          debugPrint('   ❌ Error processing pinned folder ${folder.name}: $e');
+          print('   ❌ Error processing pinned folder ${folder.name}: $e');
         }
       }
       
       if (pinnedEntries.isNotEmpty) {
         final result = pinnedEntries.join('\n\n');
-        debugPrint('   ✅ Pinned context: ${pinnedEntries.length} entries (${pinnedFiles.length} files + ${pinnedFolders.length} folders), ${usedTokens} tokens');
+        print('   ✅ Pinned context: ${pinnedEntries.length} entries (${pinnedFiles.length} files + ${pinnedFolders.length} folders), ${usedTokens} tokens');
         return result;
       }
       
       return '';
       
     } catch (e) {
-      debugPrint('Error loading pinned content: $e');
+      print('Error loading pinned content: $e');
       return '';
     }
   }
@@ -486,9 +486,9 @@ class JournalCompanionService {
     const longResponse = '''This is a very long response that would exceed our character limit. It has multiple sentences to test the smart truncation. The system should cut off at a sentence boundary. This sentence should be included. But this one might be cut off depending on where we are in the character count. This is definitely too long and should be truncated. We want to make sure it ends gracefully.''';
     
     final result = _applyResponseLimit(longResponse, maxCharacters: 200);
-    debugPrint('Original: ${longResponse.length} chars');
-    debugPrint('Truncated: ${result.length} chars');
-    debugPrint('Result: $result');
+    print('Original: ${longResponse.length} chars');
+    print('Truncated: ${result.length} chars');
+    print('Result: $result');
     return result;
   }
   
@@ -550,21 +550,21 @@ class JournalCompanionService {
 
   /// DEBUGGING: Test the embedding system with a simple query
   Future<void> debugEmbeddingSystem({String testQuery = "work"}) async {
-    debugPrint('🧪 DEBUGGING EMBEDDING SYSTEM WITH QUERY: "$testQuery"');
+    print('🧪 DEBUGGING EMBEDDING SYSTEM WITH QUERY: "$testQuery"');
     
     try {
       // 1. Check database state
       final embeddingCount = await _dbService.getEmbeddingCount();
-      debugPrint('   📊 Database embeddings: $embeddingCount');
+      print('   📊 Database embeddings: $embeddingCount');
       
       if (embeddingCount == 0) {
-        debugPrint('   ❌ No embeddings found - import files first!');
+        print('   ❌ No embeddings found - import files first!');
         return;
       }
       
       // 2. Test query embedding generation
       final queryEmbedding = await _embeddingService.generateEmbedding(testQuery);
-      debugPrint('   🧠 Query embedding: length=${queryEmbedding.length}, sum=${queryEmbedding.fold(0.0, (a, b) => a + b).toStringAsFixed(4)}');
+      print('   🧠 Query embedding: length=${queryEmbedding.length}, sum=${queryEmbedding.fold(0.0, (a, b) => a + b).toStringAsFixed(4)}');
       
       // 3. Test direct database parsing (NEW)
       final db = await _dbService.database;
@@ -572,12 +572,12 @@ class JournalCompanionService {
       if (sampleRows.isNotEmpty) {
         final rawEmbedding = sampleRows.first['embedding'];
         final parsedEmbedding = _embeddingService.parseChunkedEmbedding(rawEmbedding);
-        debugPrint('   🔧 PARSING TEST: Raw embedding type=${rawEmbedding.runtimeType}, parsed length=${parsedEmbedding.length}');
+        print('   🔧 PARSING TEST: Raw embedding type=${rawEmbedding.runtimeType}, parsed length=${parsedEmbedding.length}');
       }
       
       // 4. Test similarity search
       final similarFiles = await _embeddingService.findSimilarFiles(testQuery, topK: 5);
-      debugPrint('   🎯 Similar files found: ${similarFiles.length}');
+      print('   🎯 Similar files found: ${similarFiles.length}');
       
       // 5. Test content processing
       int validContentCount = 0;
@@ -585,77 +585,77 @@ class JournalCompanionService {
         final cleanContent = _extractUserContentOnly(file.content);
         if (cleanContent.isNotEmpty) {
           validContentCount++;
-          debugPrint('   ✅ File "${file.name}": ${cleanContent.length} chars after filtering');
+          print('   ✅ File "${file.name}": ${cleanContent.length} chars after filtering');
         } else {
-          debugPrint('   ❌ File "${file.name}": Empty after filtering (original: ${file.content.length} chars)');
+          print('   ❌ File "${file.name}": Empty after filtering (original: ${file.content.length} chars)');
         }
       }
       
-      debugPrint('   📊 Files with valid content: $validContentCount/${similarFiles.length}');
+      print('   📊 Files with valid content: $validContentCount/${similarFiles.length}');
       
       // 6. Test token estimation
       final tokenBudget = 5000;
-      debugPrint('   💰 Testing with token budget: $tokenBudget');
+      print('   💰 Testing with token budget: $tokenBudget');
       
       if (validContentCount == 0) {
-        debugPrint('   ❌ ISSUE: No files have valid content after filtering!');
+        print('   ❌ ISSUE: No files have valid content after filtering!');
       } else {
-        debugPrint('   ✅ Embedding system appears functional');
+        print('   ✅ Embedding system appears functional');
       }
       
     } catch (e) {
-      debugPrint('   ❌ ERROR during embedding debug: $e');
-      debugPrint('   📍 Stack trace: ${StackTrace.current}');
+      print('   ❌ ERROR during embedding debug: $e');
+      print('   📍 Stack trace: ${StackTrace.current}');
     }
   }
 
   /// CLEANUP: Clear corrupted embeddings and regenerate them
   Future<void> fixCorruptedEmbeddings() async {
-    debugPrint('🔧 FIXING CORRUPTED EMBEDDINGS...');
+    print('🔧 FIXING CORRUPTED EMBEDDINGS...');
     
     try {
       // 1. Clear all existing embeddings
       final db = await _dbService.database;
       await db.delete('file_embeddings');
-      debugPrint('   🗑️ Cleared all existing embeddings');
+      print('   🗑️ Cleared all existing embeddings');
       
       // 2. Get all files that need embeddings
       final allFiles = await _dbService.getFiles();
-      debugPrint('   📄 Found ${allFiles.length} files to re-embed');
+      print('   📄 Found ${allFiles.length} files to re-embed');
       
       // 3. Regenerate embeddings for each file
       int processed = 0;
       for (final fileMetadata in allFiles) {
         try {
           processed++;
-          debugPrint('   📄 Processing ${processed}/${allFiles.length}: ${fileMetadata.name}');
+          print('   📄 Processing ${processed}/${allFiles.length}: ${fileMetadata.name}');
           
           // Load full file content
           final file = await _dbService.getFile(fileMetadata.id);
           if (file?.content?.isNotEmpty == true) {
             // Generate embeddings using the import service chunking logic
             final chunks = _chunkContent(file!.content!);
-            debugPrint('     🧠 Generating ${chunks.length} chunks...');
+            print('     🧠 Generating ${chunks.length} chunks...');
             
             for (int i = 0; i < chunks.length; i++) {
               final embedding = await _embeddingService.generateEmbedding(chunks[i]);
               await _dbService.storeChunkedEmbedding(file.id, i, chunks[i], embedding);
             }
             
-            debugPrint('     ✅ Generated ${chunks.length} embeddings');
+            print('     ✅ Generated ${chunks.length} embeddings');
           } else {
-            debugPrint('     ⏭️ Skipped (no content)');
+            print('     ⏭️ Skipped (no content)');
           }
         } catch (e) {
-          debugPrint('     ❌ Error processing ${fileMetadata.name}: $e');
+          print('     ❌ Error processing ${fileMetadata.name}: $e');
         }
       }
       
       final finalCount = await _dbService.getEmbeddingCount();
-      debugPrint('   🎉 COMPLETE: Generated $finalCount fresh embeddings');
+      print('   🎉 COMPLETE: Generated $finalCount fresh embeddings');
       
     } catch (e) {
-      debugPrint('   ❌ ERROR during embedding regeneration: $e');
+      print('   ❌ ERROR during embedding regeneration: $e');
     }
   }
 
