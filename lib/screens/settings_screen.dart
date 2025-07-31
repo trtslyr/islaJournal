@@ -1,17 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/ai_provider.dart';
-import '../providers/layout_provider.dart';
 import '../providers/journal_provider.dart';
 import '../providers/license_provider.dart';
 import '../widgets/license_dialog.dart';
-import '../services/journal_companion_service.dart';
 import '../services/ai_service.dart';
-import '../services/database_service.dart';
 import '../core/theme/app_theme.dart';
 import '../widgets/import_dialog.dart';
 
@@ -513,16 +509,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           backgroundColor: AppTheme.warningRed,
         ),
       );
-    }
-  }
-
-  Future<void> _saveLicenseKey() async {
-    try {
-      final storage = FlutterSecureStorage();
-      await storage.write(key: 'license_key', value: _currentLicenseKey);
-      print('📱 License key saved to secure storage.');
-    } catch (e) {
-      print('Error saving license key to secure storage: $e');
     }
   }
 
@@ -2655,61 +2641,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Clear stored key when user wants to change it
-  Future<void> _clearStoredKey(LicenseProvider licenseProvider) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.creamBeige,
-        title: Text(
-          'Change License Key',
-          style: TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: Text(
-          'This will clear your current license key so you can enter a new one. Are you sure?',
-          style: TextStyle(fontFamily: 'JetBrainsMono'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text('Clear Key'),
-          ),
-        ],
-      ),
-    );
 
-    if (confirmed == true) {
-      try {
-        await licenseProvider.clearLicenseData();
-        setState(() {
-          _currentLicenseKey = null;
-          _showLicenseKey = false;
-          _licenseKeyController.clear();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ License key cleared! You can now enter a new key.'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error clearing key: $e'),
-            backgroundColor: AppTheme.warningRed,
-          ),
-        );
-      }
-    }
-  }
 }
 
 class _CustomerPortalDialog extends StatefulWidget {

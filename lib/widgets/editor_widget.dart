@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/journal_provider.dart';
 import '../models/journal_file.dart';
-import '../core/theme/app_theme.dart';
 import '../services/validation_service.dart';
 
 class EditorWidget extends StatefulWidget {

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/license_provider.dart';
-import '../services/license_service.dart';
 import '../core/theme/app_theme.dart';
 import '../widgets/license_dialog.dart';
 
@@ -403,33 +401,6 @@ class _LicenseScreenState extends State<LicenseScreen> {
             style: TextStyle(
               fontFamily: 'JetBrainsMono',
               color: AppTheme.mediumGray,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildErrorMessage(String error) {
-    return Container(
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.warningRed.withOpacity(0.1),
-        border: Border.all(color: AppTheme.warningRed.withOpacity(0.3)),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, color: AppTheme.warningRed, size: 20),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              error,
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 12,
-                color: AppTheme.warningRed,
-              ),
             ),
           ),
         ],

@@ -2,11 +2,9 @@ import 'dart:io';
 import 'ai_service.dart';
 import 'database_service.dart';
 import 'embedding_service.dart';
-import '../models/journal_file.dart';
 import '../models/conversation_session.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
-import 'dart:math' as math;
 import '../models/context_settings.dart';
 
 class JournalCompanionService {

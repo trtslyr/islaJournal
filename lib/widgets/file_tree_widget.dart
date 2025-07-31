@@ -7,7 +7,7 @@ import '../models/journal_file.dart';
 import '../models/file_sort_option.dart';
 import '../core/theme/app_theme.dart';
 import '../services/validation_service.dart';
-import '../services/database_service.dart';
+
 
 
 class FileTreeWidget extends StatefulWidget {

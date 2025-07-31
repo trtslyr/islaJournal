@@ -6,8 +6,7 @@ import '../providers/conversation_provider.dart';
 import '../core/theme/app_theme.dart';
 import '../services/journal_companion_service.dart';
 import '../models/conversation_session.dart';
-import '../models/context_settings.dart';
-import 'package:flutter/foundation.dart';
+
 
 class ChatMessage {
   final String content;

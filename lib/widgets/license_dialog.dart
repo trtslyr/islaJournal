@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/license_provider.dart';
-import '../services/license_service.dart';
+
 import '../core/theme/app_theme.dart';
 
 class LicenseDialog extends StatefulWidget {
@@ -331,33 +331,7 @@ class _LicenseDialogState extends State<LicenseDialog> {
       ),
     );
   }
-  
-  Widget _buildErrorMessage(String error) {
-    return Container(
-      padding: EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: AppTheme.warningRed.withOpacity(0.1),
-        border: Border.all(color: AppTheme.warningRed.withOpacity(0.3)),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, color: AppTheme.warningRed, size: 16),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              error,
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 10,
-                color: AppTheme.warningRed,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
   
   Future<void> _validateLicenseKey() async {
     final key = _keyController.text.trim();

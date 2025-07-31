@@ -3,7 +3,6 @@ import '../models/journal_file.dart';
 import '../models/journal_folder.dart';
 import '../models/file_sort_option.dart';
 import '../services/database_service.dart';
-import '../services/journal_companion_service.dart';
 import '../services/embedding_service.dart';
 
 class JournalProvider with ChangeNotifier {
