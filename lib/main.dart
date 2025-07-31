@@ -13,6 +13,7 @@ import 'providers/license_provider.dart';
 
 // Services  
 import 'services/license_service.dart';
+import 'services/windows_stability_service.dart';
 
 // Screens
 import 'screens/home_screen.dart';
@@ -23,7 +24,14 @@ import 'screens/license_screen.dart';
 import 'core/theme/app_theme.dart';
 
 /// Entry point of the Isla Journal application
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Windows stability service first for crash prevention
+  if (Platform.isWindows) {
+    await WindowsStabilityService.initialize();
+  }
+  
   // Initialize database factory for Windows/Linux (macOS/iOS/Android work with regular sqflite)
   if (Platform.isWindows || Platform.isLinux) {
     // Initialize FFI for desktop platforms that need it

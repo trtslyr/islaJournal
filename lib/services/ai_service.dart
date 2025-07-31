@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:fllama/fllama.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart';
 import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -342,7 +343,11 @@ class AIService {
 
     try {
       final modelsDir = await _getModelsDirectory();
-      final modelFile = File('${modelsDir.path}/$modelId.gguf');
+      // Use proper path joining for Windows compatibility
+      final modelPath = Platform.isWindows 
+          ? join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
+          : '${modelsDir.path}/$modelId.gguf';
+      final modelFile = File(modelPath);
       
       debugPrint('📥 Downloading ${model.name} (${model.sizeGB}GB, ${model.quantization})...');
       
@@ -412,7 +417,10 @@ class AIService {
       }
 
       final modelsDir = await _getModelsDirectory();
-      final modelPath = '${modelsDir.path}/$modelId.gguf';
+      // Use proper path joining for Windows compatibility
+      final modelPath = Platform.isWindows 
+          ? join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
+          : '${modelsDir.path}/$modelId.gguf';
       
       debugPrint('🔄 Loading model: $modelId');
 
@@ -616,12 +624,40 @@ class AIService {
       String fullResponse = '';
       final completer = Completer<String>();
 
-      await fllamaChat(request, (response, openaiResponseJsonString, done) {
-        fullResponse = response;
-        if (done) {
-          completer.complete(fullResponse);
-        }
-      });
+      // Windows-specific timeout and error handling for fllamaChat
+      if (Platform.isWindows) {
+        // Add timeout for Windows to prevent hanging
+        final chatFuture = fllamaChat(request, (response, openaiResponseJsonString, done) {
+          try {
+            fullResponse = response;
+            if (done && !completer.isCompleted) {
+              completer.complete(fullResponse);
+            }
+          } catch (e) {
+            if (!completer.isCompleted) {
+              completer.completeError(e);
+            }
+          }
+        });
+        
+        // Race between completion and timeout
+        await Future.any([
+          completer.future,
+          chatFuture,
+          Future.delayed(Duration(seconds: 30), () {
+            if (!completer.isCompleted) {
+              completer.completeError(Exception('Windows AI timeout - generation took too long'));
+            }
+          }),
+        ]);
+      } else {
+        await fllamaChat(request, (response, openaiResponseJsonString, done) {
+          fullResponse = response;
+          if (done) {
+            completer.complete(fullResponse);
+          }
+        });
+      }
 
       final result = await completer.future;
       
@@ -670,7 +706,11 @@ class AIService {
     }
 
     final modelsDir = await _getModelsDirectory();
-      final modelFile = File('${modelsDir.path}/$modelId.gguf');
+      // Use proper path joining for Windows compatibility
+      final modelPath = Platform.isWindows 
+          ? join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
+          : '${modelsDir.path}/$modelId.gguf';
+      final modelFile = File(modelPath);
 
     if (await modelFile.exists()) {
       await modelFile.delete();
