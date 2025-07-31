@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:fllama/fllama.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart';
+import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -345,7 +345,7 @@ class AIService {
       final modelsDir = await _getModelsDirectory();
       // Use proper path joining for Windows compatibility
       final modelPath = Platform.isWindows 
-          ? join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
+          ? path.join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
           : '${modelsDir.path}/$modelId.gguf';
       final modelFile = File(modelPath);
       
@@ -419,7 +419,7 @@ class AIService {
       final modelsDir = await _getModelsDirectory();
       // Use proper path joining for Windows compatibility
       final modelPath = Platform.isWindows 
-          ? join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
+          ? path.join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
           : '${modelsDir.path}/$modelId.gguf';
       
       debugPrint('🔄 Loading model: $modelId');
@@ -708,7 +708,7 @@ class AIService {
     final modelsDir = await _getModelsDirectory();
       // Use proper path joining for Windows compatibility
       final modelPath = Platform.isWindows 
-          ? join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
+          ? path.join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
           : '${modelsDir.path}/$modelId.gguf';
       final modelFile = File(modelPath);
 
