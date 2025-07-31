@@ -1,27 +1,26 @@
 @echo off
-echo Building Isla Journal for Windows (Release)...
+echo 🏗️  Building Windows Release...
+echo.
 
-REM Clean previous builds
-flutter clean
-flutter pub get
-
-REM Build Windows release
+rem Build the Flutter Windows app
 flutter build windows --release
 
-REM Check if build was successful
-if %ERRORLEVEL% neq 0 (
-    echo Build failed!
-    pause
-    exit /b 1
-)
-
 echo.
-echo ✅ Build completed successfully!
-echo 📁 Output location: build\windows\x64\runner\Release\
+echo ✅ Build complete!
 echo.
-echo ⚠️  IMPORTANT: If you get "flutter_secure_storage_windows_plugin.dll not found" error:
-echo    1. Copy the DLL from: build\windows\x64\plugins\flutter_secure_storage_windows\
-echo    2. To: build\windows\x64\runner\Release\
+echo 📁 Executable location: build\windows\runner\Release\
 echo.
-echo 🚀 You can now run isla_journal.exe from the Release folder
+echo ⚠️  IMPORTANT: Copy Visual C++ Runtime DLLs for distribution:
+echo    Copy these 3 files to build\windows\runner\Release\:
+echo    - msvcp140.dll
+echo    - vcruntime140.dll  
+echo    - vcruntime140_1.dll
+echo.
+echo    Download from: https://aka.ms/vs/17/release/vc_redist.x64.exe
+echo    Or find in: C:\Windows\System32\
+echo.
+echo 🚀 Alternative: Users can install VC++ Redistributable instead
+echo    Download: https://aka.ms/vs/17/release/vc_redist.x64.exe
+echo.
+echo ✅ Ready for distribution!
 pause 
