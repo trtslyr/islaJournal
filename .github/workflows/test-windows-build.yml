@@ -39,14 +39,15 @@ jobs:
         )
     
     - name: Build Windows Release  
+      shell: cmd
       run: |
-        echo "🏗️ Building Flutter Windows app..."
+        echo 🏗️ Building Flutter Windows app...
         flutter build windows --release --verbose
         if %ERRORLEVEL% NEQ 0 (
-            echo "❌ Flutter build failed!"
+            echo ❌ Flutter build failed!
             exit /b 1
         )
-        echo "✅ Flutter build completed successfully"
+        echo ✅ Flutter build completed successfully
     
     - name: Debug Build Output
       shell: cmd
