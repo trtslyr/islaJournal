@@ -46,6 +46,8 @@ class _LicenseScreenState extends State<LicenseScreen> {
                   SizedBox(height: 24),
                   _buildOrDivider(),
                   SizedBox(height: 24),
+                  _buildLoginSection(),
+                  SizedBox(height: 24),
                   _buildSubscriptionSection(),
                   // Error handling simplified in new system
                 ],
@@ -184,20 +186,140 @@ class _LicenseScreenState extends State<LicenseScreen> {
   Widget _buildOrDivider() {
     return Row(
       children: [
-        Expanded(child: Divider()),
+        Expanded(child: Divider(color: AppTheme.mediumGray)),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             'OR',
             style: TextStyle(
               fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
               color: AppTheme.mediumGray,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
-        Expanded(child: Divider()),
+        Expanded(child: Divider(color: AppTheme.mediumGray)),
       ],
     );
+  }
+
+  Widget _buildLoginSection() {
+    return Container(
+      padding: EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.darkerCream,
+        border: Border.all(color: AppTheme.mediumGray.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.login,
+            size: 32,
+            color: AppTheme.warmBrown,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Already Purchased?',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 18.0,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.darkText,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Access your license key from your purchase',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+              color: AppTheme.mediumGray,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _openCustomerPortal,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.warmBrown,
+                padding: EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.open_in_browser, color: Colors.white, size: 20),
+                  SizedBox(width: 12),
+                  Text(
+                    'Login to Access Your Key',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 16.0,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: 12),
+          Text(
+            '💡 Your license key will be visible in your account',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              color: AppTheme.mediumGray,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openCustomerPortal() async {
+    try {
+      const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
+      
+      // Open portal in inline webview dialog
+      final result = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => CustomerPortalDialog(
+          portalUrl: portalUrl,
+        ),
+      );
+      
+      if (result == true) {
+        // User completed login and accessed their key, refresh license status
+        final provider = Provider.of<LicenseProvider>(context, listen: false);
+        await provider.checkLicense();
+        if (provider.isValid) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Portal accessed! Copy your license key from the portal and enter it above.'),
+              backgroundColor: Colors.blue,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error opening customer portal: $e'),
+          backgroundColor: AppTheme.warningRed,
+        ),
+      );
+    }
   }
   
   Widget _buildSubscriptionSection() {
@@ -375,6 +497,37 @@ class _LicenseScreenState extends State<LicenseScreen> {
         // Payment successful, refresh license status
         await provider.checkLicense();
         if (provider.isValid) {
+          // Show success message with portal instructions
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '🎉 Payment successful!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '📧 Check your email for receipt details',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '🔑 Access your license key at: Settings → Account → Login to User Portal',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 8),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
           Navigator.of(context).pushReplacementNamed('/home');
         }
       }
@@ -386,6 +539,139 @@ class _LicenseScreenState extends State<LicenseScreen> {
         ),
       );
     }
+  }
+}
+
+class CustomerPortalDialog extends StatefulWidget {
+  final String portalUrl;
+  
+  const CustomerPortalDialog({
+    Key? key,
+    required this.portalUrl,
+  }) : super(key: key);
+  
+  @override
+  State<CustomerPortalDialog> createState() => _CustomerPortalDialogState();
+}
+
+class _CustomerPortalDialogState extends State<CustomerPortalDialog> {
+  late final WebViewController controller;
+  bool _isLoading = true;
+  
+  @override
+  void initState() {
+    super.initState();
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (url) {
+            setState(() => _isLoading = true);
+          },
+          onPageFinished: (url) {
+            setState(() => _isLoading = false);
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.portalUrl));
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            // Header with close button
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.darkerCream,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Customer Portal - Access Your License Key',
+                      style: TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 16.0,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.darkText,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    icon: Icon(Icons.close, color: AppTheme.darkText),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Loading indicator
+            if (_isLoading)
+              Container(
+                height: 4,
+                child: LinearProgressIndicator(
+                  backgroundColor: AppTheme.mediumGray,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
+                ),
+              ),
+              
+            // WebView
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                ),
+                child: WebViewWidget(controller: controller),
+              ),
+            ),
+            
+            // Footer with instructions
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.darkerCream,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: AppTheme.warmBrown, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Copy your license key from the portal, then close this dialog and paste it above',
+                      style: TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 12.0,
+                        color: AppTheme.mediumGray,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

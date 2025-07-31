@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/ai_provider.dart';
 import '../providers/layout_provider.dart';
 import '../providers/journal_provider.dart';
@@ -28,10 +29,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _showLicenseKey = false;
   String? _currentLicenseKey;
   
+  // License key input controller
+  final TextEditingController _licenseKeyController = TextEditingController();
+  
   @override
   void initState() {
     super.initState();
     _loadTokenUsage();
+    _loadStoredLicenseKey();
+  }
+  
+  @override
+  void dispose() {
+    _licenseKeyController.dispose();
+    super.dispose();
   }
   
   /// Load saved token usage from SharedPreferences
@@ -77,6 +88,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
       print('Error saving token usage: $e');
     }
   }
+
+  /// Load stored license key from secure storage
+  Future<void> _loadStoredLicenseKey() async {
+    try {
+      final storage = FlutterSecureStorage();
+      String? licenseKey;
+      
+      // Try lifetime key first
+      licenseKey = await storage.read(key: 'license_key');
+      
+      // If no lifetime key, try subscription key
+      if (licenseKey == null) {
+        licenseKey = await storage.read(key: 'subscription_key');
+      }
+      
+      // Fallback to SharedPreferences if secure storage fails
+      if (licenseKey == null) {
+        final prefs = await SharedPreferences.getInstance();
+        licenseKey = prefs.getString('license_key') ?? prefs.getString('subscription_key');
+      }
+      
+      if (licenseKey != null && mounted) {
+        setState(() {
+          _currentLicenseKey = licenseKey;
+          _showLicenseKey = false; // Hide by default  
+          _licenseKeyController.text = licenseKey!; // Use null assertion since we checked above
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading stored license key: $e');
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -147,7 +191,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(width: 8),
               const Text(
-                'Account Status',
+                'Account',
                 style: TextStyle(
                   fontFamily: 'JetBrainsMono',
                   fontSize: 16.0,
@@ -164,7 +208,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           const SizedBox(height: 16),
           
-          // Action buttons
+          // License key input section (for all users)
+          _buildLicenseKeyInput(licenseProvider),
+          
+          const SizedBox(height: 16),
+          
+          // Action buttons based on license type
           _buildLicenseActions(licenseProvider),
         ],
       ),
@@ -216,41 +265,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           
-          // License key display (if shown)
-          if (_showLicenseKey && _currentLicenseKey != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-              decoration: BoxDecoration(
-                color: AppTheme.darkerBrown.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4.0),
-                border: Border.all(color: AppTheme.darkerBrown.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'License Key:',
-                    style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
-                      fontSize: 10.0,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.darkerBrown,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  SelectableText(
-                    _currentLicenseKey!,
-                    style: const TextStyle(
-                      fontFamily: 'JetBrainsMono',
-                      fontSize: 11.0,
-                      color: AppTheme.darkText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
           
           // Trial countdown if applicable
           if (licenseProvider.isTrial && status?.trialHoursRemaining != null) ...[
@@ -320,135 +334,620 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return 'Trial expired • Please upgrade to continue using';
   }
 
-  Widget _buildLicenseActions(LicenseProvider licenseProvider) {
-    return Row(
+  /// License key input section (visible for all users)
+  Widget _buildLicenseKeyInput(LicenseProvider licenseProvider) {
+    final hasValidKey = licenseProvider.isValid;
+    
+    return Container(
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: AppTheme.creamBeige,
+        border: Border.all(color: AppTheme.mediumGray, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Manage subscription button (subscription users only)
-        if (licenseProvider.isSubscription) ...[
+          Row(
+            children: [
+              Text(
+                'License Key',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.darkText,
+                ),
+              ),
+              Spacer(),
+              if (hasValidKey && _currentLicenseKey != null) ...[
+                TextButton(
+                  onPressed: _toggleLicenseKeyVisibility,
+                  child: Text(
+                    _showLicenseKey ? 'Hide' : 'Show',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      color: AppTheme.warmBrown,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _licenseKeyController,
+                  readOnly: hasValidKey, // Make read-only when license is active
+                  obscureText: !_showLicenseKey && hasValidKey,
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 12.0,
+                    color: hasValidKey ? AppTheme.darkText : AppTheme.darkText,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: hasValidKey ? null : 'Enter your license key (ij_life_... or ij_sub_...)',
+                    hintStyle: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      color: AppTheme.mediumGray,
+                    ),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: hasValidKey ? Colors.green : AppTheme.mediumGray),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: hasValidKey ? Colors.green : AppTheme.mediumGray),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: hasValidKey ? Colors.green : AppTheme.warmBrown),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    filled: true,
+                    fillColor: hasValidKey ? Colors.green.withOpacity(0.1) : Colors.white,
+                  ),
+                  onChanged: hasValidKey ? null : (value) {
+                    setState(() {
+                      if (value.isEmpty) {
+                        _currentLicenseKey = null;
+                      }
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (!hasValidKey) ...[
           ElevatedButton(
-            onPressed: () => _openSubscriptionManagement(),
+                  onPressed: () => _validateManualKey(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.warmBrown,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             child: const Text(
-              'Manage Subscription',
+                    'Validate',
               style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 12.0,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-        ],
-        
-        // Show license key for subscription users only
-        if (licenseProvider.isSubscription) ...[
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: _toggleLicenseKeyVisibility,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _showLicenseKey ? AppTheme.mediumGray : AppTheme.darkerBrown,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              child: Text(
-                _showLicenseKey ? 'Hide Key' : 'Show Key',
-                style: const TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 12.0,
+              ],
+            ],
+          ),
+          if (hasValidKey) ...[
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 16),
+                SizedBox(width: 8),
+                Text(
+                  'License key active and stored securely',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 12.0,
+                    color: Colors.green,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _validateManualKey() async {
+    final key = _licenseKeyController.text;
+
+    if (key.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a license key.'),
+          backgroundColor: AppTheme.warningRed,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final licenseProvider = Provider.of<LicenseProvider>(context, listen: false);
+      bool success = false;
+      
+      // Determine key type and validate accordingly
+      if (key.startsWith('ij_life_')) {
+        success = await licenseProvider.validateLifetimeKey(key);
+      } else if (key.startsWith('ij_sub_')) {
+        success = await licenseProvider.validateSubscriptionKey(key);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid key format. Must start with ij_life_ or ij_sub_'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+        return;
+      }
+
+      if (success) {
+        _licenseKeyController.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ License key validated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Invalid license key. Please check and try again.'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error validating license key: $e'),
+          backgroundColor: AppTheme.warningRed,
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveLicenseKey() async {
+    try {
+      final storage = FlutterSecureStorage();
+      await storage.write(key: 'license_key', value: _currentLicenseKey);
+      print('📱 License key saved to secure storage.');
+    } catch (e) {
+      print('Error saving license key to secure storage: $e');
+    }
+  }
+
+  /// Toggle license key visibility
+  void _toggleLicenseKeyVisibility() {
+    setState(() {
+      _showLicenseKey = !_showLicenseKey;
+    });
+  }
+
+  /// TEMP: Clear all stored license keys (comprehensive version)
+  Future<void> _clearAllStoredKeys() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Clear ALL license-related keys from SharedPreferences
+      // These are the actual storage keys used by LicenseService
+      await prefs.remove('license_key');           // Lifetime keys
+      await prefs.remove('subscription_key');      // Subscription keys  
+      await prefs.remove('license_status');        // Cached license status
+      await prefs.remove('trial_start');           // Trial start time
+      await prefs.remove('device_id');             // Device ID
+      
+      // Also clear any legacy keys that might exist
+      await prefs.remove('license_type');
+      await prefs.remove('license_valid');
+      await prefs.remove('trial_start_time');
+      
+      // Try to clear secure storage but ignore errors (expected to fail on debug builds)
+      try {
+        final storage = FlutterSecureStorage();
+        await storage.deleteAll(); // Clear everything from keychain
+      } catch (secureStorageError) {
+        // Expected to fail - ignore it
+        print('Secure storage clear failed (expected on debug builds): $secureStorageError');
+      }
+      
+      // Clear local state
+      setState(() {
+        _currentLicenseKey = null;
+        _showLicenseKey = false;
+        _licenseKeyController.clear();
+      });
+      
+      // Force complete license provider reset
+      final provider = Provider.of<LicenseProvider>(context, listen: false);
+      
+      // Reset the provider's internal state
+      provider.clearLicenseData();
+      
+      // Force a fresh license check (should start new trial)
+      await provider.checkLicense();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ All license data completely cleared! Starting fresh trial.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error clearing keys: $e'),
+          backgroundColor: AppTheme.warningRed,
+        ),
+      );
+    }
+  }
+
+  /// TEMP: Input and validate manual key
+  Future<void> _inputAndValidateKey() async {
+    final keyController = TextEditingController();
+    
+    final key = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.creamBeige,
+        title: Text(
+          'Enter License Key',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: TextField(
+          controller: keyController,
+          decoration: InputDecoration(
+            hintText: 'ij_sub_... or ij_life_...',
+            border: OutlineInputBorder(),
+          ),
+          style: TextStyle(fontFamily: 'JetBrainsMono'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(keyController.text),
+            child: Text('Validate'),
+          ),
+        ],
+      ),
+    );
+    
+    if (key == null || key.isEmpty) return;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Store the key in SharedPreferences
+      if (key.startsWith('ij_life_')) {
+        await prefs.setString('license_key', key);
+      } else if (key.startsWith('ij_sub_')) {
+        await prefs.setString('subscription_key', key);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Invalid key format. Must start with ij_life_ or ij_sub_'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+        return;
+      }
+      
+      // Update local state
+      setState(() {
+        _currentLicenseKey = key;
+        _licenseKeyController.text = key;
+      });
+      
+      // Validate the key through license provider
+      final provider = Provider.of<LicenseProvider>(context, listen: false);
+      bool isValid = false;
+      
+      if (key.startsWith('ij_life_')) {
+        isValid = await provider.validateLifetimeKey(key);
+      } else if (key.startsWith('ij_sub_')) {
+        isValid = await provider.validateSubscriptionKey(key);
+      }
+      
+      if (isValid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ License key validated and stored successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Key stored but validation failed - may be invalid or expired'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error setting key: $e'),
+          backgroundColor: AppTheme.warningRed,
+        ),
+      );
+    }
+  }
+
+  Widget _buildLicenseActions(LicenseProvider licenseProvider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Subscription users: Login button to access portal
+        if (licenseProvider.isSubscription) ...[
+            ElevatedButton(
+            onPressed: () => _openUserPortal(),
+              style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.warmBrown,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.login, size: 16, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  'Login to User Portal',
+                  style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                    fontSize: 14.0,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            '💡 Access your subscription details and license key',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+              color: AppTheme.mediumGray,
               ),
             ),
           ],
         
-        // Upgrade button (for trial users)
+        // Trial users: Purchase options
         if (licenseProvider.isTrial) ...[
-          ElevatedButton(
+          Text(
+            'Purchase Options:',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.darkText,
+            ),
+          ),
+          SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
             onPressed: () => _openUpgradeOptions(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.darkerBrown,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
             ),
-            child: const Text(
-              'Upgrade Now',
+                  child: Text(
+                    'Monthly (\$7)',
               style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 12.0,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _openUpgradeOptions(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.darkerBrown,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(
+                    'Annual (\$49)',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _openUpgradeOptions(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.warmBrown,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(
+                    'Lifetime (\$99)',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
         
-        // License expired - upgrade button
+        // TEMP: Clear all keys button (for debugging)
+        SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: () => _clearAllStoredKeys(),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+          child: Text(
+            '🗑️ CLEAR ALL STORED KEYS',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 14.0,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        
+                 // TEMP: Input manual key button
+         SizedBox(height: 8),
+         ElevatedButton(
+           onPressed: () => _inputAndValidateKey(),
+           style: ElevatedButton.styleFrom(
+             backgroundColor: Colors.blue,
+             padding: const EdgeInsets.symmetric(vertical: 12),
+           ),
+           child: Text(
+             '⌨️ INPUT & VALIDATE KEY',
+             style: TextStyle(
+               fontFamily: 'JetBrainsMono',
+               fontSize: 14.0,
+               color: Colors.white,
+               fontWeight: FontWeight.w600,
+             ),
+           ),
+         ),
+        
+        // Expired license: Upgrade button
         if (licenseProvider.needsLicense) ...[
           ElevatedButton(
             onPressed: () => _openUpgradeOptions(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.warningRed,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
-            child: const Text(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.warning, size: 16, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
               'Activate License',
               style: TextStyle(
                 fontFamily: 'JetBrainsMono',
-                fontSize: 12.0,
+                    fontSize: 14.0,
+                    color: Colors.white,
               ),
+                ),
+              ],
             ),
           ),
         ],
         
-        // Add some space before debug section
-        const Spacer(),
-        
-        // 🧪 TESTING: Logout button (for testing different license states)
-        ElevatedButton(
-          onPressed: () => _logoutForTesting(licenseProvider),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.mediumGray,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        // Lifetime users: No additional buttons needed (they have permanent access)
+        if (licenseProvider.isLifetime) ...[
+          Container(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(Icons.verified, color: Colors.green, size: 16),
+                SizedBox(width: 8),
+                Text(
+                  'Lifetime access activated',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+                    fontSize: 14.0,
+                    color: Colors.green,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: const Text(
-            '🧪 Logout (Testing)',
+        ],
+        
+        // Emergency: Clear invalid key button (for debugging)
+        if (!licenseProvider.isValid) ...[
+          SizedBox(height: 8),
+        ElevatedButton(
+            onPressed: () => _clearInvalidKey(licenseProvider),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.delete, size: 16, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  'Clear Invalid Stored Key',
             style: TextStyle(
               fontFamily: 'JetBrainsMono',
               fontSize: 12.0,
-              color: Colors.black54,
+                    color: Colors.white,
             ),
+                ),
+              ],
           ),
         ),
-        
-        const SizedBox(width: 8),
-        
-        // 🧪 TESTING: Reset trial button  
-        ElevatedButton(
-          onPressed: () => _resetTrialForTesting(licenseProvider),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.mediumGray,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          child: const Text(
-            '🔄 Reset Trial',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 12.0,
-              color: Colors.black54,
-            ),
-          ),
-        ),
+        ],
       ],
     );
   }
 
-  // Open subscription management (Stripe customer portal)
-  Future<void> _openSubscriptionManagement() async {
+  // Open user portal (Stripe customer portal) inline
+  Future<void> _openUserPortal() async {
     try {
       const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
-      await launchUrl(Uri.parse(portalUrl), mode: LaunchMode.externalApplication);
+      
+      // Open portal in inline webview dialog
+      final result = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => _CustomerPortalDialog(
+          portalUrl: portalUrl,
+        ),
+      );
+      
+      if (result == true) {
+        // User completed login and accessed their key, refresh license status
+        final provider = Provider.of<LicenseProvider>(context, listen: false);
+        await provider.checkLicense();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Portal accessed! Your license key should be visible there.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error opening subscription management: $e'),
+            content: Text('Error opening user portal: $e'),
             backgroundColor: AppTheme.warningRed,
           ),
         );
@@ -551,46 +1050,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
   
-  // Toggle license key visibility
-  Future<void> _toggleLicenseKeyVisibility() async {
-    if (!_showLicenseKey) {
-      // Load the license key from storage
-      try {
-        final storage = FlutterSecureStorage();
-        String? licenseKey;
-        
-        // Try lifetime key first
-        licenseKey = await storage.read(key: 'license_key');
-        
-        // If no lifetime key, try subscription key
-        if (licenseKey == null) {
-          licenseKey = await storage.read(key: 'subscription_key');
-        }
-        
-        // Fallback to SharedPreferences if secure storage fails
-        if (licenseKey == null) {
-          final prefs = await SharedPreferences.getInstance();
-          licenseKey = prefs.getString('license_key') ?? prefs.getString('subscription_key');
-        }
-        
-        setState(() {
-          _currentLicenseKey = licenseKey ?? 'No license key found';
-          _showLicenseKey = true;
-        });
-      } catch (e) {
-        debugPrint('Error loading license key: $e');
-        setState(() {
-          _currentLicenseKey = 'Error loading key';
-          _showLicenseKey = true;
-        });
-      }
-    } else {
-      setState(() {
-        _showLicenseKey = false;
-        _currentLicenseKey = null;
-      });
-    }
-  }
 
   /// AI Models section with model management
   Widget _buildAISection(AIProvider aiProvider) {
@@ -2173,5 +2632,207 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)}kb';
     if (bytes < 1073741824) return '${(bytes / 1048576).toStringAsFixed(1)}mb';
     return '${(bytes / 1073741824).toStringAsFixed(1)}gb';
+  }
+
+  // Clear invalid stored key (emergency fix)
+  Future<void> _clearInvalidKey(LicenseProvider licenseProvider) async {
+    try {
+      await licenseProvider.clearLicenseData();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Invalid key cleared! You can now enter your correct key.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error clearing key: $e'),
+          backgroundColor: AppTheme.warningRed,
+        ),
+      );
+    }
+  }
+
+  /// Clear stored key when user wants to change it
+  Future<void> _clearStoredKey(LicenseProvider licenseProvider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.creamBeige,
+        title: Text(
+          'Change License Key',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          'This will clear your current license key so you can enter a new one. Are you sure?',
+          style: TextStyle(fontFamily: 'JetBrainsMono'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text('Clear Key'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await licenseProvider.clearLicenseData();
+        setState(() {
+          _currentLicenseKey = null;
+          _showLicenseKey = false;
+          _licenseKeyController.clear();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ License key cleared! You can now enter a new key.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error clearing key: $e'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+      }
+    }
+  }
+}
+
+class _CustomerPortalDialog extends StatefulWidget {
+  final String portalUrl;
+  
+  const _CustomerPortalDialog({
+    Key? key,
+    required this.portalUrl,
+  }) : super(key: key);
+  
+  @override
+  State<_CustomerPortalDialog> createState() => _CustomerPortalDialogState();
+}
+
+class _CustomerPortalDialogState extends State<_CustomerPortalDialog> {
+  late final WebViewController controller;
+  bool _isLoading = true;
+  
+  @override
+  void initState() {
+    super.initState();
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (url) {
+            setState(() => _isLoading = true);
+          },
+          onPageFinished: (url) {
+            setState(() => _isLoading = false);
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.portalUrl));
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        width: 600,
+        height: 500,
+        child: Column(
+          children: [
+            // Header bar
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.darkerCream,
+                border: Border(bottom: BorderSide(color: AppTheme.mediumGray.withOpacity(0.3))),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'Customer Portal',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 16.0,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.warmBrown,
+                    ),
+                  ),
+                  Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text(
+                      'Close',
+                      style: TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 14.0,
+                        color: AppTheme.warmBrown,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: Text(
+                      'Done',
+                      style: TextStyle(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 14.0,
+                        color: AppTheme.warmBrown,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // WebView content
+            Expanded(
+              child: Stack(
+                children: [
+                  WebViewWidget(controller: controller),
+                  if (_isLoading)
+                    Container(
+                      color: AppTheme.creamBeige,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'Loading customer portal...',
+                              style: TextStyle(
+                                fontFamily: 'JetBrainsMono',
+                                fontSize: 14.0,
+                                color: AppTheme.mediumGray,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 } 

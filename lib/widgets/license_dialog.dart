@@ -418,7 +418,40 @@ class _LicenseDialogState extends State<LicenseDialog> {
       if (result == true) {
         // Payment successful, refresh license status and close dialog
         await provider.checkLicense();
-        if (mounted) Navigator.of(context).pop();
+        if (mounted) {
+          // Show success message with portal instructions
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '🎉 Payment successful!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '📧 Check your email for receipt details',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '🔑 Access your license key at: Settings → Account → Login to User Portal',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 8),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          Navigator.of(context).pop();
+        }
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
