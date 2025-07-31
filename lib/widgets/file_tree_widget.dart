@@ -756,7 +756,14 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   void _pinFolderFromDrag(JournalFolder folder) async {
     try {
       final provider = Provider.of<JournalProvider>(context, listen: false);
-      final updatedFolder = folder.copyWith(isPinned: true);
+      
+      // CRITICAL FIX: Get the fresh folder data from provider
+      final freshFolder = provider.getFolderById(folder.id);
+      if (freshFolder == null) {
+        throw Exception('Folder not found');
+      }
+      
+      final updatedFolder = freshFolder.copyWith(isPinned: true);
       await provider.updateFolder(updatedFolder);
       
       // Show feedback
@@ -799,7 +806,14 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   void _pinFileFromDrag(JournalFile file) async {
     try {
       final provider = Provider.of<JournalProvider>(context, listen: false);
-      final updatedFile = file.copyWith(isPinned: true);
+      
+      // CRITICAL FIX: Get the fresh file data with current content from database
+      final freshFile = await provider.getFile(file.id);
+      if (freshFile == null) {
+        throw Exception('File not found');
+      }
+      
+      final updatedFile = freshFile.copyWith(isPinned: true);
       await provider.updateFile(updatedFile);
       
       // Show feedback
@@ -2057,7 +2071,14 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   void _toggleFolderPin(JournalFolder folder) async {
     try {
       final provider = Provider.of<JournalProvider>(context, listen: false);
-      final updatedFolder = folder.copyWith(isPinned: !folder.isPinned);
+      
+      // CRITICAL FIX: Get the fresh folder data from provider
+      final freshFolder = provider.getFolderById(folder.id);
+      if (freshFolder == null) {
+        throw Exception('Folder not found');
+      }
+      
+      final updatedFolder = freshFolder.copyWith(isPinned: !folder.isPinned);
       await provider.updateFolder(updatedFolder);
       
       // Show feedback
@@ -2100,7 +2121,14 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   void _toggleFilePin(JournalFile file) async {
     try {
       final provider = Provider.of<JournalProvider>(context, listen: false);
-      final updatedFile = file.copyWith(isPinned: !file.isPinned);
+      
+      // CRITICAL FIX: Get the fresh file data with current content from database
+      final freshFile = await provider.getFile(file.id);
+      if (freshFile == null) {
+        throw Exception('File not found');
+      }
+      
+      final updatedFile = freshFile.copyWith(isPinned: !file.isPinned);
       await provider.updateFile(updatedFile);
       
       // Show feedback

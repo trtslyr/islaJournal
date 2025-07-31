@@ -467,9 +467,14 @@ class AIService {
     } else if (Platform.isMacOS) {
       // Mac - can handle more GPU layers
       return _deviceRAMGB >= 16 ? 35 : 25;
-    } else if (Platform.isWindows || Platform.isLinux) {
-      // Desktop - full GPU but start conservative
-      return _deviceRAMGB >= 16 ? 30 : 20;
+    } else if (Platform.isWindows) {
+      // Windows - MUCH more conservative due to driver/GPU compatibility issues
+      if (_deviceRAMGB >= 32) return 8;   // Even high-end Windows: very conservative
+      if (_deviceRAMGB >= 16) return 5;   // 16GB Windows: minimal GPU
+      return 2;  // Lower RAM: CPU-only essentially
+    } else if (Platform.isLinux) {
+      // Linux - moderate approach
+      return _deviceRAMGB >= 16 ? 15 : 10;
     }
     return 5;  // Safe fallback
   }

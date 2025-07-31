@@ -20,40 +20,21 @@ class BrowserService {
     }
   }
 
-  /// Opens URL with user confirmation dialog
+  /// Opens URL directly without confirmation (deprecated the confirmation version)
   static Future<void> openUrlWithConfirmation(
     BuildContext context, 
     String url, 
     {String? title}
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title ?? 'Open Link'),
-        content: Text('This will open in your default browser:\n\n$url'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Open Browser'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      final success = await openUrl(url);
-      if (!success && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not open link in browser'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    // No longer shows confirmation - opens directly
+    final success = await openUrl(url);
+    if (!success && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open link in browser'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 } 
