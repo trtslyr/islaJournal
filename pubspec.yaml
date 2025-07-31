@@ -67,7 +67,7 @@ dependencies:
   crypto: ^3.0.3  # For model verification
   
   # License System Dependencies
-  flutter_secure_storage: ^9.2.2
+# flutter_secure_storage: ^9.2.2  # Removed to simplify Windows deployment
   url_launcher: ^6.1.12
   webview_flutter: ^4.4.2
   device_info_plus: ^9.1.0

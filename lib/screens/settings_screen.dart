@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+// import 'package:flutter_secure_storage/flutter_secure_storage.dart';  // Removed for simpler Windows deployment
 import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/ai_provider.dart';
 import '../providers/journal_provider.dart';
@@ -87,26 +87,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Load stored license key from secure storage
+  /// Load stored license key from SharedPreferences
   Future<void> _loadStoredLicenseKey() async {
     try {
-      final storage = FlutterSecureStorage();
-      String? licenseKey;
-
-      // Try lifetime key first
-      licenseKey = await storage.read(key: 'license_key');
-
-      // If no lifetime key, try subscription key
-      if (licenseKey == null) {
-        licenseKey = await storage.read(key: 'subscription_key');
-      }
-
-      // Fallback to SharedPreferences if secure storage fails
-      if (licenseKey == null) {
-        final prefs = await SharedPreferences.getInstance();
-        licenseKey = prefs.getString('license_key') ??
-            prefs.getString('subscription_key');
-      }
+      // Use SharedPreferences directly for simpler Windows deployment
+      final prefs = await SharedPreferences.getInstance();
+      String? licenseKey = prefs.getString('license_key') ??
+          prefs.getString('subscription_key');
 
       if (licenseKey != null && mounted) {
         setState(() {

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+// import 'package:flutter_secure_storage/flutter_secure_storage.dart';  // Removed for simpler Windows deployment
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:crypto/crypto.dart';
@@ -77,7 +77,7 @@ class LicenseStatus {
 class LicenseService {
   static const String baseUrl =
       'https://islajournalbackend-production.up.railway.app';
-  static const _storage = FlutterSecureStorage();
+  // static const _storage = FlutterSecureStorage();  // Removed for simpler Windows deployment
 
   // Storage keys
   static const String _licenseStatusKey = 'license_status';
@@ -291,13 +291,8 @@ class LicenseService {
   Future<void> clearLicenseData() async {
     debugPrint('🧹 LicenseService: Clearing all license data...');
 
-    // Clear all secure storage
-    try {
-      await _storage.deleteAll();
-      debugPrint('✅ Secure storage cleared');
-    } catch (e) {
-      debugPrint('⚠️ Secure storage clear failed (expected on debug): $e');
-    }
+    // Clear all secure storage (now skipped since we don't use it)
+    debugPrint('✅ Secure storage cleared (skipped - using SharedPreferences only)');
 
     // Clear all SharedPreferences license-related keys
     final prefs = await SharedPreferences.getInstance();
@@ -464,28 +459,18 @@ class LicenseService {
     }
   }
 
-  /// Store lifetime key securely
+  /// Store lifetime key 
   Future<void> _storeLifetimeKey(String licenseKey) async {
-    try {
-      await _storage.write(key: _licenseKeyKey, value: licenseKey);
-      debugPrint('✅ License key stored securely');
-    } catch (e) {
-      debugPrint('Warning: Could not store license key in keychain: $e');
-      // Fallback to SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_licenseKeyKey, licenseKey);
-      debugPrint('✅ License key stored in SharedPreferences fallback');
-    }
+    // Use SharedPreferences directly for simpler Windows deployment
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_licenseKeyKey, licenseKey);
+    debugPrint('✅ License key stored in SharedPreferences');
   }
 
   /// Get stored lifetime key
   Future<String?> _getStoredLifetimeKey() async {
     try {
-      // Try secure storage first
-      final key = await _storage.read(key: _licenseKeyKey);
-      if (key != null && key.startsWith('ij_life_')) return key;
-
-      // Fallback to SharedPreferences
+      // Use SharedPreferences directly for simpler Windows deployment
       final prefs = await SharedPreferences.getInstance();
       final storedKey = prefs.getString(_licenseKeyKey);
       if (storedKey != null && storedKey.startsWith('ij_life_'))
@@ -498,28 +483,18 @@ class LicenseService {
     }
   }
 
-  /// Store subscription key securely
+  /// Store subscription key 
   Future<void> _storeSubscriptionKey(String licenseKey) async {
-    try {
-      await _storage.write(key: 'subscription_key', value: licenseKey);
-      debugPrint('✅ Subscription key stored securely');
-    } catch (e) {
-      debugPrint('Warning: Could not store subscription key in keychain: $e');
-      // Fallback to SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('subscription_key', licenseKey);
-      debugPrint('✅ Subscription key stored in SharedPreferences fallback');
-    }
+    // Use SharedPreferences directly for simpler Windows deployment
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('subscription_key', licenseKey);
+    debugPrint('✅ Subscription key stored in SharedPreferences');
   }
 
   /// Get stored subscription key
   Future<String?> _getStoredSubscriptionKey() async {
     try {
-      // Try secure storage first
-      final key = await _storage.read(key: 'subscription_key');
-      if (key != null && key.startsWith('ij_sub_')) return key;
-
-      // Fallback to SharedPreferences
+      // Use SharedPreferences directly for simpler Windows deployment
       final prefs = await SharedPreferences.getInstance();
       final storedKey = prefs.getString('subscription_key');
       if (storedKey != null && storedKey.startsWith('ij_sub_'))
