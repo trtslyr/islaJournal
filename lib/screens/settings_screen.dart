@@ -209,6 +209,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           const SizedBox(height: 16),
           
+          // Independent login button (always visible)
+          _buildIndependentLoginButton(),
+          
+          const SizedBox(height: 16),
+          
           // Action buttons based on license type
           _buildLicenseActions(licenseProvider),
         ],
@@ -676,44 +681,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Independent login button (always visible)
+  Widget _buildIndependentLoginButton() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ElevatedButton(
+          onPressed: () => _openUserPortal(),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.warmBrown,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.login, size: 16, color: Colors.white),
+              SizedBox(width: 8),
+              Text(
+                'Login to User Portal',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 14.0,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          '💡 Access your subscription details and license key',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 12.0,
+            color: AppTheme.mediumGray,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildLicenseActions(LicenseProvider licenseProvider) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Subscription users: Login button to access portal
-        if (licenseProvider.isSubscription) ...[
-            ElevatedButton(
-            onPressed: () => _openUserPortal(),
-              style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.warmBrown,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.login, size: 16, color: Colors.white),
-                SizedBox(width: 8),
-                Text(
-                  'Login to User Portal',
-                  style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                    fontSize: 14.0,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            '💡 Access your subscription details and license key',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 12.0,
-              color: AppTheme.mediumGray,
-              ),
-            ),
-          ],
         
         // Trial users: Purchase options
         if (licenseProvider.isTrial) ...[
