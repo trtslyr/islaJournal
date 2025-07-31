@@ -38,7 +38,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
                 children: [
                   _buildHeader(),
                   SizedBox(height: 32),
-                  _buildTrialStatus(license),
+                  // No trial status - license key required
                   SizedBox(height: 32),
                   _buildLifetimeSection(),
                   SizedBox(height: 24),
@@ -82,47 +82,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
     );
   }
   
-  Widget _buildTrialStatus(LicenseProvider license) {
-    if (license.licenseStatus?.isTrial == true) {
-      return Card(
-        color: AppTheme.warmBrown.withOpacity(0.1),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(Icons.timer, color: AppTheme.warmBrown),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Free Trial Active',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.darkText,
-                      ),
-                    ),
-                    Text(
-                      '${license.licenseStatus!.trialHoursRemaining} hours remaining',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12,
-                        color: AppTheme.mediumGray,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    
-    return SizedBox.shrink();
-  }
+  // Trial status removed - license key required from start
   
   Widget _buildLifetimeSection() {
     return Card(

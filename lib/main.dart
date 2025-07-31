@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // Providers
 import 'providers/journal_provider.dart';
@@ -7,6 +9,9 @@ import 'providers/ai_provider.dart';
 import 'providers/conversation_provider.dart';
 import 'providers/layout_provider.dart';
 import 'providers/license_provider.dart';
+
+// Services  
+import 'services/license_service.dart';
 
 // Screens
 import 'screens/home_screen.dart';
@@ -18,6 +23,12 @@ import 'core/theme/app_theme.dart';
 
 /// Entry point of the Isla Journal application
 void main() {
+  // Initialize database factory for Windows/Linux (macOS works with regular sqflite)
+  if (Platform.isWindows || Platform.isLinux) {
+    // Initialize FFI for desktop platforms that need it
+    sqfliteFfiInit();
+  }
+  
   runApp(const IslaJournalApp());
 }
 
@@ -110,18 +121,22 @@ class _LicenseCheckWrapperState extends State<LicenseCheckWrapper> {
     
     return Consumer<LicenseProvider>(
       builder: (context, license, child) {
-        // Show main app for licensed users (lifetime, subscription, or active trial)
-        if (license.isValid || license.isTrial) {
+        debugPrint('🔍 Main app checking license: ${license.isValid} (${license.licenseStatus?.type})');
+        
+        // BULLETPROOF: Show main app ONLY if license is valid AND has a valid status
+        // This ensures that ANY invalid license state shows the license screen
+        if (license.isValid && 
+            license.licenseStatus != null && 
+            license.licenseStatus!.isValid &&
+            (license.licenseStatus!.type == LicenseType.lifetime || 
+             license.licenseStatus!.type == LicenseType.subscription)) {
+          debugPrint('✅ Showing HomeScreen for valid license');
           return const HomeScreen();
         }
         
-        // Only show license screen if trial has actually expired or unlicensed
-        if (license.needsLicense) {
-          return LicenseScreen();
-        }
-        
-        // Default: show main app (be generous to users during trial)
-        return const HomeScreen();
+        // ALWAYS show license screen for ANY invalid/missing license
+        debugPrint('🔒 Showing LicenseScreen - no valid license (isValid: ${license.isValid}, status: ${license.licenseStatus?.type})');
+        return LicenseScreen();
       },
     );
   }

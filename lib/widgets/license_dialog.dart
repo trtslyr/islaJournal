@@ -68,8 +68,7 @@ class _LicenseDialogState extends State<LicenseDialog> {
                 SizedBox(height: 24),
                 
                 // Trial status if active
-                _buildTrialStatus(license),
-                if (license.isTrial) SizedBox(height: 24),
+                // No trial status - license key required
                 
                 // License options
                 Expanded(
@@ -90,50 +89,7 @@ class _LicenseDialogState extends State<LicenseDialog> {
     );
   }
   
-  Widget _buildTrialStatus(LicenseProvider license) {
-    if (license.licenseStatus?.isTrial == true) {
-      return Container(
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.warmBrown.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: AppTheme.warmBrown.withOpacity(0.3)),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.timer, color: AppTheme.warmBrown, size: 20),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Free Trial Active',
-                    style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      color: AppTheme.darkText,
-                    ),
-                  ),
-                  Text(
-                    '${license.licenseStatus!.trialHoursRemaining} hours remaining',
-                    style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
-                      fontSize: 10,
-                      color: AppTheme.mediumGray,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    
-    return SizedBox.shrink();
-  }
+  // Trial status removed - license key required from start
   
 
   
