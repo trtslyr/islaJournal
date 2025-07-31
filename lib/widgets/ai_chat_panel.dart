@@ -391,50 +391,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
       },
     );
   }
-  
-  Widget _buildQuickActions() {
-    return Wrap(
-      spacing: 8.0,
-      runSpacing: 8.0,
-      children: [
-        _buildQuickActionButton('analyze mood', () {
-          _sendQuickMessage('Analyze the mood and emotions in my recent journal entries');
-        }),
-        _buildQuickActionButton('summarize', () {
-          _sendQuickMessage('Summarize my recent journal entries and key themes');
-        }),
-        _buildQuickActionButton('dig deeper', () {
-          _sendQuickMessage('Ask me an insightful question to help me reflect deeper on my recent journal entries');
-        }),
-      ],
-    );
-  }
 
-  void _sendQuickMessage(String message) {
-    _chatController.text = message;
-    _sendMessage();
-  }
-  
-  Widget _buildQuickActionButton(String label, VoidCallback onPressed) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: AppTheme.warmBrown.withOpacity(0.3)),
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-        minimumSize: Size.zero,
-        overlayColor: Colors.transparent,
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontFamily: 'JetBrainsMono',
-          fontSize: 10.0,
-          fontWeight: FontWeight.w400,
-          color: AppTheme.warmBrown,
-        ),
-      ),
-    );
-  }
   
   Widget _buildMessagesList() {
     if (_messages.isEmpty) {
@@ -1027,9 +984,6 @@ class _AIChatPanelState extends State<AIChatPanel> {
       ),
       child: Column(
         children: [
-          // Quick actions above text input
-          _buildQuickActions(),
-          const SizedBox(height: 12),
           // Text input row
           Row(
             children: [

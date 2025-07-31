@@ -28,7 +28,7 @@ class DatabaseService {
     
     return await openDatabase(
       path,
-      version: 12, // Increment version to add is_pinned field to folders
+      version: 12, // Keep current version but ensure compatibility
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -68,16 +68,21 @@ class DatabaseService {
       )
     ''');
 
-    // Create search index using FTS5
-    await db.execute('''
-      CREATE VIRTUAL TABLE files_fts USING fts5(
-        file_id,
-        title,
-        content,
-        content='',
-        contentless_delete=1
-      )
-    ''');
+    // Create search index using FTS5 with error handling for compatibility
+    try {
+      await db.execute('''
+        CREATE VIRTUAL TABLE files_fts USING fts5(
+          file_id,
+          title,
+          content
+        )
+      ''');
+      print('✅ FTS5 search index created successfully');
+    } catch (e) {
+      print('⚠️ FTS5 not available on this system: $e');
+      print('⚠️ Search functionality will be limited but app will work normally');
+      // App will continue to work, just without full-text search
+    }
 
     // Create conversations table
     await db.execute('''
@@ -345,6 +350,8 @@ class DatabaseService {
         print('Error in v12 upgrade: $e');
       }
     }
+
+
   }
 
   /// Backfill journal dates for existing files that don't have them
@@ -528,8 +535,12 @@ class DatabaseService {
         // Delete all files EXCEPT the profile file
         await txn.delete('files', where: 'id != ?', whereArgs: [profileId]);
         
-        // Delete all FTS entries EXCEPT the profile file
-        await txn.delete('files_fts', where: 'file_id != ?', whereArgs: [profileId]);
+        // Delete all FTS entries EXCEPT the profile file (if FTS5 is available)
+        try {
+          await txn.delete('files_fts', where: 'file_id != ?', whereArgs: [profileId]);
+        } catch (e) {
+          print('⚠️ FTS5 not available, skipping search index cleanup: $e');
+        }
         
         await txn.delete('folders');
         
@@ -603,12 +614,16 @@ When you're ready, delete this instruction text and write your own introduction.
     
     await db.insert('files', profileFile.toMap());
     
-    // Update search index
-    await db.insert('files_fts', {
-      'file_id': profileId,
-      'title': 'Profile',
-      'content': profileContent,
-    });
+    // Update search index (if FTS5 is available)
+    try {
+      await db.insert('files_fts', {
+        'file_id': profileId,
+        'title': 'Profile',
+        'content': profileContent,
+      });
+    } catch (e) {
+      print('⚠️ FTS5 not available, skipping search index update: $e');
+    }
   }
 
   // Folder operations
@@ -720,12 +735,16 @@ When you're ready, delete this instruction text and write your own introduction.
     await db.insert('files', updatedJournalFile.toMap());
     
     
-    // Update search index
-    await db.insert('files_fts', {
-      'file_id': updatedJournalFile.id,
-      'title': name,
-      'content': content,
-    });
+    // Update search index (if FTS5 is available)
+    try {
+      await db.insert('files_fts', {
+        'file_id': updatedJournalFile.id,
+        'title': name,
+        'content': content,
+      });
+    } catch (e) {
+      print('⚠️ FTS5 not available, skipping search index update: $e');
+    }
     
     
     
@@ -920,22 +939,42 @@ When you're ready, delete this instruction text and write your own introduction.
       // Delete from database
       await db.delete('files', where: 'id = ?', whereArgs: [id]);
       
-      // Delete from search index
-      await db.delete('files_fts', where: 'file_id = ?', whereArgs: [id]);
+      // Delete from search index (if FTS5 is available)
+      try {
+        await db.delete('files_fts', where: 'file_id = ?', whereArgs: [id]);
+      } catch (e) {
+        print('⚠️ FTS5 not available, skipping search index cleanup: $e');
+      }
     }
   }
 
-  // Search operations
+  // Search operations with fallback for systems without FTS5
   Future<List<JournalFile>> searchFiles(String query) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT f.* FROM files f
-      JOIN files_fts fts ON f.id = fts.file_id
-      WHERE files_fts MATCH ?
-      ORDER BY rank
-    ''', [query]);
     
-    return maps.map((map) => JournalFile.fromMap(map)).toList();
+    try {
+      // Try FTS5 search first (fastest and most accurate)
+      final List<Map<String, dynamic>> maps = await db.rawQuery('''
+        SELECT f.* FROM files f
+        JOIN files_fts fts ON f.id = fts.file_id
+        WHERE files_fts MATCH ?
+        ORDER BY rank
+      ''', [query]);
+      
+      return maps.map((map) => JournalFile.fromMap(map)).toList();
+    } catch (e) {
+      print('⚠️ FTS5 search failed, using fallback: $e');
+      
+      // Fallback to LIKE search (works on all SQLite versions)
+      final List<Map<String, dynamic>> maps = await db.query(
+        'files',
+        where: 'name LIKE ? OR content LIKE ?',
+        whereArgs: ['%$query%', '%$query%'],
+        orderBy: 'updated_at DESC',
+      );
+      
+      return maps.map((map) => JournalFile.fromMap(map)).toList();
+    }
   }
 
   // Simple embedding storage
