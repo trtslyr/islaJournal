@@ -23,34 +23,38 @@ class _LicenseScreenState extends State<LicenseScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.creamBeige,
-      body: Center(
-        child: Container(
-          padding: EdgeInsets.all(32),
-          constraints: BoxConstraints(maxWidth: 500),
-          child: Consumer<LicenseProvider>(
-            builder: (context, license, child) {
-              if (false) { // Loading state removed
-                return _buildLoadingView();
-              }
-              
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildHeader(),
-                  SizedBox(height: 32),
-                  // No trial status - license key required
-                  SizedBox(height: 32),
-                  _buildLifetimeSection(),
-                  SizedBox(height: 24),
-                  _buildOrDivider(),
-                  SizedBox(height: 24),
-                  _buildLoginSection(),
-                  SizedBox(height: 24),
-                  _buildSubscriptionSection(),
-                  // Error handling simplified in new system
-                ],
-              );
-            },
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Center(
+            child: Container(
+              padding: EdgeInsets.all(24),
+              constraints: BoxConstraints(maxWidth: 500),
+              child: Consumer<LicenseProvider>(
+                builder: (context, license, child) {
+                  if (false) { // Loading state removed
+                    return _buildLoadingView();
+                  }
+                  
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(height: 20),
+                      _buildHeader(),
+                      SizedBox(height: 24),
+                      _buildLifetimeSection(),
+                      SizedBox(height: 20),
+                      _buildOrDivider(),
+                      SizedBox(height: 20),
+                      _buildLoginSection(),
+                      SizedBox(height: 20),
+                      _buildSubscriptionSection(),
+                      SizedBox(height: 40), // Extra bottom padding
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
         ),
       ),
