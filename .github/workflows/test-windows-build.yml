@@ -27,10 +27,17 @@ jobs:
       shell: powershell
       run: |
         Write-Host "🔽 Downloading VC++ Redistributable..."
-        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+        $installer = "$env:TEMP\vc_redist.x64.exe"
+        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile $installer
         Write-Host "📦 Installing VC++ Redistributable..."
-        Start-Process -FilePath "vc_redist.x64.exe" -ArgumentList "/quiet" -Wait
-        Write-Host "✅ VC++ Redistributable installed"
+        Write-Host "Installer path: $installer"
+        if (Test-Path $installer) {
+            Start-Process -FilePath $installer -ArgumentList "/quiet" -Wait
+            Write-Host "✅ VC++ Redistributable installed"
+        } else {
+            Write-Host "❌ Installer file not found!"
+            exit 1
+        }
     
     - name: Build Windows Release  
       run: flutter build windows --release
