@@ -243,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Text(
-                          '✎',
+                          '+',
                           style: TextStyle(
                             fontFamily: 'JetBrainsMono',
                             fontSize: 12.0,
