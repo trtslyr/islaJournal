@@ -39,7 +39,25 @@ jobs:
         )
     
     - name: Build Windows Release  
-      run: flutter build windows --release
+      run: |
+        echo "🏗️ Building Flutter Windows app..."
+        flutter build windows --release --verbose
+        if %ERRORLEVEL% NEQ 0 (
+            echo "❌ Flutter build failed!"
+            exit /b 1
+        )
+        echo "✅ Flutter build completed successfully"
+    
+    - name: Debug Build Output
+      shell: cmd
+      run: |
+        echo "🔍 Checking build directory structure..."
+        echo "📁 Contents of build\windows\runner\Release:"
+        dir "build\windows\runner\Release" /A /S
+        echo "📁 Contents of build\windows\x64\runner\Release (alternate location):"
+        dir "build\windows\x64\runner\Release" /A /S 2>nul || echo "Alternate path not found"
+        echo "🔍 Looking for isla_journal.exe:"
+        where /R build isla_journal.exe 2>nul || echo "isla_journal.exe not found"
     
     - name: Bundle VC++ Runtime DLLs
       shell: cmd
@@ -64,9 +82,12 @@ jobs:
         echo "📦 Final build contents:"
         dir "%BUILD_DIR%"
     
-    - name: Upload Test Build
+    - name: Upload Test Build (Flexible Path)
       uses: actions/upload-artifact@v4
       with:
         name: isla-journal-windows-test
-        path: build/windows/runner/Release/
-        retention-days: 7 
+        path: |
+          build/windows/runner/Release/
+          build/windows/x64/runner/Release/
+        retention-days: 7
+        if-no-files-found: error 
