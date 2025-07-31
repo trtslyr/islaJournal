@@ -23,6 +23,15 @@ jobs:
     - name: Install Flutter Dependencies
       run: flutter pub get
     
+    - name: Install Visual C++ Redistributable
+      shell: powershell
+      run: |
+        Write-Host "🔽 Downloading VC++ Redistributable..."
+        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+        Write-Host "📦 Installing VC++ Redistributable..."
+        Start-Process -FilePath "vc_redist.x64.exe" -ArgumentList "/quiet" -Wait
+        Write-Host "✅ VC++ Redistributable installed"
+    
     - name: Build Windows Release
       run: flutter build windows --release
     
@@ -34,6 +43,10 @@ jobs:
         set SYSTEM32=C:\Windows\System32
         
         echo "📁 Build directory: %BUILD_DIR%"
+        
+        echo "🔍 Checking System32 for DLLs..."
+        dir "C:\Windows\System32\msvcp140*.dll" 2>nul || echo "No msvcp140 DLLs found"
+        dir "C:\Windows\System32\vcruntime140*.dll" 2>nul || echo "No vcruntime140 DLLs found"
         
         rem Copy required DLLs
         if exist "%SYSTEM32%\msvcp140.dll" (
