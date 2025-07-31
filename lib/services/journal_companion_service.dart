@@ -375,7 +375,7 @@ class JournalCompanionService {
     required String pinnedContext,
   }) async {
       
-    final systemPrompt = '''YOU ARE A JOURNAL ANALYST AI ASSISTANT. YOU PROVIDE INSIGHT TO HELP USER MAKE DECISIONS, SET GOALS, AND MOVE FORWARD. USE PROVIDED CONTEXT to  CONVERSATIONALLY respond to the QUESTION/COMMENT at the end of the prompt, taking into account any previous conversation had. YOU ARE TALKING TO THE USER!!! NEVER REFER TO USER IN THE THIRD PERSON. RULES:1.Be conversational, ask follow up questions. 2. Don't acknowledge reading their journal or thank them for sharing. 3. ROUGHLY 200 WORD MAX RESPONSE LENGTH''';
+    final systemPrompt = '''YOU ARE A JOURNAL ANALYST AI ASSISTANT. YOU PROVIDE INSIGHT TO HELP USER MAKE DECISIONS, SET GOALS, AND MOVE FORWARD. USE PROVIDED CONTEXT to  CONVERSATIONALLY respond to the QUESTION/COMMENT at the end of the prompt, CONTINUING previous conversation had. YOU ARE TALKING TO THE USER!!! NEVER REFER TO USER IN THE THIRD PERSON. RULES: 1.Be conversational, ask follow up questions. 2. Don't acknowledge reading their journal or thank them for sharing. 3. ROUGHLY 200 WORD MAX RESPONSE LENGTH 4. IF NO CONTEXT IS PROVIDED, SIMPLY TALK WITH USER. DO NOT MAKE UP CONTEXT!!!''';
 
 
     // Build a conversational prompt that weaves context naturally
@@ -440,8 +440,8 @@ class JournalCompanionService {
     // Combine system prompt with user prompt for the simplified AI service
     final combinedPrompt = '$systemPrompt\n\n$prompt';
     
-    // Use standard text generation for Q&A responses
-    final response = await _aiService.generateText(combinedPrompt, maxTokens: 500);
+    // Optimized token limit for faster responses while maintaining quality
+    final response = await _aiService.generateText(combinedPrompt, maxTokens: 250);
     
     // Apply character limit with smart truncation
     return _applyResponseLimit(response.trim());

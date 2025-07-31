@@ -746,7 +746,10 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () async {
               final name = nameController.text.trim();
               if (name.isNotEmpty && name != file.name) {
-                await provider.updateFile(file.copyWith(name: name));
+                await provider.updateFile(file.copyWith(
+          name: name,
+          isPinned: file.isPinned, // Preserve pin status
+        ));
                 Navigator.of(context).pop();
               } else if (name.isEmpty) {
                 Navigator.of(context).pop();

@@ -18,13 +18,6 @@ class LicenseDialog extends StatefulWidget {
 }
 
 class _LicenseDialogState extends State<LicenseDialog> {
-  final TextEditingController _keyController = TextEditingController();
-  
-  @override
-  void dispose() {
-    _keyController.dispose();
-    super.dispose();
-  }
   
   @override
   Widget build(BuildContext context) {
@@ -32,7 +25,7 @@ class _LicenseDialogState extends State<LicenseDialog> {
       backgroundColor: AppTheme.creamBeige,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Container(
-        constraints: BoxConstraints(maxWidth: 500, maxHeight: 700),
+        constraints: BoxConstraints(maxWidth: 500, maxHeight: 500),
         padding: EdgeInsets.all(24),
         child: Consumer<LicenseProvider>(
           builder: (context, license, child) {
@@ -83,10 +76,6 @@ class _LicenseDialogState extends State<LicenseDialog> {
                   child: SingleChildScrollView(
                     child: Column(
                       children: [
-                        _buildLifetimeSection(),
-                        SizedBox(height: 16),
-                        _buildOrDivider(),
-                        SizedBox(height: 16),
                         _buildSubscriptionSection(),
                         // Error handling simplified in new system
                       ],
@@ -146,92 +135,7 @@ class _LicenseDialogState extends State<LicenseDialog> {
     return SizedBox.shrink();
   }
   
-  Widget _buildLifetimeSection() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.darkerCream,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.stars, color: AppTheme.warmBrown, size: 16),
-              SizedBox(width: 8),
-              Text(
-                'Lifetime License',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.darkText,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Enter your lifetime license key',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 10,
-              color: AppTheme.mediumGray,
-            ),
-          ),
-          SizedBox(height: 12),
-          TextField(
-            controller: _keyController,
-            decoration: InputDecoration(
-              hintText: 'ij_life_abc123...',
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.all(8),
-              isDense: true,
-            ),
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 10,
-            ),
-          ),
-          SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-                                    onPressed: _validateLicenseKey,
-              style: ElevatedButton.styleFrom(
-                padding: EdgeInsets.symmetric(vertical: 8),
-              ),
-              child: Text(
-                'Activate Lifetime License',
-                style: TextStyle(fontSize: 12),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildOrDivider() {
-    return Row(
-      children: [
-        Expanded(child: Divider()),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            'OR',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 12,
-              color: AppTheme.mediumGray,
-            ),
-          ),
-        ),
-        Expanded(child: Divider()),
-      ],
-    );
-  }
+
   
   Widget _buildSubscriptionSection() {
     return Container(
@@ -333,47 +237,7 @@ class _LicenseDialogState extends State<LicenseDialog> {
   }
 
   
-  Future<void> _validateLicenseKey() async {
-    final key = _keyController.text.trim();
-    if (key.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please enter a license key'),
-          backgroundColor: AppTheme.warningRed,
-        ),
-      );
-      return;
-    }
-    
-    final provider = Provider.of<LicenseProvider>(context, listen: false);
-    bool success = false;
-    
-    // Determine key type and validate accordingly
-    if (key.startsWith('ij_life_')) {
-      success = await provider.validateLifetimeKey(key);
-    } else if (key.startsWith('ij_sub_')) {
-      success = await provider.validateSubscriptionKey(key);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Invalid license key format. Keys should start with ij_life_ or ij_sub_'),
-          backgroundColor: AppTheme.warningRed,
-        ),
-      );
-      return;
-    }
-    
-    if (success) {
-      Navigator.of(context).pop(); // Close dialog
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Invalid license key. Please check and try again.'),
-          backgroundColor: AppTheme.warningRed,
-        ),
-      );
-    }
-  }
+
   
   Future<void> _startCheckout(String planType) async {
     final provider = Provider.of<LicenseProvider>(context, listen: false);

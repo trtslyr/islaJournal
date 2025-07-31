@@ -39,6 +39,12 @@ class AIProvider with ChangeNotifier {
   void _listenToDownloadProgress() {
     _aiService.downloadProgress.listen((progress) {
       _downloadProgress = progress;
+      
+      // Clear progress when download completes (indicated by 0 total)
+      if (progress.total == 0 && progress.downloaded == 0) {
+        _downloadProgress = null;
+      }
+      
       notifyListeners();
     });
   }
@@ -55,7 +61,7 @@ class AIProvider with ChangeNotifier {
     try {
       await _aiService.downloadModel(modelId);
       notifyListeners();
-      print('✅ Model $modelId downloaded successfully! Click "Load Model" to use it.');
+      print('✅ Model $modelId downloaded successfully! Click "Load" to activate it.');
     } catch (e) {
       print('❌ Failed to download model: $e');
       notifyListeners();
@@ -87,6 +93,7 @@ class AIProvider with ChangeNotifier {
     try {
       await _aiService.deleteModel(modelId);
       notifyListeners();
+      print('✅ Model $modelId deleted successfully. Storage freed.');
     } catch (e) {
       print('❌ Failed to delete model: $e');
       rethrow;
@@ -110,7 +117,7 @@ class AIProvider with ChangeNotifier {
     try {
       _moodAnalysis = await _aiService.generateText(
         'Analyze the mood of this text briefly: $text',
-        maxTokens: 50,
+        maxTokens: 30,  // Reduced from 50 for faster analysis
       );
       notifyListeners();
     } catch (e) {
@@ -124,7 +131,7 @@ class AIProvider with ChangeNotifier {
     try {
       _writingAnalysis = await _aiService.generateText(
         'Analyze the writing style of this text briefly: $text',
-        maxTokens: 80,
+        maxTokens: 50,  // Reduced from 80 for faster analysis
       );
       notifyListeners();
     } catch (e) {

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum ModelStatus { notDownloaded, downloading, downloaded, loaded, error }
 
@@ -141,6 +142,7 @@ class AIService {
   Future<void> initialize() async {
     await _detectDeviceCapabilities();
     await _checkExistingModels();
+    await _loadPreviouslyLoadedModel();
   }
 
   Future<void> _detectDeviceCapabilities() async {
@@ -428,6 +430,9 @@ class AIService {
       _currentModelId = modelId;
       _modelStatuses[modelId] = ModelStatus.loaded;
       
+      // Persist the loaded model ID
+      await _saveLoadedModelId(modelId);
+      
       final model = _availableModels[modelId]!;
       print('✅ Successfully loaded ${model.name} (${model.quantization}) - ${(fileSize / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB');
       
@@ -441,11 +446,80 @@ class AIService {
   }
 
   int _getContextSize() {
-    // Adjust context size based on available RAM
-    if (_deviceRAMGB >= 32) return 8192;
-    if (_deviceRAMGB >= 16) return 4096;
+    // Fixed context sizes - the previous optimization was too aggressive
+    if (_deviceRAMGB >= 32) return 4096;
+    if (_deviceRAMGB >= 16) return 3072;
     if (_deviceRAMGB >= 8) return 2048;
-    return 1024;
+    return 1536;  // Minimum viable context size
+  }
+
+  int _getOptimalGpuLayers() {
+    // Conservative GPU layer configuration to ensure stability
+    if (Platform.isIOS) {
+      // iPhone/iPad - be more conservative initially
+      if (_deviceRAMGB >= 16) return 25;  // Moderate GPU layers for high-end
+      if (_deviceRAMGB >= 8) return 15;   // Some GPU layers for mid-range
+      return 5;  // Minimal GPU for lower-end
+    } else if (Platform.isAndroid) {
+      // Android devices - similar conservative approach
+      if (_deviceRAMGB >= 16) return 20;  // Moderate GPU layers
+      if (_deviceRAMGB >= 8) return 10;   // Some GPU layers
+      return 3;  // Minimal GPU
+    } else if (Platform.isMacOS) {
+      // Mac - can handle more GPU layers
+      return _deviceRAMGB >= 16 ? 35 : 25;
+    } else if (Platform.isWindows || Platform.isLinux) {
+      // Desktop - full GPU but start conservative
+      return _deviceRAMGB >= 16 ? 30 : 20;
+    }
+    return 5;  // Safe fallback
+  }
+
+  /// Save the currently loaded model ID to SharedPreferences
+  Future<void> _saveLoadedModelId(String modelId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('loaded_model_id', modelId);
+      print('💾 Saved loaded model ID: $modelId');
+    } catch (e) {
+      print('⚠️ Failed to save loaded model ID: $e');
+    }
+  }
+
+  /// Clear the loaded model ID from SharedPreferences
+  Future<void> _clearLoadedModelId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('loaded_model_id');
+      print('🗑️ Cleared loaded model ID');
+    } catch (e) {
+      print('⚠️ Failed to clear loaded model ID: $e');
+    }
+  }
+
+  /// Load the previously loaded model on app startup
+  Future<void> _loadPreviouslyLoadedModel() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedModelId = prefs.getString('loaded_model_id');
+      
+      if (savedModelId != null && _availableModels.containsKey(savedModelId)) {
+        // Check if the model is downloaded and ready to load
+        if (_modelStatuses[savedModelId] == ModelStatus.downloaded) {
+          print('🔄 Auto-loading previously loaded model: $savedModelId');
+          await loadModel(savedModelId);
+          print('✅ Successfully restored previously loaded model: $savedModelId');
+        } else {
+          print('⚠️ Previously loaded model $savedModelId is not downloaded, skipping auto-load');
+          // Clear the saved model ID since it's no longer valid
+          await _clearLoadedModelId();
+        }
+      }
+    } catch (e) {
+      print('⚠️ Failed to load previously loaded model: $e');
+      // Clear the saved model ID if there was an error
+      await _clearLoadedModelId();
+    }
   }
 
   Future<void> unloadModel() async {
@@ -457,10 +531,22 @@ class AIService {
       _modelStatuses[_currentModelId!] = ModelStatus.downloaded;
       _currentModelId = null;
       _currentModelPath = null;
+      
+      // Clear the persisted loaded model ID
+      await _clearLoadedModelId();
     }
   }
 
   Future<String> generateText(String prompt, {int maxTokens = 100}) async {
+    // Adaptive token optimization based on prompt complexity
+    if (maxTokens == 100) {  // Only optimize default calls
+      if (prompt.length < 50) {
+        maxTokens = 50;   // Short prompt = short response
+      } else if (prompt.length < 200) {
+        maxTokens = 80;   // Medium prompt = medium response
+      }
+      // Long prompts keep the passed maxTokens value
+    }
     if (_currentModelPath == null) {
       throw Exception('No model loaded');
     }
@@ -475,16 +561,21 @@ class AIService {
       messages.add(Message(Role.system, 'You are a helpful AI assistant. Answer questions directly and concisely.'));
       messages.add(Message(Role.user, prompt));
 
+      final gpuLayers = _getOptimalGpuLayers();
+      final contextSize = _getContextSize();
+      
+      print('🖥️ GPU Layers: $gpuLayers, Context: $contextSize, RAM: ${_deviceRAMGB}GB');
+      
       final request = OpenAiRequest(
         maxTokens: maxTokens,
         messages: messages,
-        numGpuLayers: Platform.isAndroid || Platform.isIOS ? 0 : -1,
+        numGpuLayers: gpuLayers,
         modelPath: _currentModelPath!,
-        temperature: 0.7,
-        topP: 0.9,
-        contextSize: _getContextSize(),
-        frequencyPenalty: 0.0,
-        presencePenalty: 1.1,
+        temperature: 0.5,              // Reduced from 0.7 for faster, more focused responses
+        topP: 0.8,                     // Reduced from 0.9 for better performance
+        contextSize: contextSize,
+        frequencyPenalty: 0.1,         // Slight penalty to avoid repetition
+        presencePenalty: 0.6,          // Reduced from 1.1 for faster inference
       );
 
       String fullResponse = '';
@@ -504,9 +595,12 @@ class AIService {
       // If generation fails, the model might be corrupted or incompatible
       if (_currentModelId != null) {
         print('⚠️ Marking model $_currentModelId as error due to generation failure');
-        _modelStatuses[_currentModelId!] = ModelStatus.error;
-        _currentModelPath = null;
-        _currentModelId = null;
+              _modelStatuses[_currentModelId!] = ModelStatus.error;
+      _currentModelPath = null;
+      _currentModelId = null;
+      
+      // Clear persisted model ID on error
+      await _clearLoadedModelId();
       }
       
       throw Exception('AI generation failed: ${e.toString()}. Model may be incompatible with this device.');

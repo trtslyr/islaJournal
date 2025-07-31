@@ -1532,10 +1532,13 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
                          nameController.text.trim().isNotEmpty && 
                          nameController.text.trim() != file.name
                   ? () async {
-                      final name = nameController.text.trim();
-                      final provider = Provider.of<JournalProvider>(context, listen: false);
-                      await provider.updateFile(file.copyWith(name: name));
-                      Navigator.of(context).pop();
+                                          final name = nameController.text.trim();
+                    final provider = Provider.of<JournalProvider>(context, listen: false);
+                    await provider.updateFile(file.copyWith(
+                      name: name,
+                      isPinned: file.isPinned, // Preserve pin status
+                    ));
+                    Navigator.of(context).pop();
                     }
                   : null,
               child: const Text('rename'),
@@ -1622,7 +1625,10 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
               leading: const Text('• root'),
               title: const Text('root'),
               onTap: () async {
-                await provider.updateFile(file.copyWith(folderId: null));
+                await provider.updateFile(file.copyWith(
+              folderId: null,
+              isPinned: file.isPinned, // Preserve pin status
+            ));
                 Navigator.of(context).pop();
               },
             ),
@@ -1630,7 +1636,10 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
               leading: const Text('• dir'),
               title: Text(folder.name),
               onTap: () async {
-                await provider.updateFile(file.copyWith(folderId: folder.id));
+                await provider.updateFile(file.copyWith(
+              folderId: folder.id,
+              isPinned: file.isPinned, // Preserve pin status
+            ));
                 Navigator.of(context).pop();
               },
             )),
@@ -1729,7 +1738,10 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   /// Move a file to a specific folder
   void _moveFileToFolder(JournalFile file, JournalFolder folder, JournalProvider provider) async {
     try {
-      await provider.updateFile(file.copyWith(folderId: folder.id));
+                    await provider.updateFile(file.copyWith(
+                folderId: folder.id,
+                isPinned: file.isPinned, // Preserve pin status
+              ));
       
       // Show success feedback
       if (mounted) {
@@ -1770,7 +1782,10 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   /// Move a file to root (no folder)
   void _moveFileToRoot(JournalFile file, JournalProvider provider) async {
     try {
-      await provider.updateFile(file.copyWith(folderId: null));
+                    await provider.updateFile(file.copyWith(
+                folderId: null,
+                isPinned: file.isPinned, // Preserve pin status
+              ));
       
       // Show success feedback
       if (mounted) {
@@ -1860,6 +1875,7 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
       await provider.updateFile(draggedFile.copyWith(
         folderId: null, // Ensure it stays in root
         lastOpened: newTimestamp,
+        isPinned: draggedFile.isPinned, // Preserve pin status
       ));
       
       // Show success feedback
@@ -2152,10 +2168,13 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
           ),
           TextButton(
             onPressed: () async {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty && name != file.name) {
-                await provider.updateFile(file.copyWith(name: name));
-                Navigator.of(context).pop();
+                          final name = nameController.text.trim();
+            if (name.isNotEmpty && name != file.name) {
+              await provider.updateFile(file.copyWith(
+                name: name,
+                isPinned: file.isPinned, // Preserve pin status
+              ));
+              Navigator.of(context).pop();
               } else if (name.isEmpty) {
                 Navigator.of(context).pop();
               }

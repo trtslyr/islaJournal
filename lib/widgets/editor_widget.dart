@@ -81,6 +81,7 @@ class _EditorWidgetState extends State<EditorWidget> {
       content: content,
       wordCount: wordCount,
       updatedAt: DateTime.now(),
+      isPinned: _currentFile!.isPinned, // Preserve pin status
     );
     
     await provider.updateFile(updatedFile);
@@ -290,7 +291,10 @@ class _EditorWidgetState extends State<EditorWidget> {
                   ? () async {
               final name = nameController.text.trim();
                 final provider = Provider.of<JournalProvider>(context, listen: false);
-                await provider.updateFile(_currentFile!.copyWith(name: name));
+                await provider.updateFile(_currentFile!.copyWith(
+                  name: name,
+                  isPinned: _currentFile!.isPinned, // Preserve pin status
+                ));
                 Navigator.of(context).pop();
               }
                   : null,

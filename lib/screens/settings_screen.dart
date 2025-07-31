@@ -24,7 +24,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double _currentTokens = 4000.0; // Updated default value to match new range
   bool _showLicenseKey = false;
   String? _currentLicenseKey;
-  String? _selectedModelId; // Selected model ID for dropdown
+  bool _isModelsExpanded = false; // AI Models section collapsed by default
+
   
   // License key input controller
   final TextEditingController _licenseKeyController = TextEditingController();
@@ -146,22 +147,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       body: Consumer2<AIProvider, LicenseProvider>(
         builder: (context, aiProvider, licenseProvider, child) {
-                      return ListView(
-              padding: const EdgeInsets.all(16.0),
-              children: [
-                _buildAISection(aiProvider),
-                const SizedBox(height: 24),
-                _buildContextSection(),
-                const SizedBox(height: 24),
-                _buildImportExportSection(),
-                const SizedBox(height: 24),
-                _buildStorageSection(aiProvider),
-                const SizedBox(height: 24),
-                _buildLicenseSection(licenseProvider),
-                const SizedBox(height: 24),
-                _buildAboutSection(),
-              ],
-            );
+                                return ListView(
+            padding: const EdgeInsets.all(16.0),
+            children: [
+              _buildLicenseSection(licenseProvider),
+              const SizedBox(height: 24),
+              _buildAISection(aiProvider),
+              const SizedBox(height: 24),
+              _buildContextSection(),
+              const SizedBox(height: 24),
+              _buildImportExportSection(),
+              const SizedBox(height: 24),
+              _buildStorageSection(aiProvider),
+              const SizedBox(height: 24),
+              _buildAboutSection(),
+            ],
+          );
         },
       ),
     );
@@ -207,6 +208,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           // License key input section (for all users)
           _buildLicenseKeyInput(licenseProvider),
+          
+          const SizedBox(height: 16),
+          
+          // License Management buttons
+          _buildLicenseManagement(),
           
           const SizedBox(height: 16),
           
@@ -613,7 +619,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () => Navigator.of(context).pop(null),
             child: Text('Cancel'),
           ),
-          ElevatedButton(
+            ElevatedButton(
             onPressed: () => Navigator.of(context).pop(keyController.text),
             child: Text('Validate'),
           ),
@@ -682,39 +688,107 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// License Management buttons
+  Widget _buildLicenseManagement() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'License Management',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 14.0,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.darkText,
+          ),
+        ),
+        SizedBox(height: 8),
+        
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _inputAndValidateKey(),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: AppTheme.creamBeige,
+                  side: BorderSide(color: AppTheme.warmBrown.withOpacity(0.3)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                child: Text(
+                  'Add License Key',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 12.0,
+                    color: AppTheme.warmBrown,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _clearAllStoredKeys(),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: AppTheme.warningRed.withOpacity(0.1),
+                  side: BorderSide(color: AppTheme.warningRed.withOpacity(0.3)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                child: Text(
+                  'Clear All Keys',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 12.0,
+                    color: AppTheme.warningRed,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   /// Independent login button (always visible)
   Widget _buildIndependentLoginButton() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ElevatedButton(
-          onPressed: () => _openUserPortal(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.warmBrown,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.login, size: 16, color: Colors.white),
-              SizedBox(width: 8),
-              Text(
-                'Login to User Portal',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 14.0,
-                  color: Colors.white,
+        Container(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => _openUserPortal(),
+            style: OutlinedButton.styleFrom(
+              backgroundColor: AppTheme.creamBeige,
+              side: BorderSide(color: AppTheme.warmBrown.withOpacity(0.3)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.login, size: 16, color: AppTheme.warmBrown),
+                SizedBox(width: 8),
+                Text(
+                  'Access User Portal',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 14.0,
+                    color: AppTheme.warmBrown,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-        SizedBox(height: 8),
+        SizedBox(height: 6),
         Text(
-          '💡 Access your subscription details and license key',
+          'View subscription details and retrieve license keys',
           style: TextStyle(
             fontFamily: 'JetBrainsMono',
-            fontSize: 12.0,
+            fontSize: 11.0,
             color: AppTheme.mediumGray,
           ),
         ),
@@ -730,7 +804,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Trial users: Purchase options
         if (licenseProvider.isTrial) ...[
           Text(
-            'Purchase Options:',
+            'Upgrade Options',
             style: TextStyle(
               fontFamily: 'JetBrainsMono',
               fontSize: 14.0,
@@ -739,142 +813,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-            onPressed: () => _openUpgradeOptions(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.darkerBrown,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+          Container(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => _openUpgradeOptions(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.warmBrown,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: Text(
+                'View Pricing Options',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 14.0,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
-                  child: Text(
-                    'Monthly (\$7)',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 12.0,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => _openUpgradeOptions(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.darkerBrown,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: Text(
-                    'Annual (\$49)',
-                    style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
-                      fontSize: 12.0,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => _openUpgradeOptions(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.warmBrown,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: Text(
-                    'Lifetime (\$99)',
-                    style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
-                      fontSize: 12.0,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
         
-        // TEMP: Clear all keys button (for debugging)
-        SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: () => _clearAllStoredKeys(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-          ),
-          child: Text(
-            '🗑️ CLEAR ALL STORED KEYS',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 14.0,
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        
-                 // TEMP: Input manual key button
-         SizedBox(height: 8),
-         ElevatedButton(
-           onPressed: () => _inputAndValidateKey(),
-           style: ElevatedButton.styleFrom(
-             backgroundColor: Colors.blue,
-             padding: const EdgeInsets.symmetric(vertical: 12),
-           ),
-           child: Text(
-             '⌨️ INPUT & VALIDATE KEY',
-             style: TextStyle(
-               fontFamily: 'JetBrainsMono',
-               fontSize: 14.0,
-               color: Colors.white,
-               fontWeight: FontWeight.w600,
-             ),
-           ),
-         ),
+
         
         // Expired license: Upgrade button
         if (licenseProvider.needsLicense) ...[
-          ElevatedButton(
-            onPressed: () => _openUpgradeOptions(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.warningRed,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.warning, size: 16, color: Colors.white),
-                SizedBox(width: 8),
-                Text(
-              'Activate License',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                    fontSize: 14.0,
-                    color: Colors.white,
+          SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => _openUpgradeOptions(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.warmBrown,
+                padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-                ),
-              ],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.upgrade, size: 16, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text(
+                    'Activate License',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 14.0,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
         
         // Lifetime users: No additional buttons needed (they have permanent access)
         if (licenseProvider.isLifetime) ...[
+          SizedBox(height: 8),
           Container(
-            padding: EdgeInsets.symmetric(vertical: 8),
+            width: double.infinity,
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.green.withOpacity(0.3)),
+            ),
             child: Row(
               children: [
                 Icon(Icons.verified, color: Colors.green, size: 16),
                 SizedBox(width: 8),
                 Text(
                   'Lifetime access activated',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-                    fontSize: 14.0,
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 12.0,
                     color: Colors.green,
                     fontWeight: FontWeight.w500,
                   ),
@@ -887,28 +899,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Emergency: Clear invalid key button (for debugging)
         if (!licenseProvider.isValid) ...[
           SizedBox(height: 8),
-        ElevatedButton(
+          OutlinedButton(
             onPressed: () => _clearInvalidKey(licenseProvider),
-          style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            style: OutlinedButton.styleFrom(
+              backgroundColor: AppTheme.warningRed.withOpacity(0.1),
+              side: BorderSide(color: AppTheme.warningRed.withOpacity(0.3)),
+              padding: const EdgeInsets.symmetric(vertical: 10),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.delete, size: 16, color: Colors.white),
-                SizedBox(width: 8),
+                Icon(Icons.delete, size: 14, color: AppTheme.warningRed),
+                SizedBox(width: 6),
                 Text(
-                  'Clear Invalid Stored Key',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 12.0,
-                    color: Colors.white,
-            ),
+                  'Clear Invalid Key',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 12.0,
+                    color: AppTheme.warningRed,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
+            ),
           ),
-        ),
         ],
       ],
     );
@@ -1056,36 +1070,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'AI Models',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 16.0,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.darkText,
+            // Collapsible header
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _isModelsExpanded = !_isModelsExpanded;
+                });
+              },
+              child: Container(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      _isModelsExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: AppTheme.darkText,
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'AI Models',
+                        style: TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 16.0,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.darkText,
+                        ),
+                      ),
+                    ),
+                    // Show active model indicator
+                    if (!_isModelsExpanded && aiProvider.isModelLoaded) ...[
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Active',
+                        style: TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 10.0,
+                          color: Colors.green,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
-            SizedBox(height: 8),
-            Text(
-              'Device: ${aiProvider.deviceType ?? 'Unknown'} (${aiProvider.deviceRAMGB}GB RAM)',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 12.0,
-                color: AppTheme.mediumGray,
+            
+            // Expandable content
+            AnimatedCrossFade(
+              crossFadeState: _isModelsExpanded 
+                  ? CrossFadeState.showSecond 
+                  : CrossFadeState.showFirst,
+              duration: Duration(milliseconds: 200),
+              firstChild: SizedBox.shrink(),
+              secondChild: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 8),
+                  Text(
+                    'Device: ${aiProvider.deviceType ?? 'Unknown'} (${aiProvider.deviceRAMGB}GB RAM)',
+                    style: TextStyle(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
+                      color: AppTheme.mediumGray,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Current model status
+                  _buildCurrentModelStatus(aiProvider),
+                  SizedBox(height: 24),
+                  
+                  // Available models
+                  _buildAvailableModelsList(aiProvider),
+                  SizedBox(height: 16),
+                  
+                  // Storage info
+                  _buildStorageInfo(aiProvider),
+                ],
               ),
             ),
-            SizedBox(height: 16),
-            
-            // Current model status
-            _buildCurrentModelStatus(aiProvider),
-            SizedBox(height: 24),
-            
-            // Available models
-            _buildAvailableModelsList(aiProvider),
-            SizedBox(height: 16),
-            
-            // Storage info
-            _buildStorageInfo(aiProvider),
           ],
         );
       },
@@ -1115,10 +1187,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: AppTheme.warmBrown,
               ),
               SizedBox(width: 8),
-              Text(
+          Text(
                 'Current Model',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
                   fontSize: 14.0,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.darkText,
@@ -1214,7 +1286,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Select AI Model',
+          'Available Models',
           style: TextStyle(
             fontFamily: 'JetBrainsMono',
             fontSize: 14.0,
@@ -1224,7 +1296,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         SizedBox(height: 8),
         Text(
-          'Choose based on your system RAM:',
+          'Download, load, and delete AI models. Only keep what you need to save storage.',
           style: TextStyle(
             fontFamily: 'JetBrainsMono',
             fontSize: 12.0,
@@ -1233,320 +1305,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         SizedBox(height: 12),
         
-        // Model dropdown
-        Container(
-          width: double.infinity,
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppTheme.darkerCream,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppTheme.mediumGray.withOpacity(0.3)),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedModelId,
-              hint: Text(
-                'Choose a model for your system',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 13.0,
-                  color: AppTheme.mediumGray,
-                ),
-              ),
-              dropdownColor: AppTheme.darkerCream,
-              items: allModels.map((model) {
-                final isRecommended = recommendedModels.contains(model);
-                final canDownload = model.minRAMGB <= aiProvider.deviceRAMGB;
-                final status = aiProvider.modelStatuses[model.id] ?? ModelStatus.notDownloaded;
-                
-                return DropdownMenuItem<String>(
-                  value: model.id,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Status indicator icon
-                          Container(
-                            width: 8,
-                            height: 8,
-                            margin: EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              color: _getStatusColor(status),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          
-                          Text(
-                            model.name,
-                            style: TextStyle(
-                              fontFamily: 'JetBrainsMono',
-                              fontSize: 13.0,
-                              fontWeight: FontWeight.w500,
-                              color: canDownload ? AppTheme.darkText : AppTheme.mediumGray,
-                            ),
-                          ),
-                          
-                          SizedBox(width: 8),
-                          
-                          // Status text
-                          Container(
-                            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: _getStatusColor(status).withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: Text(
-                              _getStatusText(status),
-                              style: TextStyle(
-                                fontFamily: 'JetBrainsMono',
-                                fontSize: 8.0,
-                                color: _getStatusColor(status),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          
-                          if (isRecommended) ...[
-                            SizedBox(width: 6),
-                            Container(
-                              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: AppTheme.warmBrown,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                              child: Text(
-                                'BEST',
-                                style: TextStyle(
-                                  fontFamily: 'JetBrainsMono',
-                                  fontSize: 8.0,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                          
-                          if (!canDownload) ...[
-                            SizedBox(width: 6),
-                            Text(
-                              'Need ${model.minRAMGB}GB RAM',
-                              style: TextStyle(
-                                fontFamily: 'JetBrainsMono',
-                                fontSize: 9.0,
-                                color: AppTheme.warningRed,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      SizedBox(height: 2),
-                      Padding(
-                        padding: EdgeInsets.only(left: 16), // Align with text after the dot
-                        child: Text(
-                          model.description,
-                          style: TextStyle(
-                            fontFamily: 'JetBrainsMono',
-                            fontSize: 11.0,
-                            color: AppTheme.mediumGray,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: (String? modelId) {
-                if (modelId != null) {
-                  setState(() {
-                    _selectedModelId = modelId;
-                  });
-                }
-              },
-            ),
-          ),
-        ),
+        // Individual model cards with buttons
+        ...allModels.map((model) {
+          final isRecommended = recommendedModels.contains(model);
+          return _buildModelCard(model, aiProvider, isRecommended: isRecommended);
+        }).toList(),
         
         SizedBox(height: 16),
-        
-        // Action buttons for selected model
-        if (_selectedModelId != null) 
-          _buildSelectedModelActions(aiProvider),
       ],
     );
   }
 
-  Widget _buildSelectedModelActions(AIProvider aiProvider) {
-    if (_selectedModelId == null) return SizedBox.shrink();
-    
-    final model = aiProvider.availableModels[_selectedModelId!];
-    if (model == null) return SizedBox.shrink();
-    
-    final status = aiProvider.modelStatuses[model.id] ?? ModelStatus.notDownloaded;
-    final canDownload = model.minRAMGB <= aiProvider.deviceRAMGB;
-    
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.darkerCream,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.mediumGray.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            model.name,
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 14.0,
-              fontWeight: FontWeight.w500,
-              color: AppTheme.darkText,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            '${model.sizeGB}GB • ${model.quantization} • Quality: ${model.qualityScore}/10',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 11.0,
-              color: AppTheme.mediumGray,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            model.description,
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 12.0,
-              color: AppTheme.mediumGray,
-            ),
-          ),
-          if (!canDownload) ...[
-            SizedBox(height: 8),
-            Text(
-              '⚠️ This model requires ${model.minRAMGB}GB RAM but your system has ~${aiProvider.deviceRAMGB}GB',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 11.0,
-                color: AppTheme.warningRed,
-              ),
-            ),
-          ],
-          SizedBox(height: 12),
-          
-          // Download progress bar (only show when downloading)
-          if (status == ModelStatus.downloading) ...[
-            Consumer<AIProvider>(
-              builder: (context, aiProvider, child) {
-                final progress = aiProvider.downloadProgress;
-                return Column(
-                  children: [
-                    // Progress bar
-                    LinearProgressIndicator(
-                      value: progress?.percentage != null ? progress!.percentage / 100 : null,
-                      backgroundColor: AppTheme.mediumGray.withOpacity(0.3),
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                      minHeight: 6,
-                    ),
-                    SizedBox(height: 8),
-                    // Progress details
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          progress != null 
-                              ? '${progress.percentage.toStringAsFixed(1)}%'
-                              : '0%',
-                          style: TextStyle(
-                            fontFamily: 'JetBrainsMono',
-                            fontSize: 11.0,
-                            color: AppTheme.darkText,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        if (progress != null && progress.speed > 0) 
-                          Text(
-                            '${progress.speed.toStringAsFixed(1)} MB/s',
-                            style: TextStyle(
-                              fontFamily: 'JetBrainsMono',
-                              fontSize: 11.0,
-                              color: AppTheme.mediumGray,
-                            ),
-                          ),
-                        if (progress != null && progress.remainingTime > 0)
-                          Text(
-                            '${progress.remainingTime}s left',
-                            style: TextStyle(
-                              fontFamily: 'JetBrainsMono',
-                              fontSize: 11.0,
-                              color: AppTheme.mediumGray,
-                            ),
-                          ),
-                      ],
-                    ),
-                    SizedBox(height: 12),
-                  ],
-                );
-              },
-            ),
-          ],
-          
-          // Action button
-          SizedBox(
-            width: double.infinity,
-            height: 36,
-            child: ElevatedButton(
-              onPressed: canDownload && status != ModelStatus.downloading 
-                  ? () => _handleModelAction(model, status, aiProvider) 
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _getActionButtonColor(status),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              ),
-              child: status == ModelStatus.downloading
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Downloading...',
-                          style: TextStyle(
-                            fontFamily: 'JetBrainsMono',
-                            fontSize: 12.0,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Text(
-                      _getActionButtonText(status),
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 12.0,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   void _handleModelAction(DeviceOptimizedModel model, ModelStatus status, AIProvider aiProvider) {
     switch (status) {
@@ -1565,6 +1335,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       default:
         break;
     }
+  }
+
+  void _handleDeleteModel(String modelId, AIProvider aiProvider) {
+    _showDeleteModelDialog(modelId, aiProvider);
   }
 
   String _getActionButtonText(ModelStatus status) {
@@ -1634,22 +1408,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       margin: EdgeInsets.only(bottom: 12),
       padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.darkerCream,
-        borderRadius: BorderRadius.circular(8),
+          decoration: BoxDecoration(
+            color: AppTheme.darkerCream,
+            borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isRecommended && model.isRecommended 
               ? AppTheme.warmBrown.withOpacity(0.3)
               : AppTheme.mediumGray.withOpacity(0.3),
           width: isRecommended && model.isRecommended ? 2 : 1,
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
+              Row(
+                children: [
+                  Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1658,9 +1432,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Text(
                           model.name,
                           style: TextStyle(
-                            fontFamily: 'JetBrainsMono',
+                        fontFamily: 'JetBrainsMono',
                             fontSize: 13.0,
-                            fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w500,
                             color: AppTheme.darkText,
                           ),
                         ),
@@ -1668,14 +1442,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           SizedBox(width: 8),
                           Container(
                             padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
+                        decoration: BoxDecoration(
                               color: AppTheme.warmBrown,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                             child: Text(
                               'RECOMMENDED',
-                              style: TextStyle(
-                                fontFamily: 'JetBrainsMono',
+                          style: TextStyle(
+                            fontFamily: 'JetBrainsMono',
                                 fontSize: 8.0,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.white,
@@ -1694,8 +1468,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         color: AppTheme.mediumGray,
                       ),
                     ),
-                  ],
-                ),
+                ],
+              ),
               ),
               _buildModelStatusIndicator(status),
             ],
@@ -1739,12 +1513,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildModelControls(DeviceOptimizedModel model, ModelStatus status, AIProvider aiProvider, bool canDownload) {
     final downloadProgress = aiProvider.downloadProgress;
     
-    if (status == ModelStatus.downloading && downloadProgress != null) {
+    // Show progress bar only if downloading AND progress is valid
+    if (status == ModelStatus.downloading && downloadProgress != null && downloadProgress.total > 0) {
       return _buildDownloadProgress(downloadProgress);
     }
 
     return Row(
-      children: [
+                children: [
         if (status == ModelStatus.notDownloaded && canDownload) ...[
           ElevatedButton(
             onPressed: () => _downloadModel(model.id, aiProvider),
@@ -1757,11 +1532,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Icon(Icons.download, size: 14, color: Colors.white),
                 SizedBox(width: 4),
-                Text(
+                  Text(
                   'Download',
                   style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12.0,
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12.0,
                     color: Colors.white,
                   ),
                 ),
@@ -1780,16 +1555,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Icon(Icons.play_arrow, size: 14, color: Colors.white),
                 SizedBox(width: 4),
-                Text(
+                  Text(
                   'Load',
                   style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
+                      fontFamily: 'JetBrainsMono',
                     fontSize: 12.0,
                     color: Colors.white,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ),
           SizedBox(width: 8),
           _buildDeleteModelButton(model.id, aiProvider),
@@ -1802,13 +1577,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: [
+                  children: [
                 Icon(Icons.stop, size: 14, color: Colors.white),
                 SizedBox(width: 4),
-                Text(
+                    Text(
                   'Unload',
                   style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
+                        fontFamily: 'JetBrainsMono',
                     fontSize: 12.0,
                     color: Colors.white,
                   ),
@@ -1830,15 +1605,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Icon(Icons.refresh, size: 14, color: Colors.white),
                 SizedBox(width: 4),
-                Text(
+                    Text(
                   'Retry',
                   style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
+                        fontFamily: 'JetBrainsMono',
                     fontSize: 12.0,
                     color: Colors.white,
-                  ),
-                ),
-              ],
+                      ),
+                    ),
+                  ],
             ),
           ),
         ],
@@ -1889,6 +1664,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildDownloadProgress(DownloadProgress progress) {
+    final isComplete = progress.percentage >= 100.0;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1898,7 +1675,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: LinearProgressIndicator(
                 value: progress.percentage / 100,
                 backgroundColor: AppTheme.mediumGray.withOpacity(0.3),
-                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  isComplete ? Colors.green : AppTheme.warmBrown
+                ),
               ),
             ),
             SizedBox(width: 8),
@@ -1907,18 +1686,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 11.0,
-                color: AppTheme.darkText,
+                color: isComplete ? Colors.green : AppTheme.darkText,
+                fontWeight: isComplete ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ],
         ),
         SizedBox(height: 4),
         Text(
-          '${progress.speed.toStringAsFixed(1)} MB/s • ${progress.remainingTime}s remaining',
+          isComplete 
+            ? 'Download complete! Preparing...' 
+            : '${progress.speed.toStringAsFixed(1)} MB/s • ${progress.remainingTime}s remaining',
           style: TextStyle(
             fontFamily: 'JetBrainsMono',
             fontSize: 10.0,
-            color: AppTheme.mediumGray,
+            color: isComplete ? Colors.green : AppTheme.mediumGray,
+            fontWeight: isComplete ? FontWeight.w500 : FontWeight.normal,
           ),
         ),
       ],
@@ -1971,9 +1754,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   fontFamily: 'JetBrainsMono',
                   fontSize: 11.0,
                   color: AppTheme.mediumGray,
-                ),
-              ),
-            ],
+          ),
+        ),
+      ],
           ),
         );
       },
@@ -1986,7 +1769,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Model downloaded successfully'),
+            content: Text('Model downloaded successfully! Click "Load" to activate.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -2059,38 +1842,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return AlertDialog(
           title: Text(
             'Delete Model',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 16.0,
-              fontWeight: FontWeight.w600,
-            ),
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 16.0,
+            fontWeight: FontWeight.w600,
           ),
+        ),
           content: Text(
             'Are you sure you want to delete "${model.name}"?\n\nThis will free up ${model.sizeGB}GB of storage but you\'ll need to download it again to use it.',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
               fontSize: 13.0,
-            ),
           ),
-          actions: [
-            TextButton(
+        ),
+        actions: [
+          TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'Cancel',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
                   fontSize: 13.0,
                   color: AppTheme.mediumGray,
-                ),
               ),
             ),
-            TextButton(
+          ),
+          TextButton(
               onPressed: () async {
                 Navigator.of(context).pop();
                 try {
                   await aiProvider.deleteModel(modelId);
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+              ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Model deleted'),
                         backgroundColor: Colors.red,
@@ -2110,15 +1893,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
               child: Text(
                 'Delete',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
                   fontSize: 13.0,
                   color: Colors.red,
                   fontWeight: FontWeight.w500,
-                ),
               ),
             ),
-          ],
+          ),
+        ],
         );
       },
     );
