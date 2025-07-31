@@ -1,43 +1,27 @@
 @echo off
-echo.
-echo ===============================================
-echo    Building Isla Journal for Windows...
-echo ===============================================
-echo.
+echo Building Isla Journal for Windows (Release)...
 
-REM Check if Flutter is available
-flutter --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ERROR: Flutter not found in PATH!
-    echo Please install Flutter or add it to your PATH.
-    echo.
+REM Clean previous builds
+flutter clean
+flutter pub get
+
+REM Build Windows release
+flutter build windows --release
+
+REM Check if build was successful
+if %ERRORLEVEL% neq 0 (
+    echo Build failed!
     pause
     exit /b 1
 )
 
-echo Building Windows release version...
-echo This may take a few minutes...
 echo.
-
-REM Build the Windows app
-flutter build windows --release
-
-if %errorlevel% equ 0 (
-    echo.
-    echo ===============================================
-    echo    Build completed successfully!
-    echo ===============================================
-    echo.
-    echo You can now run IslaJournal.bat to launch the app
-    echo.
-) else (
-    echo.
-    echo ===============================================
-    echo    Build failed!
-    echo ===============================================
-    echo.
-    echo Please check the error messages above.
-    echo.
-)
-
+echo ✅ Build completed successfully!
+echo 📁 Output location: build\windows\x64\runner\Release\
+echo.
+echo ⚠️  IMPORTANT: If you get "flutter_secure_storage_windows_plugin.dll not found" error:
+echo    1. Copy the DLL from: build\windows\x64\plugins\flutter_secure_storage_windows\
+echo    2. To: build\windows\x64\runner\Release\
+echo.
+echo 🚀 You can now run isla_journal.exe from the Release folder
 pause 
