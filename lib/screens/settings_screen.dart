@@ -854,13 +854,93 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openUpgradeOptions() async {
-    // Just open the customer portal - same URL for everything!
-    const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
+    // Show upgrade options dialog
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.creamBeige,
+          title: Text(
+            'Upgrade Your License',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontWeight: FontWeight.w600,
+              color: AppTheme.warmBrown,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Monthly Option
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _openPaymentLink('https://pay.islajournal.app/b/dRmaEWct2cT03BN6JY73G01', 'Monthly');
+                  },
+                  child: Text('Monthly - \$7'),
+                ),
+              ),
+              SizedBox(height: 8),
+              // Annual Option
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _openPaymentLink('https://pay.islajournal.app/b/7sY28qakUg5cfkv2tI73G02', 'Annual');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.warmBrown,
+                  ),
+                  child: Text('Annual - \$49 (Save \$35!)'),
+                ),
+              ),
+              SizedBox(height: 8),
+              // Lifetime Option
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _openPaymentLink('https://pay.islajournal.app/b/cNieVc50A7yGfkv4BQ73G00', 'Lifetime');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.darkerBrown,
+                  ),
+                  child: Text('Lifetime - \$99 (Never Pay Again!)'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: AppTheme.mediumGray),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
+  Future<void> _openPaymentLink(String url, String planName) async {
     await BrowserService.openUrlWithConfirmation(
       context,
-      portalUrl,
-      title: 'Upgrade License',
+      url,
+      title: 'Upgrade to $planName',
+    );
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$planName upgrade page opened in browser!'),
+        backgroundColor: Colors.blue,
+        duration: Duration(seconds: 5),
+      ),
     );
   }
 

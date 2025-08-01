@@ -395,20 +395,38 @@ class _LicenseScreenState extends State<LicenseScreen> {
   }
   
   Future<void> _startCheckout(String planType) async {
-    // All purchases go to the same customer portal URL - simple and reliable!
-    const portalUrl = 'https://pay.islajournal.app/p/login/cNieVc50A7yGfkv4BQ73G00';
+    // Use specific payment links for each plan type
+    String paymentUrl;
+    String planName;
     
-    // Open in browser directly
+    switch (planType) {
+      case 'monthly':
+        paymentUrl = 'https://pay.islajournal.app/b/dRmaEWct2cT03BN6JY73G01';
+        planName = 'Monthly';
+        break;
+      case 'annual':
+        paymentUrl = 'https://pay.islajournal.app/b/7sY28qakUg5cfkv2tI73G02';
+        planName = 'Annual';
+        break;
+      case 'lifetime':
+        paymentUrl = 'https://pay.islajournal.app/b/cNieVc50A7yGfkv4BQ73G00';
+        planName = 'Lifetime';
+        break;
+      default:
+        return;
+    }
+    
+    // Open specific payment link in browser
     await BrowserService.openUrlWithConfirmation(
       context, 
-      portalUrl,
-      title: 'Complete Purchase',
+      paymentUrl,
+      title: 'Complete $planName Purchase',
     );
     
     // Show helpful message
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Purchase page opened in browser! Complete your purchase and then enter your license key above.'),
+        content: Text('$planName purchase page opened in browser! Complete your purchase and then enter your license key above.'),
         backgroundColor: Colors.blue,
         duration: Duration(seconds: 10),
       ),
