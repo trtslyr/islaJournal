@@ -457,13 +457,12 @@ class AIService {
   }
 
   int _getContextSize() {
-    // Windows-specific ultra conservative context sizes
+    // Reasonable context sizes for Windows (slightly more conservative than other platforms)
     if (Platform.isWindows) {
-      // Much smaller context sizes for Windows stability
-      if (_deviceRAMGB >= 32) return 1536; // Was 4096
-      if (_deviceRAMGB >= 16) return 1024; // Was 3072  
-      if (_deviceRAMGB >= 8) return 768;   // Was 2048
-      return 512;  // Ultra minimal for low-end Windows
+      if (_deviceRAMGB >= 32) return 3072; // Was 1536, now reasonable for high-end Windows
+      if (_deviceRAMGB >= 16) return 2048; // Was 1024, now decent for mid-range Windows  
+      if (_deviceRAMGB >= 8) return 1536;  // Was 768, now usable for 8GB Windows
+      return 1024;  // Was 512, now minimum viable for low-end Windows
     }
     
     // Normal sizes for other platforms
@@ -489,9 +488,11 @@ class AIService {
       // Mac - can handle more GPU layers
       return _deviceRAMGB >= 16 ? 35 : 25;
     } else if (Platform.isWindows) {
-      // Windows - ULTRA conservative to prevent crashes
-      // Completely disable GPU layers for maximum stability
-      return 0;  // CPU-only for Windows to prevent driver crashes
+      // Windows - more conservative but not completely disabled
+      if (_deviceRAMGB >= 32) return 15;  // Some GPU for high-end Windows
+      if (_deviceRAMGB >= 16) return 10;  // Moderate GPU for mid-range Windows
+      if (_deviceRAMGB >= 8) return 5;    // Light GPU for 8GB Windows
+      return 0;  // CPU-only for low-end Windows (4GB or less)
     } else if (Platform.isLinux) {
       // Linux - moderate approach
       return _deviceRAMGB >= 16 ? 15 : 10;
@@ -572,7 +573,7 @@ class AIService {
       final inSafeMode = await WindowsStabilityService.shouldRunInSafeMode();
       if (inSafeMode) {
         // Use safe configuration for Windows
-        maxTokens = 25; // Much smaller for safety
+        maxTokens = 50; // Was 25, now more reasonable for safe mode
         debugPrint('⚠️ Windows safe mode: using reduced parameters');
       }
     }
@@ -605,8 +606,8 @@ class AIService {
       
       debugPrint('🖥️ GPU Layers: $gpuLayers, Context: $contextSize, RAM: ${_deviceRAMGB}GB');
       
-      // Use Windows-safe parameters if needed
-      final temperature = Platform.isWindows ? 0.3 : 0.5;
+      // Reasonable parameters for Windows (not overly conservative)
+      final temperature = Platform.isWindows ? 0.4 : 0.5; // Was 0.3, now less restrictive
       final topP = Platform.isWindows ? 0.8 : 0.8;
       
       final request = OpenAiRequest(
@@ -623,6 +624,7 @@ class AIService {
 
       String fullResponse = '';
       final completer = Completer<String>();
+      String result = ''; // Declare result variable before if/else block
 
       // Windows-specific timeout and error handling for fllamaChat
       if (Platform.isWindows) {
@@ -640,7 +642,7 @@ class AIService {
           }
         });
         
-        // Race between completion and timeout
+        // Race between completion and timeout - capture result directly
         await Future.any([
           completer.future,
           chatFuture,
@@ -650,6 +652,9 @@ class AIService {
             }
           }),
         ]);
+        
+        // For Windows, the result is already in fullResponse after Future.any completes
+        result = fullResponse;
       } else {
         await fllamaChat(request, (response, openaiResponseJsonString, done) {
           fullResponse = response;
@@ -657,10 +662,11 @@ class AIService {
             completer.complete(fullResponse);
           }
         });
+        
+        // For non-Windows, await the completer as before
+        result = await completer.future;
       }
 
-      final result = await completer.future;
-      
       // Mark successful operation for Windows stability tracking
       if (Platform.isWindows) {
         await WindowsStabilityService.markSuccessfulOperation();

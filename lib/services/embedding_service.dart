@@ -188,11 +188,11 @@ class EmbeddingService {
     final queryEmbedding = await generateEmbedding(query);
 
     
-    // Get file chunks with embeddings - Windows optimization to reduce lag
+    // Get file chunks with embeddings
     final db = await _dbService.database;
     
-    // Windows-specific optimization: limit chunks to prevent lag
-    final limitClause = Platform.isWindows ? 'LIMIT 500' : ''; // Max 500 chunks on Windows
+    // Reasonable chunk limits for performance (more generous now that race condition is fixed)
+    final limitClause = Platform.isWindows ? 'LIMIT 2000' : 'LIMIT 5000'; // Was 500 for Windows, now much more reasonable
     
     final chunkRows = await db.rawQuery('''
       SELECT fe.file_id, fe.content, fe.embedding, f.name, f.file_path, f.folder_id, 

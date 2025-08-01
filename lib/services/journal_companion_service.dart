@@ -22,17 +22,7 @@ class JournalCompanionService {
     ConversationSession? conversation,
     required ContextSettings settings,
   }) async {
-    
-    
-    // Try multiple log approaches to see if any work
-    stderr.writeln('STDERR: generateInsights called with query: $userQuery');
-    
-    // Force flush stdout
-    stdout.writeln('STDOUT: generateInsights method entry');
-    
-
-          try {
-      
+    try {
       // Get user token setting
       final userTokens = await _getUserTokenSetting();
       
@@ -47,10 +37,11 @@ class JournalCompanionService {
       int customTokensUsed = 0;
       
       if (Platform.isWindows) {
-        // Simplified context gathering for Windows to reduce lag
-        pinnedContext = await _getPinnedContentFast(userTokens ~/ 16); // Even smaller allocation for Windows
+        // Slightly more conservative context gathering for Windows, but not extreme
+        pinnedContext = await _getPinnedContent(userTokens ~/ 10); // Was ~/ 16, now more reasonable
         pinnedTokensUsed = _estimateTokens(pinnedContext);
-        customTokensUsed = 0; // Skip custom context on Windows for now
+        customContext = await _getCustomContext(settings, userTokens ~/ 6); // Was skipped, now enabled with reasonable limit
+        customTokensUsed = _estimateTokens(customContext);
       } else {
         // Full context gathering for other platforms
         pinnedContext = await _getPinnedContent(userTokens ~/ 8);
@@ -377,62 +368,6 @@ class JournalCompanionService {
     }
   }
 
-  /// Get pinned content optimized for Windows performance (faster, lighter)
-  Future<String> _getPinnedContentFast(int tokenBudget) async {
-    try {
-      print('   📌 Loading pinned content (Windows fast mode)...');
-      
-      // Only get pinned files, skip folders for speed
-      final pinnedFiles = await _dbService.getPinnedFiles();
-      
-      if (pinnedFiles.isEmpty) {
-        return '';
-      }
-      
-      print('   📌 Found ${pinnedFiles.length} pinned files (skipping folders for Windows speed)');
-      
-      final pinnedEntries = <String>[];
-      int usedTokens = 0;
-      
-      // Process only first 3 pinned files for Windows performance
-      final filesToProcess = pinnedFiles.take(3);
-      
-      for (final file in filesToProcess) {
-        if (file.content.isNotEmpty) {
-          // Get only first 100 chars for Windows performance
-          final shortContent = file.content.length > 100 
-              ? file.content.substring(0, 100) + '...'
-              : file.content;
-              
-          final cleanContent = _extractUserContentOnly(shortContent);
-          if (cleanContent.trim().isEmpty) continue;
-          
-          final entry = '${file.name}:\n$cleanContent';
-          final entryTokens = _estimateTokens(entry);
-          
-          if (usedTokens + entryTokens <= tokenBudget) {
-            pinnedEntries.add(entry);
-            usedTokens += entryTokens;
-          } else {
-            break;
-          }
-        }
-      }
-      
-      if (pinnedEntries.isNotEmpty) {
-        final result = pinnedEntries.join('\n\n');
-        print('   ✅ Windows fast pinned context: ${pinnedEntries.length} entries, ${usedTokens} tokens');
-        return result;
-      }
-      
-      return '';
-      
-    } catch (e) {
-      print('Error loading pinned content (Windows fast): $e');
-      return '';
-    }
-  }
-
   /// Generate a clean response using the AI service
   Future<String> _generateCleanResponse({
     required String userQuery,
@@ -507,19 +442,10 @@ class JournalCompanionService {
     // Combine system prompt with user prompt for the simplified AI service
     final combinedPrompt = '$systemPrompt\n\n$prompt';
     
-    // Windows-specific optimization for first AI call
-    int maxTokens = 250;
-    if (Platform.isWindows) {
-      // Much smaller token limit for Windows to reduce lag
-      maxTokens = 80; // Reduced from 250 to 80 for faster Windows generation
-      
-      // Also simplify the prompt for Windows
-      final windowsPrompt = 'Answer briefly: $prompt';
-      final response = await _aiService.generateText(windowsPrompt, maxTokens: maxTokens);
-      return _applyResponseLimit(response.trim(), maxCharacters: 600); // Shorter limit too
-    }
+    // Reasonable token limits for all platforms
+    int maxTokens = Platform.isWindows ? 200 : 250; // Was 80 for Windows, now more reasonable
     
-    // Full generation for other platforms
+    // Full generation for all platforms (no more simplified Windows prompts)
     final response = await _aiService.generateText(combinedPrompt, maxTokens: maxTokens);
     
     // Apply character limit with smart truncation

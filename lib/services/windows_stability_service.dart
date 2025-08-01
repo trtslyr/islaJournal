@@ -75,12 +75,12 @@ class WindowsStabilityService {
   /// Get Windows-safe AI configuration
   static Map<String, dynamic> getSafeAIConfig() {
     return {
-      'numGpuLayers': 0,           // Completely disable GPU
-      'contextSize': 1024,         // Smaller context
-      'maxTokens': 50,             // Smaller responses
-      'temperature': 0.3,          // More deterministic
-      'topP': 0.8,                 // Focused sampling
-      'enableBatching': false,     // Disable batching
+      'numGpuLayers': 5,           // Was 0, now allows some GPU usage
+      'contextSize': 1536,         // Was 1024, now more reasonable
+      'maxTokens': 100,            // Was 50, now more usable
+      'temperature': 0.4,          // Was 0.3, now less restrictive
+      'topP': 0.8,                 // Keep focused sampling
+      'enableBatching': false,     // Keep disabled for stability
       'useF16': false,             // Use F32 for stability
     };
   }
