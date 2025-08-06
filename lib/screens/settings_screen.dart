@@ -1040,9 +1040,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   // Storage info
                   _buildStorageInfo(aiProvider),
                   
-                  // Ollama test widget for Windows
+                  // Ollama setup and test for Windows
                   if (Platform.isWindows) ...[
                     SizedBox(height: 24),
+                    _buildOllamaSetupSection(),
+                    SizedBox(height: 16),
                     OllamaTestWidget(),
                   ],
                 ],
@@ -2743,5 +2745,209 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     }
+  }
+
+  /// Build Ollama setup section with download link
+  Widget _buildOllamaSetupSection() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.lightGray,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.mediumGray.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.download_rounded,
+                color: AppTheme.warmBrown,
+                size: 24,
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Ollama AI Engine',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.darkText,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          Text(
+            'For Windows AI features, install Ollama - a separate AI engine that prevents crashes.',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppTheme.mediumGray,
+              height: 1.4,
+            ),
+          ),
+          SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _downloadOllama,
+                  icon: Icon(Icons.open_in_browser),
+                  label: Text('Download Ollama'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.warmBrown,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _showOllamaSetupGuide,
+                  icon: Icon(Icons.help_outline),
+                  label: Text('Setup Guide'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.warmBrown,
+                    side: BorderSide(color: AppTheme.warmBrown),
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Open Ollama download page in browser
+  Future<void> _downloadOllama() async {
+    const url = 'https://ollama.ai/download';
+    try {
+      await BrowserService.openUrl(url);
+      
+      // Show helpful message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🌐 Opening Ollama download page...'),
+            backgroundColor: AppTheme.warmBrown,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Could not open browser: $e'),
+            backgroundColor: AppTheme.warningRed,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Show Ollama setup guide dialog
+  void _showOllamaSetupGuide() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.settings, color: AppTheme.warmBrown),
+              SizedBox(width: 8),
+              Text('Ollama Setup Guide'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '📥 Quick Setup (5 minutes):',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                SizedBox(height: 12),
+                _buildSetupStep('1', 'Download & install Ollama from the link above'),
+                _buildSetupStep('2', 'Open Command Prompt and run:\n   ollama pull llama3.2:3b'),
+                _buildSetupStep('3', 'Test the connection using the button below'),
+                SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.lightGray,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '✅ Benefits:',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.warmBrown),
+                      ),
+                      SizedBox(height: 4),
+                      Text('• No more Windows crashes\n• Faster AI responses\n• Works offline\n• Easy to update'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Got it!', style: TextStyle(color: AppTheme.warmBrown)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Build a setup step widget
+  Widget _buildSetupStep(String number, String description) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: AppTheme.warmBrown,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                number,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              description,
+              style: TextStyle(fontSize: 14, height: 1.3),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
