@@ -172,4 +172,75 @@ class WindowsStabilityService {
       debugPrint('⚠️ Error marking Windows success: $e');
     }
   }
+
+  /// Pre-operation safety check for enhanced Windows protection
+  static Future<bool> preOperationSafetyCheck({
+    required String operation,
+    String? modelPath,
+    Map<String, dynamic>? parameters,
+  }) async {
+    if (!Platform.isWindows) return true;
+    
+    try {
+      // Check if in safe mode
+      final inSafeMode = await shouldRunInSafeMode();
+      if (inSafeMode) {
+        debugPrint('⚠️ Windows in safe mode - operation may be restricted');
+        return false;
+      }
+      
+      // Check system health
+      final healthy = await isSystemHealthy();
+      if (!healthy) {
+        debugPrint('⚠️ Windows system not healthy - operation not safe');
+        return false;
+      }
+      
+      // Check model file if provided
+      if (modelPath != null) {
+        final modelFile = File(modelPath);
+        if (!await modelFile.exists()) {
+          debugPrint('❌ Model file not found: $modelPath');
+          return false;
+        }
+      }
+      
+      debugPrint('✅ Windows pre-operation safety check passed for: $operation');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Windows safety check failed: $e');
+      return false;
+    }
+  }
+
+  /// Record native crash with detailed information
+  static Future<void> recordNativeCrash({
+    required String operation,
+    String? modelPath,
+    String? errorDetails,
+    Map<String, dynamic>? parameters,
+  }) async {
+    if (!Platform.isWindows) return;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final nativeCrashCount = (prefs.getInt('windows_native_crash_count') ?? 0) + 1;
+      
+      await prefs.setInt('windows_native_crash_count', nativeCrashCount);
+      await prefs.setString('windows_last_native_crash', DateTime.now().toIso8601String());
+      await prefs.setString('windows_last_crash_operation', operation);
+      
+      if (errorDetails != null) {
+        await prefs.setString('windows_last_crash_details', errorDetails);
+      }
+      
+      debugPrint('🔴 Windows native crash recorded: $operation (count: $nativeCrashCount)');
+      
+      // Also record as general crash
+      await recordCrash();
+      
+    } catch (e) {
+      debugPrint('⚠️ Error recording Windows native crash: $e');
+    }
+  }
 } 
