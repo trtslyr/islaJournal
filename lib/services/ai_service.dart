@@ -502,7 +502,6 @@ class AIService {
       if (_currentModelId != null) {
         debugPrint('⚠️ Marking model $_currentModelId as error due to generation failure');
         _modelStatuses[_currentModelId!] = ModelStatus.error;
-        _currentModelPath = null;
         _currentModelId = null;
         
         // Clear persisted model ID on error
