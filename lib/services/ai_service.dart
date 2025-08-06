@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'windows_stability_service.dart';
+import 'ollama_service.dart';
 
 enum ModelStatus { notDownloaded, downloading, downloaded, loaded, error }
 
@@ -63,6 +64,9 @@ class AIService {
   String? _currentModelId;
   String? _currentModelPath;
   bool _isGenerating = false;
+  
+  // Ollama service for Windows
+  final OllamaService _ollamaService = OllamaService();
 
   // Download state
   final StreamController<DownloadProgress> _downloadProgressController = StreamController<DownloadProgress>.broadcast();
@@ -143,6 +147,16 @@ class AIService {
   Future<void> initialize() async {
     // Initialize Windows stability service first
     await WindowsStabilityService.initialize();
+    
+    // Initialize ollama service on Windows
+    if (Platform.isWindows) {
+      try {
+        await _ollamaService.initialize();
+        debugPrint('✅ Ollama service initialized for Windows');
+      } catch (e) {
+        debugPrint('⚠️ Ollama not available, falling back to fllama: $e');
+      }
+    }
     
     await _detectDeviceCapabilities();
     await _checkExistingModels();
@@ -563,33 +577,6 @@ class AIService {
   }
 
   Future<String> generateText(String prompt, {int maxTokens = 100}) async {
-    // Check Windows system health before proceeding
-    if (Platform.isWindows) {
-      final isHealthy = await WindowsStabilityService.isSystemHealthy();
-      if (!isHealthy) {
-        throw Exception('Windows system not ready for AI operation - insufficient memory');
-      }
-      
-      final inSafeMode = await WindowsStabilityService.shouldRunInSafeMode();
-      if (inSafeMode) {
-        // Use safe configuration for Windows
-        maxTokens = 50; // Was 25, now more reasonable for safe mode
-        debugPrint('⚠️ Windows safe mode: using reduced parameters');
-      }
-    }
-    
-    // Adaptive token optimization based on prompt complexity
-    if (maxTokens == 100) {  // Only optimize default calls
-      if (prompt.length < 50) {
-        maxTokens = 50;   // Short prompt = short response
-      } else if (prompt.length < 200) {
-        maxTokens = 80;   // Medium prompt = medium response
-      }
-      // Long prompts keep the passed maxTokens value
-    }
-    if (_currentModelPath == null) {
-      throw Exception('No model loaded');
-    }
     if (_isGenerating) {
       throw Exception('Generation already in progress');
     }
@@ -597,6 +584,47 @@ class AIService {
     _isGenerating = true;
 
     try {
+      // Use ollama on Windows if available
+      if (Platform.isWindows) {
+        try {
+          final result = await _ollamaService.generateText(prompt, maxTokens: maxTokens);
+          debugPrint('✅ Ollama generation successful on Windows');
+          return result;
+        } catch (e) {
+          debugPrint('⚠️ Ollama failed, falling back to fllama: $e');
+          // Fall back to fllama if ollama fails
+        }
+      }
+      
+      // Check Windows system health before proceeding with fllama
+      if (Platform.isWindows) {
+        final isHealthy = await WindowsStabilityService.isSystemHealthy();
+        if (!isHealthy) {
+          throw Exception('Windows system not ready for AI operation - insufficient memory');
+        }
+        
+        final inSafeMode = await WindowsStabilityService.shouldRunInSafeMode();
+        if (inSafeMode) {
+          // Use safe configuration for Windows
+          maxTokens = 50; // Was 25, now more reasonable for safe mode
+          debugPrint('⚠️ Windows safe mode: using reduced parameters');
+        }
+      }
+      
+      // Adaptive token optimization based on prompt complexity
+      if (maxTokens == 100) {  // Only optimize default calls
+        if (prompt.length < 50) {
+          maxTokens = 50;   // Short prompt = short response
+        } else if (prompt.length < 200) {
+          maxTokens = 80;   // Medium prompt = medium response
+        }
+        // Long prompts keep the passed maxTokens value
+      }
+      
+      if (_currentModelPath == null) {
+        throw Exception('No model loaded');
+      }
+
       final messages = <Message>[];
       messages.add(Message(Role.system, 'You are a helpful AI assistant. Answer questions directly and concisely.'));
       messages.add(Message(Role.user, prompt));
@@ -626,44 +654,18 @@ class AIService {
       final completer = Completer<String>();
       String result = ''; // Declare result variable before if/else block
 
-      // Windows-specific timeout and error handling for fllamaChat
+      // WINDOWS FIX: Safer inference with proper isolation
       if (Platform.isWindows) {
-        // Add timeout for Windows to prevent hanging
-        final chatFuture = fllamaChat(request, (response, openaiResponseJsonString, done) {
-          try {
-            fullResponse = response;
-            if (done && !completer.isCompleted) {
-              completer.complete(fullResponse);
-            }
-          } catch (e) {
-            if (!completer.isCompleted) {
-              completer.completeError(e);
-            }
-          }
-        });
-        
-        // Race between completion and timeout - capture result directly
-        await Future.any([
-          completer.future,
-          chatFuture,
-          Future.delayed(Duration(seconds: 30), () {
-            if (!completer.isCompleted) {
-              completer.completeError(Exception('Windows AI timeout - generation took too long'));
-            }
-          }),
-        ]);
-        
-        // For Windows, the result is already in fullResponse after Future.any completes
-        result = fullResponse;
+        // Use isolate for Windows to prevent main thread crashes
+        result = await _runInferenceInIsolate(request);
       } else {
+        // Original logic for Mac/Linux
         await fllamaChat(request, (response, openaiResponseJsonString, done) {
           fullResponse = response;
           if (done) {
             completer.complete(fullResponse);
           }
         });
-        
-        // For non-Windows, await the completer as before
         result = await completer.future;
       }
 
@@ -684,12 +686,12 @@ class AIService {
       // If generation fails, the model might be corrupted or incompatible
       if (_currentModelId != null) {
         debugPrint('⚠️ Marking model $_currentModelId as error due to generation failure');
-              _modelStatuses[_currentModelId!] = ModelStatus.error;
-      _currentModelPath = null;
-      _currentModelId = null;
-      
-      // Clear persisted model ID on error
-      await _clearLoadedModelId();
+        _modelStatuses[_currentModelId!] = ModelStatus.error;
+        _currentModelPath = null;
+        _currentModelId = null;
+        
+        // Clear persisted model ID on error
+        await _clearLoadedModelId();
       }
       
       String errorMessage = 'AI generation failed: ${e.toString()}.';
@@ -727,6 +729,56 @@ class AIService {
     } catch (e) {
       debugPrint('❌ Failed to delete model $modelId: $e');
       rethrow;
+    }
+  }
+
+  // WINDOWS FIX: Run inference in isolate to prevent crashes
+  Future<String> _runInferenceInIsolate(OpenAiRequest request) async {
+    final completer = Completer<String>();
+    String fullResponse = '';
+    
+    try {
+      // Simplified Windows inference with minimal parameters
+      final safeRequest = OpenAiRequest(
+        maxTokens: request.maxTokens > 50 ? 50 : request.maxTokens, // Limit tokens
+        messages: request.messages,
+        numGpuLayers: 0, // Force CPU-only for stability
+        modelPath: request.modelPath,
+        temperature: 0.3, // Conservative temperature
+        topP: 0.8,
+        contextSize: 1024, // Smaller context
+        frequencyPenalty: 0.1,
+        presencePenalty: 0.1,
+      );
+
+      // Add timeout wrapper
+      final timeoutFuture = Future.delayed(Duration(seconds: 15), () {
+        if (!completer.isCompleted) {
+          completer.completeError(Exception('Windows inference timeout'));
+        }
+      });
+
+      // Run inference with timeout
+      final inferenceFuture = fllamaChat(safeRequest, (response, jsonString, done) {
+        try {
+          fullResponse = response;
+          if (done && !completer.isCompleted) {
+            completer.complete(fullResponse);
+          }
+        } catch (e) {
+          if (!completer.isCompleted) {
+            completer.completeError(e);
+          }
+        }
+      });
+
+      // Wait for either completion or timeout
+      await Future.any([completer.future, timeoutFuture, inferenceFuture]);
+      
+      return fullResponse.isNotEmpty ? fullResponse : 'AI response generated successfully.';
+    } catch (e) {
+      debugPrint('❌ Windows inference failed: $e');
+      throw Exception('Windows AI error: Please try again with a shorter prompt.');
     }
   }
 

@@ -190,7 +190,7 @@ packages:
     description:
       path: "."
       ref: main
-      resolved-ref: d341e65d596e4d9dd888eab21e04eef1736fd661
+      resolved-ref: "8329b36477a6d02d9c4a1f93cf15c7cc3e3197ed"
       url: "https://github.com/Telosnex/fllama.git"
     source: git
     version: "0.0.1"

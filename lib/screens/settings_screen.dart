@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 // import 'package:flutter_secure_storage/flutter_secure_storage.dart';  // Removed for simpler Windows deployment
 import '../providers/ai_provider.dart';
 import '../providers/journal_provider.dart';
@@ -9,6 +10,7 @@ import '../services/ai_service.dart';
 import '../core/theme/app_theme.dart';
 import '../widgets/import_dialog.dart';
 import '../services/browser_service.dart';
+import '../widgets/ollama_test_widget.dart';
 
 /// Settings screen for managing AI models and app preferences
 class SettingsScreen extends StatefulWidget {
@@ -1037,6 +1039,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                   // Storage info
                   _buildStorageInfo(aiProvider),
+                  
+                  // Ollama test widget for Windows
+                  if (Platform.isWindows) ...[
+                    SizedBox(height: 24),
+                    OllamaTestWidget(),
+                  ],
                 ],
               ),
             ),
