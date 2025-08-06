@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'windows_stability_service.dart';
+import 'dart:async';
 
 enum ModelStatus { notDownloaded, downloading, downloaded, loaded, error }
 
@@ -624,47 +625,61 @@ class AIService {
 
       String fullResponse = '';
       final completer = Completer<String>();
-      String result = ''; // Declare result variable before if/else block
 
-      // Windows-specific timeout and error handling for fllamaChat
+      // FIXED: Proper timeout handling for Windows to prevent race conditions and crashes
       if (Platform.isWindows) {
-        // Add timeout for Windows to prevent hanging
-        final chatFuture = fllamaChat(request, (response, openaiResponseJsonString, done) {
-          try {
-            fullResponse = response;
-            if (done && !completer.isCompleted) {
-              completer.complete(fullResponse);
+        try {
+          // Use Future.timeout instead of Future.any to prevent race conditions
+          await fllamaChat(request, (response, openaiResponseJsonString, done) {
+            try {
+              fullResponse = response;
+              if (done && !completer.isCompleted) {
+                completer.complete(fullResponse);
+              }
+            } catch (e) {
+              if (!completer.isCompleted) {
+                completer.completeError(e);
+              }
             }
-          } catch (e) {
-            if (!completer.isCompleted) {
-              completer.completeError(e);
-            }
+          }).timeout(
+            Duration(seconds: 45), // Increased from 30 for better reliability
+            onTimeout: () {
+              if (!completer.isCompleted) {
+                completer.completeError(Exception('AI generation timeout - took longer than expected'));
+              }
+              throw TimeoutException('Windows AI timeout', Duration(seconds: 45));
+            },
+          );
+          
+          // Wait for the completer if not already completed
+          if (!completer.isCompleted) {
+            await completer.future;
           }
-        });
+          
+        } catch (e) {
+          // Handle timeout and other errors gracefully
+          if (e is TimeoutException) {
+            throw Exception('AI generation timed out. Try again with a shorter prompt or restart the app.');
+          } else {
+            rethrow;
+          }
+        }
         
-        // Race between completion and timeout - capture result directly
-        await Future.any([
-          completer.future,
-          chatFuture,
-          Future.delayed(Duration(seconds: 30), () {
-            if (!completer.isCompleted) {
-              completer.completeError(Exception('Windows AI timeout - generation took too long'));
-            }
-          }),
-        ]);
+        fullResponse = completer.isCompleted ? await completer.future : fullResponse;
         
-        // For Windows, the result is already in fullResponse after Future.any completes
-        result = fullResponse;
       } else {
+        // Non-Windows platforms use the original simple approach
         await fllamaChat(request, (response, openaiResponseJsonString, done) {
           fullResponse = response;
-          if (done) {
+          if (done && !completer.isCompleted) {
             completer.complete(fullResponse);
           }
         });
         
-        // For non-Windows, await the completer as before
-        result = await completer.future;
+        if (!completer.isCompleted) {
+          await completer.future;
+        }
+        fullResponse = completer.isCompleted ? await completer.future : fullResponse;
       }
 
       // Mark successful operation for Windows stability tracking
@@ -672,7 +687,12 @@ class AIService {
         await WindowsStabilityService.markSuccessfulOperation();
       }
       
-      return result;
+      // Ensure we have a valid response
+      if (fullResponse.trim().isEmpty) {
+        throw Exception('AI returned empty response. Try rephrasing your question.');
+      }
+      
+      return fullResponse;
     } catch (e) {
       debugPrint('❌ Generation failed: $e');
       
