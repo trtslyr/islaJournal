@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:fllama/fllama.dart';
 import 'package:path_provider/path_provider.dart';
@@ -406,13 +407,17 @@ class AIService {
   }
 
   Future<void> loadModel(String modelId) async {
+    debugPrint('🔄 Starting model loading for: $modelId');
+    
     if (_modelStatuses[modelId] != ModelStatus.downloaded) {
+      debugPrint('❌ Model not downloaded: $modelId');
       throw Exception('Model not downloaded: $modelId');
     }
 
     try {
       // Unload current model if any
       if (_currentModelPath != null) {
+        debugPrint('🔄 Unloading current model...');
         await unloadModel();
       }
 
@@ -423,20 +428,66 @@ class AIService {
           : '${modelsDir.path}/$modelId.gguf';
       
       debugPrint('🔄 Loading model: $modelId');
+      debugPrint('📂 Model path: $modelPath');
 
-      // Simply verify the model file exists and set it as loaded
-      // The actual loading will be validated when first used for generation
+      // ENHANCED MODEL VALIDATION - especially critical for Windows
       final modelFile = File(modelPath);
+      
+      // 1. Check if file exists
       if (!await modelFile.exists()) {
+        debugPrint('❌ Model file not found: $modelPath');
         throw Exception('Model file not found: $modelPath');
       }
       
-      // Verify file is not corrupted by checking it's a reasonable size
+      // 2. Verify file size and integrity
       final fileSize = await modelFile.length();
+      debugPrint('📊 Model file size: ${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB');
+      
       if (fileSize < 1024 * 1024) { // Less than 1MB is definitely not a valid model
-        throw Exception('Model file appears corrupted (too small): $fileSize bytes');
+        debugPrint('❌ Model file too small (${fileSize} bytes) - likely corrupted');
+        throw Exception('Model file appears corrupted (too small): ${fileSize} bytes');
+      }
+      
+      // 3. Windows-specific validation
+      if (Platform.isWindows) {
+        debugPrint('🔒 Windows-specific model validation...');
+        
+        // Check if file is accessible and not locked
+        try {
+          final randomAccess = await modelFile.open(mode: FileMode.read);
+          await randomAccess.close();
+          debugPrint('✅ Model file is accessible');
+        } catch (e) {
+          debugPrint('❌ Model file access failed: $e');
+          throw Exception('Model file cannot be accessed - it may be locked or corrupted');
+        }
+        
+        // Read and validate file header (basic GGUF validation)
+        try {
+          final randomAccess = await modelFile.open(mode: FileMode.read);
+          final headerBytes = await randomAccess.read(4);
+          await randomAccess.close();
+          
+          // GGUF files should start with "GGUF" magic bytes
+          final header = String.fromCharCodes(headerBytes);
+          debugPrint('📋 Model file header: $header');
+          
+          if (!header.startsWith('GGUF') && !header.startsWith('GGML')) {
+            debugPrint('❌ Invalid model format - header: $header');
+            throw Exception('Invalid model file format - not a valid GGUF/GGML model');
+          }
+          
+          debugPrint('✅ Model file format validation passed');
+          
+        } catch (e) {
+          debugPrint('❌ Model header validation failed: $e');
+          throw Exception('Model file validation failed: $e');
+        }
+        
+        debugPrint('✅ Windows model validation completed');
       }
 
+      // 4. Set model as loaded (but don't actually load into memory yet)
       _currentModelPath = modelPath;
       _currentModelId = modelId;
       _modelStatuses[modelId] = ModelStatus.loaded;
@@ -446,13 +497,26 @@ class AIService {
       
       final model = _availableModels[modelId]!;
       debugPrint('✅ Successfully loaded ${model.name} (${model.quantization}) - ${(fileSize / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB');
+      debugPrint('✅ Model ready for AI generation');
       
     } catch (e) {
+      debugPrint('❌ Failed to load model $modelId: $e');
+      
       _modelStatuses[modelId] = ModelStatus.error;
       _currentModelPath = null;
       _currentModelId = null;
-      debugPrint('❌ Failed to load model $modelId: $e');
-      rethrow;
+      
+      // Add more context to the error message
+      String errorMessage = 'Failed to load model $modelId: ${e.toString()}';
+      
+      if (Platform.isWindows) {
+        errorMessage += '\n\nWindows troubleshooting:';
+        errorMessage += '\n- Ensure no antivirus is blocking the model file';
+        errorMessage += '\n- Try running as administrator';
+        errorMessage += '\n- Check if model file is corrupted (redownload if needed)';
+      }
+      
+      throw Exception(errorMessage);
     }
   }
 
@@ -563,6 +627,27 @@ class AIService {
   }
 
   Future<String> generateText(String prompt, {int maxTokens = 100}) async {
+    debugPrint('🚀 Starting AI generation - Windows: ${Platform.isWindows}');
+    
+    // WINDOWS ENHANCED SAFETY: Pre-operation checks
+    if (Platform.isWindows) {
+      final safetyCheck = await WindowsStabilityService.preOperationSafetyCheck(
+        operation: 'generateText',
+        modelPath: _currentModelPath,
+        parameters: {
+          'maxTokens': maxTokens,
+          'promptLength': prompt.length,
+          'currentModelId': _currentModelId,
+          'deviceRAMGB': _deviceRAMGB,
+        },
+      );
+      
+      if (!safetyCheck) {
+        debugPrint('❌ Windows safety check failed - aborting AI generation');
+        throw Exception('Windows safety check failed. System may be unstable or in safe mode.');
+      }
+    }
+    
     // Check Windows system health before proceeding
     if (Platform.isWindows) {
       final isHealthy = await WindowsStabilityService.isSystemHealthy();
@@ -587,14 +672,58 @@ class AIService {
       }
       // Long prompts keep the passed maxTokens value
     }
+    
+    // CRITICAL: Validate state before proceeding
     if (_currentModelPath == null) {
+      debugPrint('❌ No model loaded - aborting');
       throw Exception('No model loaded');
     }
     if (_isGenerating) {
+      debugPrint('❌ Generation already in progress - aborting');
       throw Exception('Generation already in progress');
     }
 
+    // WINDOWS SAFETY: Comprehensive pre-flight validation
+    if (Platform.isWindows) {
+      debugPrint('🔒 Windows safety checks...');
+      
+      // 1. Validate model file exists and is readable
+      try {
+        final modelFile = File(_currentModelPath!);
+        if (!await modelFile.exists()) {
+          debugPrint('❌ Model file does not exist: $_currentModelPath');
+          throw Exception('Model file not found - please reload the model');
+        }
+        
+        final fileSize = await modelFile.length();
+        debugPrint('📁 Model file size: ${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB');
+        
+        if (fileSize < 1024 * 1024) { // Less than 1MB
+          debugPrint('❌ Model file too small - possibly corrupted');
+          throw Exception('Model file appears corrupted - please redownload');
+        }
+      } catch (e) {
+        debugPrint('❌ Model file validation failed: $e');
+        throw Exception('Model file validation failed: $e');
+      }
+      
+      // 2. Validate parameters are within safe ranges
+      if (maxTokens > 1000) {
+        debugPrint('⚠️ Reducing maxTokens from $maxTokens to 1000 for Windows safety');
+        maxTokens = 1000;
+      }
+      
+      // 3. Validate prompt length
+      if (prompt.length > 10000) {
+        debugPrint('⚠️ Truncating long prompt for Windows safety');
+        prompt = prompt.substring(0, 10000);
+      }
+      
+      debugPrint('✅ Windows safety checks passed');
+    }
+
     _isGenerating = true;
+    debugPrint('🔄 Setting generation flag to true');
 
     try {
       final messages = <Message>[];
@@ -605,10 +734,14 @@ class AIService {
       final contextSize = _getContextSize();
       
       debugPrint('🖥️ GPU Layers: $gpuLayers, Context: $contextSize, RAM: ${_deviceRAMGB}GB');
+      debugPrint('🎯 MaxTokens: $maxTokens, Prompt length: ${prompt.length}');
       
       // Reasonable parameters for Windows (not overly conservative)
       final temperature = Platform.isWindows ? 0.4 : 0.5; // Was 0.3, now less restrictive
       final topP = Platform.isWindows ? 0.8 : 0.8;
+      
+      debugPrint('⚙️ Temperature: $temperature, TopP: $topP');
+      debugPrint('📂 Model path: $_currentModelPath');
       
       final request = OpenAiRequest(
         maxTokens: maxTokens,
@@ -622,20 +755,37 @@ class AIService {
         presencePenalty: 0.6,          
       );
 
+      debugPrint('📝 OpenAiRequest created successfully');
+      
       String fullResponse = '';
       final completer = Completer<String>();
 
-      // FIXED: Proper timeout handling for Windows to prevent race conditions and crashes
+      // ENHANCED WINDOWS PROTECTION: Multiple safety layers
       if (Platform.isWindows) {
+        debugPrint('🛡️ Starting Windows-protected fllama call...');
+        
         try {
-          // Use Future.timeout instead of Future.any to prevent race conditions
+          // Pre-call validation
+          debugPrint('🔍 Final pre-call validation...');
+          if (_currentModelPath == null || _currentModelPath!.isEmpty) {
+            throw Exception('Model path became null before fllama call');
+          }
+          
+          // CRITICAL: Wrap fllama call in additional safety with crash detection
+          debugPrint('🚀 Calling fllamaChat with timeout protection...');
+          
+          final callStart = DateTime.now();
+          
           await fllamaChat(request, (response, openaiResponseJsonString, done) {
             try {
+              debugPrint('📨 fllama callback - Response length: ${response.length}, Done: $done');
               fullResponse = response;
               if (done && !completer.isCompleted) {
+                debugPrint('✅ fllama generation completed successfully');
                 completer.complete(fullResponse);
               }
             } catch (e) {
+              debugPrint('❌ Error in fllama callback: $e');
               if (!completer.isCompleted) {
                 completer.completeError(e);
               }
@@ -643,6 +793,22 @@ class AIService {
           }).timeout(
             Duration(seconds: 45), // Increased from 30 for better reliability
             onTimeout: () {
+              final duration = DateTime.now().difference(callStart);
+              debugPrint('⏰ fllama call timed out after ${duration.inSeconds} seconds');
+              
+              // Record native crash with timeout details
+              WindowsStabilityService.recordNativeCrash(
+                operation: 'fllamaChat_timeout',
+                modelPath: _currentModelPath,
+                errorDetails: 'Timeout after ${duration.inSeconds} seconds',
+                parameters: {
+                  'maxTokens': maxTokens,
+                  'promptLength': prompt.length,
+                  'gpuLayers': gpuLayers,
+                  'contextSize': contextSize,
+                },
+              );
+              
               if (!completer.isCompleted) {
                 completer.completeError(Exception('AI generation timeout - took longer than expected'));
               }
@@ -650,23 +816,48 @@ class AIService {
             },
           );
           
+          debugPrint('🏁 fllamaChat call completed, waiting for result...');
+          
           // Wait for the completer if not already completed
           if (!completer.isCompleted) {
+            debugPrint('⏳ Waiting for completer...');
             await completer.future;
           }
           
         } catch (e) {
+          debugPrint('💥 Exception during fllama call: $e');
+          debugPrint('🔍 Exception type: ${e.runtimeType}');
+          
+          // Record detailed native crash information
+          await WindowsStabilityService.recordNativeCrash(
+            operation: 'fllamaChat_exception',
+            modelPath: _currentModelPath,
+            errorDetails: e.toString(),
+            parameters: {
+              'maxTokens': maxTokens,
+              'promptLength': prompt.length,
+              'gpuLayers': gpuLayers,
+              'contextSize': contextSize,
+              'temperature': temperature,
+              'topP': topP,
+            },
+          );
+          
           // Handle timeout and other errors gracefully
           if (e is TimeoutException) {
             throw Exception('AI generation timed out. Try again with a shorter prompt or restart the app.');
           } else {
-            rethrow;
+            throw Exception('Windows AI native call failed: ${e.toString()}. Check model compatibility.');
           }
         }
         
-        fullResponse = completer.isCompleted ? await completer.future : fullResponse;
+        if (completer.isCompleted) {
+          fullResponse = await completer.future;
+          debugPrint('✅ Got final response: ${fullResponse.length} characters');
+        }
         
       } else {
+        debugPrint('🖥️ Using standard non-Windows fllama call...');
         // Non-Windows platforms use the original simple approach
         await fllamaChat(request, (response, openaiResponseJsonString, done) {
           fullResponse = response;
@@ -684,31 +875,53 @@ class AIService {
       // Mark successful operation for Windows stability tracking
       if (Platform.isWindows) {
         await WindowsStabilityService.markSuccessfulOperation();
+        debugPrint('✅ Marked successful Windows operation');
       }
       
       // Ensure we have a valid response
       if (fullResponse.trim().isEmpty) {
+        debugPrint('❌ AI returned empty response');
         throw Exception('AI returned empty response. Try rephrasing your question.');
       }
       
+      debugPrint('🎉 AI generation completed successfully: ${fullResponse.length} characters');
       return fullResponse;
+      
     } catch (e) {
-      debugPrint('❌ Generation failed: $e');
+      debugPrint('💥 Generation failed with exception: $e');
+      debugPrint('🔍 Exception type: ${e.runtimeType}');
+      debugPrint('📍 Stack trace: ${StackTrace.current}');
       
       // Record crash for Windows stability tracking
       if (Platform.isWindows) {
         await WindowsStabilityService.recordCrash();
+        debugPrint('📊 Recorded Windows crash in stability service');
+        
+        // Also record as native crash if it seems to be from fllama
+        if (e.toString().contains('fllama') || e.toString().contains('model') || 
+            e.toString().contains('generation') || e.toString().contains('native')) {
+          await WindowsStabilityService.recordNativeCrash(
+            operation: 'generateText_general_failure',
+            modelPath: _currentModelPath,
+            errorDetails: e.toString(),
+            parameters: {
+              'maxTokens': maxTokens,
+              'promptLength': prompt.length,
+              'currentModelId': _currentModelId,
+            },
+          );
+        }
       }
       
       // If generation fails, the model might be corrupted or incompatible
       if (_currentModelId != null) {
         debugPrint('⚠️ Marking model $_currentModelId as error due to generation failure');
-              _modelStatuses[_currentModelId!] = ModelStatus.error;
-      _currentModelPath = null;
-      _currentModelId = null;
-      
-      // Clear persisted model ID on error
-      await _clearLoadedModelId();
+        _modelStatuses[_currentModelId!] = ModelStatus.error;
+        _currentModelPath = null;
+        _currentModelId = null;
+        
+        // Clear persisted model ID on error
+        await _clearLoadedModelId();
       }
       
       String errorMessage = 'AI generation failed: ${e.toString()}.';
@@ -721,6 +934,7 @@ class AIService {
       throw Exception(errorMessage);
     } finally {
       _isGenerating = false;
+      debugPrint('🔄 Cleared generation flag');
     }
   }
 
@@ -779,5 +993,77 @@ class AIService {
 
   void dispose() {
     _downloadProgressController.close();
+  }
+
+  /// DEBUGGING: Test AI system safely with minimal risk
+  Future<void> debugTestAISystem() async {
+    debugPrint('🧪 DEBUGGING AI SYSTEM TEST');
+    
+    try {
+      // 1. Print system status
+      await WindowsStabilityService.printDiagnostics();
+      
+      // 2. Check model status
+      debugPrint('📊 Model Status:');
+      debugPrint('   Current model: $_currentModelId');
+      debugPrint('   Model path: $_currentModelPath');
+      debugPrint('   Is generating: $_isGenerating');
+      debugPrint('   Is model loaded: $isModelLoaded');
+      
+      // 3. Check model file if available
+      if (_currentModelPath != null) {
+        final modelFile = File(_currentModelPath!);
+        if (await modelFile.exists()) {
+          final fileSize = await modelFile.length();
+          debugPrint('   Model file size: ${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB');
+        } else {
+          debugPrint('   ❌ Model file not found!');
+        }
+      }
+      
+      // 4. System capabilities
+      debugPrint('🖥️ System Info:');
+      debugPrint('   Platform: ${Platform.operatingSystem}');
+      debugPrint('   Device RAM: ${_deviceRAMGB}GB');
+      debugPrint('   GPU Layers: ${_getOptimalGpuLayers()}');
+      debugPrint('   Context Size: ${_getContextSize()}');
+      
+      // 5. Windows-specific checks
+      if (Platform.isWindows) {
+        debugPrint('🪟 Windows Checks:');
+        final healthy = await WindowsStabilityService.isSystemHealthy();
+        debugPrint('   System healthy: $healthy');
+        
+        final safeMode = await WindowsStabilityService.shouldRunInSafeMode();
+        debugPrint('   Safe mode: $safeMode');
+        
+        if (_currentModelPath != null) {
+          final safetyCheck = await WindowsStabilityService.preOperationSafetyCheck(
+            operation: 'debug_test',
+            modelPath: _currentModelPath,
+          );
+          debugPrint('   Safety check: $safetyCheck');
+        }
+      }
+      
+      // 6. Test with minimal parameters if model is loaded
+      if (isModelLoaded && Platform.isWindows) {
+        debugPrint('🧪 Attempting safe test generation...');
+        try {
+          final testResponse = await generateText(
+            'Hi', 
+            maxTokens: 10,  // Very small test
+          );
+          debugPrint('✅ Test generation successful: "${testResponse.substring(0, min(50, testResponse.length))}..."');
+        } catch (e) {
+          debugPrint('❌ Test generation failed: $e');
+        }
+      }
+      
+      debugPrint('🏁 AI system debug test completed');
+      
+    } catch (e) {
+      debugPrint('💥 Debug test failed: $e');
+    }
   }
 } 

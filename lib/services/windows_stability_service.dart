@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class WindowsStabilityService {
   static const String _crashCountKey = 'windows_crash_count';
   static const String _lastCrashTimeKey = 'windows_last_crash_time';
+  static const String _nativeCrashCountKey = 'windows_native_crash_count';
+  static const String _lastNativeCrashKey = 'windows_last_native_crash';
+  static const String _crashDetailsKey = 'windows_crash_details';
   static const int _maxCrashesBeforeSafeMode = 3;
   static const int _crashResetHours = 24;
 
@@ -16,6 +19,7 @@ class WindowsStabilityService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final crashCount = prefs.getInt(_crashCountKey) ?? 0;
+      final nativeCrashCount = prefs.getInt(_nativeCrashCountKey) ?? 0;
       final lastCrashTime = prefs.getString(_lastCrashTimeKey);
       
       if (lastCrashTime != null) {
@@ -29,7 +33,8 @@ class WindowsStabilityService {
         }
         
         // Enable safe mode if we've had too many recent crashes
-        return crashCount >= _maxCrashesBeforeSafeMode;
+        final totalCrashes = crashCount + (nativeCrashCount * 2); // Weight native crashes more
+        return totalCrashes >= _maxCrashesBeforeSafeMode;
       }
       
       return false;
@@ -60,12 +65,193 @@ class WindowsStabilityService {
     }
   }
 
+  /// Record a native library crash with details
+  static Future<void> recordNativeCrash({
+    required String operation,
+    String? modelPath,
+    String? errorDetails,
+    Map<String, dynamic>? parameters,
+  }) async {
+    if (!Platform.isWindows) return;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final nativeCrashCount = (prefs.getInt(_nativeCrashCountKey) ?? 0) + 1;
+      
+      // Store crash details
+      final crashDetails = {
+        'timestamp': DateTime.now().toIso8601String(),
+        'operation': operation,
+        'modelPath': modelPath,
+        'errorDetails': errorDetails,
+        'parameters': parameters,
+        'crashCount': nativeCrashCount,
+      };
+      
+      await prefs.setInt(_nativeCrashCountKey, nativeCrashCount);
+      await prefs.setString(_lastNativeCrashKey, DateTime.now().toIso8601String());
+      await prefs.setString(_crashDetailsKey, crashDetails.toString());
+      
+      debugPrint('💥 Native crash recorded:');
+      debugPrint('   Operation: $operation');
+      debugPrint('   Model: $modelPath');
+      debugPrint('   Details: $errorDetails');
+      debugPrint('   Count: $nativeCrashCount');
+      
+      // Also record a regular crash
+      await recordCrash();
+      
+    } catch (e) {
+      debugPrint('⚠️ Error recording native crash: $e');
+    }
+  }
+
+  /// Get diagnostic information for troubleshooting
+  static Future<Map<String, dynamic>> getDiagnosticInfo() async {
+    if (!Platform.isWindows) return {};
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      return {
+        'totalCrashes': prefs.getInt(_crashCountKey) ?? 0,
+        'nativeCrashes': prefs.getInt(_nativeCrashCountKey) ?? 0,
+        'lastCrash': prefs.getString(_lastCrashTimeKey),
+        'lastNativeCrash': prefs.getString(_lastNativeCrashKey),
+        'inSafeMode': await shouldRunInSafeMode(),
+        'crashDetails': prefs.getString(_crashDetailsKey),
+        'systemInfo': await _getSystemInfo(),
+      };
+    } catch (e) {
+      debugPrint('⚠️ Error getting diagnostic info: $e');
+      return {'error': e.toString()};
+    }
+  }
+
+  /// Print comprehensive diagnostic information
+  static Future<void> printDiagnostics() async {
+    if (!Platform.isWindows) return;
+    
+    final info = await getDiagnosticInfo();
+    
+    debugPrint('🔍 WINDOWS DIAGNOSTIC REPORT:');
+    debugPrint('   Total crashes: ${info['totalCrashes']}');
+    debugPrint('   Native crashes: ${info['nativeCrashes']}');
+    debugPrint('   Safe mode: ${info['inSafeMode']}');
+    debugPrint('   Last crash: ${info['lastCrash']}');
+    debugPrint('   Last native crash: ${info['lastNativeCrash']}');
+    debugPrint('   System info: ${info['systemInfo']}');
+    debugPrint('   Recent crash details: ${info['crashDetails']}');
+  }
+
+  /// Get basic system information
+  static Future<Map<String, dynamic>> _getSystemInfo() async {
+    try {
+      // Get available memory
+      final memResult = await Process.run(
+        'wmic', 
+        ['OS', 'get', 'TotalAvailableMemoryBytes', '/value'],
+        runInShell: true,
+      );
+      
+      // Get CPU info
+      final cpuResult = await Process.run(
+        'wmic', 
+        ['cpu', 'get', 'name', '/value'],
+        runInShell: true,
+      );
+      
+      return {
+        'memoryOutput': memResult.stdout.toString(),
+        'cpuOutput': cpuResult.stdout.toString(),
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  /// Pre-operation safety check with detailed logging
+  static Future<bool> preOperationSafetyCheck({
+    required String operation,
+    String? modelPath,
+    Map<String, dynamic>? parameters,
+  }) async {
+    if (!Platform.isWindows) return true;
+    
+    debugPrint('🛡️ Pre-operation safety check for: $operation');
+    
+    try {
+      // 1. Check if in safe mode
+      final inSafeMode = await shouldRunInSafeMode();
+      if (inSafeMode) {
+        debugPrint('⚠️ SAFE MODE: Operation $operation restricted');
+        return false;
+      }
+      
+      // 2. Check system health
+      final healthy = await isSystemHealthy();
+      if (!healthy) {
+        debugPrint('⚠️ SYSTEM UNHEALTHY: Operation $operation restricted');
+        return false;
+      }
+      
+      // 3. Check if model file is accessible (if provided)
+      if (modelPath != null) {
+        final modelFile = File(modelPath);
+        if (!await modelFile.exists()) {
+          debugPrint('❌ Model file not accessible: $modelPath');
+          return false;
+        }
+      }
+      
+      // 4. Log operation attempt
+      debugPrint('✅ Safety check passed for: $operation');
+      await _logOperationAttempt(operation, parameters);
+      
+      return true;
+      
+    } catch (e) {
+      debugPrint('❌ Safety check failed: $e');
+      return false;
+    }
+  }
+
+  /// Log operation attempt for debugging
+  static Future<void> _logOperationAttempt(String operation, Map<String, dynamic>? parameters) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final attempts = prefs.getStringList('operation_attempts') ?? [];
+      
+      final logEntry = {
+        'timestamp': DateTime.now().toIso8601String(),
+        'operation': operation,
+        'parameters': parameters?.toString() ?? 'none',
+      }.toString();
+      
+      attempts.add(logEntry);
+      
+      // Keep only last 10 attempts
+      if (attempts.length > 10) {
+        attempts.removeRange(0, attempts.length - 10);
+      }
+      
+      await prefs.setStringList('operation_attempts', attempts);
+      
+    } catch (e) {
+      debugPrint('⚠️ Failed to log operation attempt: $e');
+    }
+  }
+
   /// Reset crash count (called after successful stable operation)
   static Future<void> _resetCrashCount() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_crashCountKey);
       await prefs.remove(_lastCrashTimeKey);
+      await prefs.remove(_nativeCrashCountKey);
+      await prefs.remove(_lastNativeCrashKey);
+      await prefs.remove(_crashDetailsKey);
       debugPrint('✅ Windows crash count reset');
     } catch (e) {
       debugPrint('⚠️ Error resetting Windows crash count: $e');
@@ -105,6 +291,8 @@ class WindowsStabilityService {
           final availableBytes = int.parse(memoryMatch.group(1)!);
           final availableGB = availableBytes / (1024 * 1024 * 1024);
           
+          debugPrint('💾 Available memory: ${availableGB.toStringAsFixed(1)}GB');
+          
           // Require at least 2GB available memory
           if (availableGB < 2.0) {
             debugPrint('⚠️ Windows: Low memory detected: ${availableGB.toStringAsFixed(1)}GB');
@@ -126,6 +314,9 @@ class WindowsStabilityService {
     
     debugPrint('🔧 Initializing Windows stability service...');
     
+    // Print diagnostics on startup
+    await printDiagnostics();
+    
     final inSafeMode = await shouldRunInSafeMode();
     if (inSafeMode) {
       debugPrint('⚠️ Windows running in SAFE MODE due to recent crashes');
@@ -136,6 +327,8 @@ class WindowsStabilityService {
     if (!healthy) {
       debugPrint('⚠️ Windows system health check failed');
     }
+    
+    debugPrint('✅ Windows stability service initialized');
   }
 
   /// Handle Windows-specific error scenarios
@@ -152,6 +345,8 @@ class WindowsStabilityService {
       return 'Windows Timeout: The AI took too long. The app will use faster settings automatically.';
     } else if (error.contains('already completed') || error.contains('race condition')) {
       return 'Windows Threading Issue: Restart the app - this has been fixed in the latest version.';
+    } else if (error.contains('native') || error.contains('fllama') || error.contains('model')) {
+      return 'Windows Native Library Issue: The AI model encountered a problem. Try reloading the model or restart the app.';
     } else {
       return 'Windows Error: Restart the application. If problems persist, the app will automatically enter safe mode.';
     }
