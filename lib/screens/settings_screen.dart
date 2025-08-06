@@ -1040,13 +1040,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   // Storage info
                   _buildStorageInfo(aiProvider),
                   
-                  // Ollama setup and test for Windows
-                  if (Platform.isWindows) ...[
-                    SizedBox(height: 24),
-                    _buildOllamaSetupSection(),
-                    SizedBox(height: 16),
-                    OllamaTestWidget(),
-                  ],
+                          // Ollama setup and test for Windows and Mac
+        if (Platform.isWindows || Platform.isMacOS) ...[
+          SizedBox(height: 24),
+          _buildOllamaSetupSection(),
+          SizedBox(height: 16),
+          OllamaTestWidget(),
+        ],
                 ],
               ),
             ),
@@ -2778,14 +2778,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           SizedBox(height: 12),
-          Text(
-            'For Windows AI features, install Ollama - a separate AI engine that prevents crashes.',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppTheme.mediumGray,
-              height: 1.4,
-            ),
-          ),
+                         Text(
+                 Platform.isWindows 
+                   ? 'For Windows AI features, install Ollama - a separate AI engine that prevents crashes.'
+                   : 'Install Ollama for faster, more stable AI with native Apple Silicon support.',
+                 style: TextStyle(
+                   fontSize: 14,
+                   color: AppTheme.mediumGray,
+                   height: 1.4,
+                 ),
+               ),
           SizedBox(height: 16),
           Row(
             children: [
@@ -2888,17 +2890,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: AppTheme.lightGray,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '✅ Benefits:',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.warmBrown),
-                      ),
-                      SizedBox(height: 4),
-                      Text('• No more Windows crashes\n• Faster AI responses\n• Works offline\n• Easy to update'),
-                    ],
-                  ),
+                                         child: Column(
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: [
+                           Text(
+                             '✅ Benefits:',
+                             style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.warmBrown),
+                           ),
+                           SizedBox(height: 4),
+                           Text(Platform.isWindows 
+                             ? '• No more Windows crashes\n• Faster AI responses\n• Works offline\n• Easy to update'
+                             : '• Native Apple Silicon support\n• Faster than fllama\n• Works offline\n• Easy to update'),
+                         ],
+                       ),
                 ),
               ],
             ),
