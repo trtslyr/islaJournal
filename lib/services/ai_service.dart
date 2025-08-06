@@ -1,10 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:fllama/fllama.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
-import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'windows_stability_service.dart';
@@ -62,7 +59,6 @@ class AIService {
   // Model state
   final Map<String, ModelStatus> _modelStatuses = {};
   String? _currentModelId;
-  String? _currentModelPath;
   bool _isGenerating = false;
   
   // Ollama service for Windows
@@ -76,60 +72,46 @@ class AIService {
   String? _deviceType;
   int _deviceRAMGB = 8; // Default conservative estimate
   
-  // Simplified model catalog - better distribution for all RAM levels
+  // Ollama model catalog - no downloads needed, managed by Ollama
   static const Map<String, DeviceOptimizedModel> _availableModels = {
     // Basic models for low RAM
-    'llama3.2-1b-q4_0': DeviceOptimizedModel(
-      id: 'llama3.2-1b-q4_0',
-      name: 'Basic 1B',
+    'llama3.2:1b': DeviceOptimizedModel(
+      id: 'llama3.2:1b',
+      name: 'Llama 3.2 1B',
       description: 'Very fast, basic intelligence. For 4GB RAM or less.',
       quantization: 'Q4_0',
-      downloadUrl: 'https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_0.gguf',
+      downloadUrl: '', // Managed by Ollama
       sizeGB: 1,
       minRAMGB: 2,
-      optimizedFor: ['4GB RAM or less', 'Very old systems', 'Testing'],
+      optimizedFor: ['4GB RAM or less', 'Basic tasks'],
       isRecommended: true,
       qualityScore: 6.5,
     ),
     
     // Universal compatibility for 8GB systems
-    'llama3.2-3b-q4_0': DeviceOptimizedModel(
-      id: 'llama3.2-3b-q4_0',
-      name: 'Compatible 3B',
-      description: 'Works on any system. Best for old Apple/PC with 8GB RAM.',
+    'llama3.2:3b': DeviceOptimizedModel(
+      id: 'llama3.2:3b',
+      name: 'Llama 3.2 3B',
+      description: 'Works on any system. Best for most users.',
       quantization: 'Q4_0',
-      downloadUrl: 'https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_0.gguf',
+      downloadUrl: '', // Managed by Ollama
       sizeGB: 2,
       minRAMGB: 4,
-      optimizedFor: ['8GB RAM', 'Old Apple (Intel)', 'Old Windows/PC'],
+      optimizedFor: ['8GB RAM', 'General use'],
       isRecommended: true,
       qualityScore: 7.5,
     ),
     
-    // Modern systems with 16GB
-    'llama3.2-3b-q4_k_m': DeviceOptimizedModel(
-      id: 'llama3.2-3b-q4_k_m',
-      name: 'Modern 3B',
-      description: 'Best quality for 16GB RAM. New Apple Silicon and modern PCs.',
+    // High-end systems
+    'llama3:8b': DeviceOptimizedModel(
+      id: 'llama3:8b',
+      name: 'Llama 3 8B',
+      description: 'Highest intelligence. For 16GB+ RAM systems.',
       quantization: 'Q4_K_M',
-      downloadUrl: 'https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
-      sizeGB: 2,
-      minRAMGB: 6,
-      optimizedFor: ['16GB RAM', 'New Apple (M1/M2/M3/M4)', 'Modern PC'],
-      isRecommended: true,
-      qualityScore: 8.5,
-    ),
-    
-    // High-end systems with 32GB+
-    'llama3-8b-q4_k_m': DeviceOptimizedModel(
-      id: 'llama3-8b-q4_k_m',
-      name: 'Premium 8B',
-      description: 'Highest intelligence. For 32GB+ RAM systems only.',
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://huggingface.co/QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct.Q4_K_M.gguf',
+      downloadUrl: '', // Managed by Ollama
       sizeGB: 5,
       minRAMGB: 12,
-      optimizedFor: ['32GB+ RAM', 'Apple Pro/Max/Ultra', 'High-end PC'],
+      optimizedFor: ['16GB+ RAM', 'Complex tasks'],
       qualityScore: 9.0,
     ),
   };
@@ -356,61 +338,13 @@ class AIService {
     _modelStatuses[modelId] = ModelStatus.downloading;
 
     try {
-      final modelsDir = await _getModelsDirectory();
-      // Use proper path joining for Windows compatibility
-      final modelPath = Platform.isWindows 
-          ? path.join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
-          : '${modelsDir.path}/$modelId.gguf';
-      final modelFile = File(modelPath);
+      debugPrint('📥 Downloading ${model.name} via Ollama...');
       
-      debugPrint('📥 Downloading ${model.name} (${model.sizeGB}GB, ${model.quantization})...');
+      // Use ollama to pull the model
+      await _ollamaService.pullModel(modelId);
       
-      final request = http.Request('GET', Uri.parse(model.downloadUrl));
-      final response = await request.send();
-      
-      if (response.statusCode != 200) {
-        throw Exception('Download failed: HTTP ${response.statusCode}');
-      }
-      
-      final totalBytes = response.contentLength ?? 0;
-      int downloadedBytes = 0;
-      final startTime = DateTime.now();
-      
-      final sink = modelFile.openWrite();
-      
-      await response.stream.listen(
-        (chunk) {
-          sink.add(chunk);
-          downloadedBytes += chunk.length;
-          
-          final elapsed = DateTime.now().difference(startTime).inMilliseconds;
-          final speed = elapsed > 0 ? (downloadedBytes / 1024 / 1024) / (elapsed / 1000) : 0.0;
-          final remaining = speed > 0 ? ((totalBytes - downloadedBytes) / 1024 / 1024 / speed).round() : 0;
-          
-          _downloadProgressController.add(DownloadProgress(
-            downloaded: downloadedBytes,
-            total: totalBytes,
-            speed: speed,
-            remainingTime: remaining,
-          ));
-        },
-        onDone: () async {
-          await sink.close();
-          _modelStatuses[modelId] = ModelStatus.downloaded;
-          debugPrint('✅ Downloaded ${model.name} successfully');
-          
-          // Ensure status is updated before method returns
-          await Future.delayed(Duration(milliseconds: 100));
-        },
-        onError: (error) async {
-          await sink.close();
-          if (await modelFile.exists()) {
-            await modelFile.delete();
-          }
-          _modelStatuses[modelId] = ModelStatus.error;
-          throw error;
-        },
-      ).asFuture();
+      _modelStatuses[modelId] = ModelStatus.downloaded;
+      debugPrint('✅ Downloaded ${model.name} successfully via Ollama');
 
     } catch (e) {
       _modelStatuses[modelId] = ModelStatus.error;
@@ -420,38 +354,10 @@ class AIService {
   }
 
   Future<void> loadModel(String modelId) async {
-    if (_modelStatuses[modelId] != ModelStatus.downloaded) {
-      throw Exception('Model not downloaded: $modelId');
-    }
-
     try {
-      // Unload current model if any
-      if (_currentModelPath != null) {
-        await unloadModel();
-      }
-
-      final modelsDir = await _getModelsDirectory();
-      // Use proper path joining for Windows compatibility
-      final modelPath = Platform.isWindows 
-          ? path.join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
-          : '${modelsDir.path}/$modelId.gguf';
+      // Use ollama to set the current model
+      await _ollamaService.setModel(modelId);
       
-      debugPrint('🔄 Loading model: $modelId');
-
-      // Simply verify the model file exists and set it as loaded
-      // The actual loading will be validated when first used for generation
-      final modelFile = File(modelPath);
-      if (!await modelFile.exists()) {
-        throw Exception('Model file not found: $modelPath');
-      }
-      
-      // Verify file is not corrupted by checking it's a reasonable size
-      final fileSize = await modelFile.length();
-      if (fileSize < 1024 * 1024) { // Less than 1MB is definitely not a valid model
-        throw Exception('Model file appears corrupted (too small): $fileSize bytes');
-      }
-
-      _currentModelPath = modelPath;
       _currentModelId = modelId;
       _modelStatuses[modelId] = ModelStatus.loaded;
       
@@ -459,60 +365,17 @@ class AIService {
       await _saveLoadedModelId(modelId);
       
       final model = _availableModels[modelId]!;
-      debugPrint('✅ Successfully loaded ${model.name} (${model.quantization}) - ${(fileSize / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB');
+      debugPrint('✅ Successfully loaded ${model.name} via Ollama');
       
     } catch (e) {
       _modelStatuses[modelId] = ModelStatus.error;
-      _currentModelPath = null;
       _currentModelId = null;
       debugPrint('❌ Failed to load model $modelId: $e');
       rethrow;
     }
   }
 
-  int _getContextSize() {
-    // Reasonable context sizes for Windows (slightly more conservative than other platforms)
-    if (Platform.isWindows) {
-      if (_deviceRAMGB >= 32) return 3072; // Was 1536, now reasonable for high-end Windows
-      if (_deviceRAMGB >= 16) return 2048; // Was 1024, now decent for mid-range Windows  
-      if (_deviceRAMGB >= 8) return 1536;  // Was 768, now usable for 8GB Windows
-      return 1024;  // Was 512, now minimum viable for low-end Windows
-    }
-    
-    // Normal sizes for other platforms
-    if (_deviceRAMGB >= 32) return 4096;
-    if (_deviceRAMGB >= 16) return 3072;
-    if (_deviceRAMGB >= 8) return 2048;
-    return 1536;  // Minimum viable context size
-  }
 
-  int _getOptimalGpuLayers() {
-    // Conservative GPU layer configuration to ensure stability
-    if (Platform.isIOS) {
-      // iPhone/iPad - be more conservative initially
-      if (_deviceRAMGB >= 16) return 25;  // Moderate GPU layers for high-end
-      if (_deviceRAMGB >= 8) return 15;   // Some GPU layers for mid-range
-      return 5;  // Minimal GPU for lower-end
-    } else if (Platform.isAndroid) {
-      // Android devices - similar conservative approach
-      if (_deviceRAMGB >= 16) return 20;  // Moderate GPU layers
-      if (_deviceRAMGB >= 8) return 10;   // Some GPU layers
-      return 3;  // Minimal GPU
-    } else if (Platform.isMacOS) {
-      // Mac - can handle more GPU layers
-      return _deviceRAMGB >= 16 ? 35 : 25;
-    } else if (Platform.isWindows) {
-      // Windows - more conservative but not completely disabled
-      if (_deviceRAMGB >= 32) return 15;  // Some GPU for high-end Windows
-      if (_deviceRAMGB >= 16) return 10;  // Moderate GPU for mid-range Windows
-      if (_deviceRAMGB >= 8) return 5;    // Light GPU for 8GB Windows
-      return 0;  // CPU-only for low-end Windows (4GB or less)
-    } else if (Platform.isLinux) {
-      // Linux - moderate approach
-      return _deviceRAMGB >= 16 ? 15 : 10;
-    }
-    return 5;  // Safe fallback
-  }
 
   /// Save the currently loaded model ID to SharedPreferences
   Future<void> _saveLoadedModelId(String modelId) async {
@@ -562,17 +425,14 @@ class AIService {
   }
 
   Future<void> unloadModel() async {
-    if (_currentModelPath != null) {
-      debugPrint('🔄 Model unloaded');
-    }
-    
-    if (_currentModelId != null && _modelStatuses[_currentModelId] == ModelStatus.loaded) {
+    if (_currentModelId != null) {
       _modelStatuses[_currentModelId!] = ModelStatus.downloaded;
       _currentModelId = null;
-      _currentModelPath = null;
       
       // Clear the persisted loaded model ID
       await _clearLoadedModelId();
+      
+      debugPrint('🔄 Model unloaded');
     }
   }
 
@@ -621,53 +481,8 @@ class AIService {
         // Long prompts keep the passed maxTokens value
       }
       
-      if (_currentModelPath == null) {
-        throw Exception('No model loaded');
-      }
-
-      final messages = <Message>[];
-      messages.add(Message(Role.system, 'You are a helpful AI assistant. Answer questions directly and concisely.'));
-      messages.add(Message(Role.user, prompt));
-
-      final gpuLayers = _getOptimalGpuLayers();
-      final contextSize = _getContextSize();
-      
-      debugPrint('🖥️ GPU Layers: $gpuLayers, Context: $contextSize, RAM: ${_deviceRAMGB}GB');
-      
-      // Reasonable parameters for Windows (not overly conservative)
-      final temperature = Platform.isWindows ? 0.4 : 0.5; // Was 0.3, now less restrictive
-      final topP = Platform.isWindows ? 0.8 : 0.8;
-      
-      final request = OpenAiRequest(
-        maxTokens: maxTokens,
-        messages: messages,
-        numGpuLayers: gpuLayers,
-        modelPath: _currentModelPath!,
-        temperature: temperature,        // More conservative for Windows
-        topP: topP,                     
-        contextSize: contextSize,
-        frequencyPenalty: 0.1,         
-        presencePenalty: 0.6,          
-      );
-
-      String fullResponse = '';
-      final completer = Completer<String>();
-      String result = ''; // Declare result variable before if/else block
-
-      // WINDOWS FIX: Safer inference with proper isolation
-      if (Platform.isWindows) {
-        // Use isolate for Windows to prevent main thread crashes
-        result = await _runInferenceInIsolate(request);
-      } else {
-        // Original logic for Mac/Linux
-        await fllamaChat(request, (response, openaiResponseJsonString, done) {
-          fullResponse = response;
-          if (done) {
-            completer.complete(fullResponse);
-          }
-        });
-        result = await completer.future;
-      }
+      // Use ollama for all platforms (no more fllama crashes)
+      final result = await _ollamaService.generateText(prompt, maxTokens: maxTokens);
 
       // Mark successful operation for Windows stability tracking
       if (Platform.isWindows) {
@@ -709,78 +524,22 @@ class AIService {
 
   Future<void> deleteModel(String modelId) async {
     try {
-      if (_currentModelId == modelId && _currentModelPath != null) {
-      await unloadModel();
-    }
+      if (_currentModelId == modelId) {
+        await unloadModel();
+      }
 
-    final modelsDir = await _getModelsDirectory();
-      // Use proper path joining for Windows compatibility
-      final modelPath = Platform.isWindows 
-          ? path.join(modelsDir.path, '$modelId.gguf').replaceAll('/', '\\')
-          : '${modelsDir.path}/$modelId.gguf';
-      final modelFile = File(modelPath);
+      // Use ollama to delete the model
+      await _ollamaService.deleteModel(modelId);
 
-    if (await modelFile.exists()) {
-      await modelFile.delete();
-        debugPrint('🗑️ Deleted model: $modelId');
-    }
-
-    _modelStatuses[modelId] = ModelStatus.notDownloaded;
+      _modelStatuses[modelId] = ModelStatus.notDownloaded;
+      debugPrint('🗑️ Deleted model: $modelId');
     } catch (e) {
       debugPrint('❌ Failed to delete model $modelId: $e');
       rethrow;
     }
   }
 
-  // WINDOWS FIX: Run inference in isolate to prevent crashes
-  Future<String> _runInferenceInIsolate(OpenAiRequest request) async {
-    final completer = Completer<String>();
-    String fullResponse = '';
-    
-    try {
-      // Simplified Windows inference with minimal parameters
-      final safeRequest = OpenAiRequest(
-        maxTokens: request.maxTokens > 50 ? 50 : request.maxTokens, // Limit tokens
-        messages: request.messages,
-        numGpuLayers: 0, // Force CPU-only for stability
-        modelPath: request.modelPath,
-        temperature: 0.3, // Conservative temperature
-        topP: 0.8,
-        contextSize: 1024, // Smaller context
-        frequencyPenalty: 0.1,
-        presencePenalty: 0.1,
-      );
 
-      // Add timeout wrapper
-      final timeoutFuture = Future.delayed(Duration(seconds: 15), () {
-        if (!completer.isCompleted) {
-          completer.completeError(Exception('Windows inference timeout'));
-        }
-      });
-
-      // Run inference with timeout
-      final inferenceFuture = fllamaChat(safeRequest, (response, jsonString, done) {
-        try {
-          fullResponse = response;
-          if (done && !completer.isCompleted) {
-            completer.complete(fullResponse);
-          }
-        } catch (e) {
-          if (!completer.isCompleted) {
-            completer.completeError(e);
-          }
-        }
-      });
-
-      // Wait for either completion or timeout
-      await Future.any([completer.future, timeoutFuture, inferenceFuture]);
-      
-      return fullResponse.isNotEmpty ? fullResponse : 'AI response generated successfully.';
-    } catch (e) {
-      debugPrint('❌ Windows inference failed: $e');
-      throw Exception('Windows AI error: Please try again with a shorter prompt.');
-    }
-  }
 
   Future<String> getStorageUsage() async {
     try {
