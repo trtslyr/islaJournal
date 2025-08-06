@@ -57,3 +57,14 @@ backend-repo/.env
 **/private/
 **/*secret*
 **/*key*.txt
+
+# Embedded Ollama binaries (too large for git)
+assets/binaries/windows/ollama.exe
+assets/binaries/macos/ollama
+assets/binaries/linux/ollama
+assets/models/*.gguf
+assets/models/*.bin
+
+# Keep directory structure but ignore binaries
+!assets/binaries/windows/README.md
+!assets/models/README.md

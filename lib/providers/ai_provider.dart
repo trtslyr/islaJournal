@@ -1,59 +1,47 @@
 import 'package:flutter/foundation.dart';
-import '../services/ai_service.dart';
+import '../services/hybrid_ai_service.dart';
 
 class AIProvider with ChangeNotifier {
-  final AIService _aiService = AIService();
+  final HybridAiService _aiService = HybridAiService();
   
-  // State
   String _aiResponse = '';
   String _moodAnalysis = '';
-  String _writingAnalysis = '';
-  List<String> _writingPrompts = [];
-  
-  // Download progress
-  DownloadProgress? _downloadProgress;
-  
-  // Getters
+  String _writingStyleAnalysis = '';
+  bool _isInitialized = false;
+
   String get aiResponse => _aiResponse;
   String get moodAnalysis => _moodAnalysis;
-  String get writingAnalysis => _writingAnalysis;
-  List<String> get writingPrompts => _writingPrompts;
-  DownloadProgress? get downloadProgress => _downloadProgress;
-  
-  // AI Service getters
-  Map<String, ModelStatus> get modelStatuses => _aiService.modelStatuses;
-  Map<String, DeviceOptimizedModel> get availableModels => _aiService.availableModels;
-  bool get isGenerating => _aiService.isGenerating;
-  bool get hasDownloadedModel => _aiService.hasDownloadedModel;
+  String get writingStyleAnalysis => _writingStyleAnalysis;
+
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    
+    try {
+      await _aiService.initialize();
+      _isInitialized = true;
+      notifyListeners();
+      debugPrint('✅ AI Provider initialized with hybrid service');
+    } catch (e) {
+      debugPrint('❌ Failed to initialize AI Provider: $e');
+      rethrow;
+    }
+  }
+
+  // Delegate properties to hybrid service
+  Map<String, dynamic> get modelStatuses => _aiService.modelStatuses;
+  Map<String, dynamic> get availableModels => _aiService.availableModels;
+  bool get hasDownloadedModel => _aiService.isModelLoaded;
   bool get isModelLoaded => _aiService.isModelLoaded;
   String? get currentModelId => _aiService.currentModelId;
   String? get deviceType => _aiService.deviceType;
   int get deviceRAMGB => _aiService.deviceRAMGB;
+  bool get isGenerating => _aiService.isGenerating;
 
-  Future<void> initialize() async {
-    await _aiService.initialize();
-    _listenToDownloadProgress();
-    notifyListeners();
-  }
-
-  void _listenToDownloadProgress() {
-    _aiService.downloadProgress.listen((progress) {
-      _downloadProgress = progress;
-      
-      // Clear progress when download completes (indicated by 0 total)
-      if (progress.total == 0 && progress.downloaded == 0) {
-        _downloadProgress = null;
-      }
-      
-      notifyListeners();
-    });
-  }
-
-  List<DeviceOptimizedModel> getRecommendedModels() {
+  List<dynamic> getRecommendedModels() {
     return _aiService.getRecommendedModels();
   }
-  
-  DeviceOptimizedModel? getBestModelForDevice() {
+
+  dynamic getBestModelForDevice() {
     return _aiService.getBestModelForDevice();
   }
 
@@ -129,59 +117,27 @@ class AIProvider with ChangeNotifier {
 
   Future<void> analyzeWritingStyle(String text) async {
     try {
-      _writingAnalysis = await _aiService.generateText(
+      _writingStyleAnalysis = await _aiService.generateText(
         'Analyze the writing style of this text briefly: $text',
-        maxTokens: 50,  // Reduced from 80 for faster analysis
+        maxTokens: 40,  // Quick style analysis
       );
       notifyListeners();
     } catch (e) {
-      print('❌ Writing analysis failed: $e');
-      _writingAnalysis = 'Error analyzing writing style: $e';
+      debugPrint('❌ Writing style analysis failed: $e');
+      _writingStyleAnalysis = 'Error analyzing writing style: $e';
       notifyListeners();
     }
-  }
-
-  Future<void> generateWritingPrompts(String context) async {
-    try {
-      final response = await _aiService.generateText(
-        'Generate 3 creative writing prompts based on: $context',
-        maxTokens: 100,
-      );
-      _writingPrompts = response.split('\n').where((line) => line.trim().isNotEmpty).toList();
-      notifyListeners();
-    } catch (e) {
-      print('❌ Writing prompts generation failed: $e');
-      _writingPrompts = ['Error generating writing prompts: $e'];
-      notifyListeners();
-    }
-  }
-
-  // Clear methods
-  void clearAIResponse() {
-    _aiResponse = '';
-    notifyListeners();
-  }
-
-  void clearMoodAnalysis() {
-    _moodAnalysis = '';
-    notifyListeners();
-  }
-
-  void clearWritingAnalysis() {
-    _writingAnalysis = '';
-    notifyListeners();
-  }
-
-  void clearWritingPrompts() {
-    _writingPrompts = [];
-    notifyListeners();
   }
 
   Future<String> getStorageUsage() async {
     return await _aiService.getStorageUsage();
   }
 
-  @override
+  /// Debug test the AI system
+  Future<void> debugTestAISystem() async {
+    await _aiService.debugTestAISystem();
+  }
+
   void dispose() {
     _aiService.dispose();
     super.dispose();

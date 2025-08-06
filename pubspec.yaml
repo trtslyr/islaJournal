@@ -140,9 +140,12 @@ flutter:
           weight: 700
   
   # We'll add images and icons here when available
-  # assets:
-  #   - assets/images/
-  #   - assets/icons/
+  assets:
+    - assets/fonts/
+    - assets/icon/
+    # Embedded Ollama for Windows
+    - assets/binaries/windows/
+    - assets/models/
 
 flutter_launcher_icons:
   image_path: "assets/icon/LOGO.png"
