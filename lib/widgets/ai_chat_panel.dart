@@ -498,6 +498,8 @@ class _AIChatPanelState extends State<AIChatPanel> {
     _chatController.clear();
     _scrollToBottom();
 
+    String? errorMessage;
+    
     try {
       // Add user message to conversation
       await activeConversation.addUserMessage(message);
@@ -511,7 +513,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
       
       // Ensure we have a valid response
       if (response.trim().isEmpty) {
-        throw Exception('Empty response from AI service');
+        throw Exception('AI returned an empty response. Please try rephrasing your question.');
       }
       
       // Add assistant response to conversation
@@ -529,23 +531,45 @@ class _AIChatPanelState extends State<AIChatPanel> {
       }
       
       _scrollToBottom();
+      return; // Success - exit early
     
     } catch (e) {
-      // Handle error
-      if (mounted) {
-      setState(() {
-        _messages.add(ChatMessage(
-          content: 'Error: ${e.toString()}',
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-      });
+      debugPrint('🔴 AI Chat Error: $e');
+      
+      // Categorize and handle different types of errors
+      if (e.toString().contains('timeout') || e.toString().contains('timeout')) {
+        errorMessage = 'AI took too long to respond. Try again with a shorter question.';
+      } else if (e.toString().contains('memory') || e.toString().contains('insufficient')) {
+        errorMessage = 'System running low on memory. Close other apps and try again.';
+      } else if (e.toString().contains('model') || e.toString().contains('loaded')) {
+        errorMessage = 'AI model issue. Go to Settings to reload the model.';
+      } else if (e.toString().contains('Windows') || e.toString().contains('safe mode')) {
+        errorMessage = 'Windows compatibility issue. The app will adjust settings automatically.';
+      } else {
+        // Generic error with helpful suggestion
+        errorMessage = 'AI temporarily unavailable. Try again or restart the app if the problem persists.';
       }
+      
     } finally {
+      // Always clean up the processing state and show error if needed
       if (mounted) {
       setState(() {
         _isProcessingAI = false;
+        
+        // Only add error message if we have one
+        if (errorMessage != null) {
+          _messages.add(ChatMessage(
+            content: errorMessage!,
+            isUser: false,
+            timestamp: DateTime.now(),
+          ));
+        }
       });
+      }
+      
+      // Scroll to show the error message
+      if (errorMessage != null) {
+        _scrollToBottom();
       }
     }
   }

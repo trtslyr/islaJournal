@@ -140,16 +140,20 @@ class WindowsStabilityService {
 
   /// Handle Windows-specific error scenarios
   static String getWindowsErrorGuidance(String error) {
-    if (error.contains('dll')) {
-      return 'Windows DLL Error: Please install Microsoft Visual C++ Redistributable from https://aka.ms/vs/17/release/vc_redist.x64.exe';
-    } else if (error.contains('memory') || error.contains('allocation')) {
-      return 'Windows Memory Error: Close other applications and restart Isla Journal';
-    } else if (error.contains('gpu') || error.contains('driver')) {
-      return 'Windows GPU Error: Update your graphics drivers or run in CPU-only mode';
-    } else if (error.contains('permission') || error.contains('access')) {
-      return 'Windows Permission Error: Run as administrator or check antivirus settings';
+    if (error.contains('dll') || error.contains('library')) {
+      return 'Windows DLL Error: Install Microsoft Visual C++ Redistributable from https://aka.ms/vs/17/release/vc_redist.x64.exe and restart.';
+    } else if (error.contains('memory') || error.contains('allocation') || error.contains('insufficient')) {
+      return 'Windows Memory Error: Close other applications, restart Isla Journal, or use a smaller AI model.';
+    } else if (error.contains('gpu') || error.contains('driver') || error.contains('graphics')) {
+      return 'Windows GPU Error: Update your graphics drivers or the app will automatically use CPU-only mode.';
+    } else if (error.contains('permission') || error.contains('access') || error.contains('denied')) {
+      return 'Windows Permission Error: Run as administrator or check antivirus settings.';
+    } else if (error.contains('timeout') || error.contains('took too long')) {
+      return 'Windows Timeout: The AI took too long. The app will use faster settings automatically.';
+    } else if (error.contains('already completed') || error.contains('race condition')) {
+      return 'Windows Threading Issue: Restart the app - this has been fixed in the latest version.';
     } else {
-      return 'Windows Error: Restart the application. If this persists, run in safe mode';
+      return 'Windows Error: Restart the application. If problems persist, the app will automatically enter safe mode.';
     }
   }
 
