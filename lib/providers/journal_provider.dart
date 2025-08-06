@@ -16,11 +16,11 @@ class JournalProvider with ChangeNotifier {
   
   String? _selectedFolderId;
   String? _selectedFileId;
-  Set<String> _selectedFileIds = {}; // Multi-selection support
+  final Set<String> _selectedFileIds = {}; // Multi-selection support
   String? _lastSelectedFileId; // For range selection
   bool _isLoading = false;
   String _searchQuery = '';
-  Set<String> _unsavedFileIds = {};
+  final Set<String> _unsavedFileIds = {};
   FileSortOption _sortOption = const FileSortOption();
 
   // Getters
@@ -83,8 +83,6 @@ class JournalProvider with ChangeNotifier {
       await _generateMissingEmbeddings();
       
       
-    } catch (e) {
-      
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -118,8 +116,8 @@ class JournalProvider with ChangeNotifier {
           // Load the actual file content from disk
           final file = await _dbService.getFile(fileMetadata.id);
           
-          if (file?.content?.isNotEmpty == true) {
-            final embedding = await _embeddingService.generateEmbedding(file!.content!);
+          if (file?.content.isNotEmpty == true) {
+            final embedding = await _embeddingService.generateEmbedding(file!.content);
             await _dbService.storeEmbedding(file.id, embedding);
 
           } else {
@@ -218,8 +216,6 @@ class JournalProvider with ChangeNotifier {
     try {
       _files = await _dbService.getFiles(folderId: folderId);
       notifyListeners();
-    } catch (e) {
-
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -292,10 +288,10 @@ class JournalProvider with ChangeNotifier {
       _unsavedFileIds.remove(file.id); // File is now saved
       
       // Regenerate embedding for updated file
-      if (file.content?.isNotEmpty == true) {
+      if (file.content.isNotEmpty == true) {
         try {
   
-          final embedding = await _embeddingService.generateEmbedding(file.content!);
+          final embedding = await _embeddingService.generateEmbedding(file.content);
           await _dbService.storeEmbedding(file.id, embedding);
           
         } catch (e) {

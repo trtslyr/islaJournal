@@ -31,11 +31,11 @@ class ConversationMessage {
 
 class ConversationSession {
   // Private fields
-  String _id;
+  final String _id;
   String _title;
-  List<ConversationMessage> _history;
-  DateTime _createdAt;
-  DateTime _updatedAt;
+  final List<ConversationMessage> _history;
+  final DateTime _createdAt;
+  final DateTime _updatedAt;
   ContextSettings _contextSettings = ContextSettings.empty;
   final DatabaseService _dbService = DatabaseService();
 

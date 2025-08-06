@@ -964,8 +964,8 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
             ),
           ),
           child: DragTarget<JournalFile>(
-            onWillAccept: (data) => data != null && data.folderId != folder.id,
-            onAccept: (file) => _moveFileToFolder(file, folder, provider),
+            onWillAcceptWithDetails: (details) => details.data != null && details.data.folderId != folder.id,
+            onAcceptWithDetails: (details) => _moveFileToFolder(details.data, folder, provider),
             builder: (context, candidateData, rejectedData) {
               final isHighlighted = candidateData.isNotEmpty;
               
@@ -1931,8 +1931,8 @@ class _FileTreeWidgetState extends State<FileTreeWidget> {
   /// Build a drop zone for reordering files
   Widget _buildDropZone(int index, List<JournalFile> rootFiles, JournalProvider provider) {
     return DragTarget<JournalFile>(
-      onWillAccept: (data) => data != null && data.folderId == null && rootFiles.any((f) => f.id == data.id),
-      onAccept: (file) => _reorderFileInRoot(file, index, rootFiles, provider),
+      onWillAcceptWithDetails: (details) => details.data != null && details.data.folderId == null && rootFiles.any((f) => f.id == details.data.id),
+      onAcceptWithDetails: (details) => _reorderFileInRoot(details.data, index, rootFiles, provider),
       builder: (context, candidateData, rejectedData) {
         final isHighlighted = candidateData.isNotEmpty;
         

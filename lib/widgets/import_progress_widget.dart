@@ -6,9 +6,9 @@ class ImportProgressWidget extends StatelessWidget {
   final ImportProgress progress;
   
   const ImportProgressWidget({
-    Key? key,
+    super.key,
     required this.progress,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

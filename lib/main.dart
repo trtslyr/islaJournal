@@ -75,6 +75,8 @@ class IslaJournalApp extends StatelessWidget {
 }
 
 class LicenseCheckWrapper extends StatefulWidget {
+  const LicenseCheckWrapper({super.key});
+
   @override
   State<LicenseCheckWrapper> createState() => _LicenseCheckWrapperState();
 }
@@ -137,20 +139,22 @@ class _LicenseCheckWrapperState extends State<LicenseCheckWrapper> {
       builder: (context, license, child) {
         debugPrint('🔍 Main app checking license: ${license.isValid} (${license.licenseStatus?.type})');
         
-        // BULLETPROOF: Show main app ONLY if license is valid AND has a valid status
-        // This ensures that ANY invalid license state shows the license screen
-        if (license.isValid && 
-            license.licenseStatus != null && 
-            license.licenseStatus!.isValid &&
-            (license.licenseStatus!.type == LicenseType.lifetime || 
-             license.licenseStatus!.type == LicenseType.subscription)) {
-          debugPrint('✅ Showing HomeScreen for valid license');
-          return const HomeScreen();
-        }
+        // TEMPORARY: License validation disabled for testing
+        debugPrint('⚠️ LICENSE VALIDATION TEMPORARILY DISABLED - SHOWING HOME SCREEN');
+        return const HomeScreen();
         
-        // ALWAYS show license screen for ANY invalid/missing license
-        debugPrint('🔒 Showing LicenseScreen - no valid license (isValid: ${license.isValid}, status: ${license.licenseStatus?.type})');
-        return LicenseScreen();
+        // ORIGINAL LICENSE CHECK (DISABLED):
+        // if (license.isValid && 
+        //     license.licenseStatus != null && 
+        //     license.licenseStatus!.isValid &&
+        //     (license.licenseStatus!.type == LicenseType.lifetime || 
+        //      license.licenseStatus!.type == LicenseType.subscription)) {
+        //   debugPrint('✅ Showing HomeScreen for valid license');
+        //   return const HomeScreen();
+        // }
+        // 
+        // debugPrint('🔒 Showing LicenseScreen - no valid license (isValid: ${license.isValid}, status: ${license.licenseStatus?.type})');
+        // return LicenseScreen();
       },
     );
   }

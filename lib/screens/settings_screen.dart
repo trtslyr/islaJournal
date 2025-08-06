@@ -99,7 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _currentLicenseKey = licenseKey;
           _showLicenseKey = false; // Hide by default
           _licenseKeyController.text =
-              licenseKey!; // Use null assertion since we checked above
+              licenseKey; // Use null assertion since we checked above
         });
       }
     } catch (e) {
@@ -265,8 +265,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Color _getLicenseCardColor(LicenseProvider licenseProvider) {
     if (licenseProvider.isLifetime) return AppTheme.warmBrown.withOpacity(0.1);
-    if (licenseProvider.isSubscription)
+    if (licenseProvider.isSubscription) {
       return AppTheme.darkerBrown.withOpacity(0.1);
+    }
     return AppTheme.warningRed.withOpacity(0.1);
   }
 
@@ -694,7 +695,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
+        SizedBox(
           width: double.infinity,
           child: OutlinedButton(
             onPressed: () => _openUserPortal(),
@@ -743,7 +744,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Expired license: Upgrade button
         if (licenseProvider.needsLicense) ...[
           SizedBox(height: 8),
-          Container(
+          SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () => _openUpgradeOptions(),
@@ -1191,7 +1192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           final isRecommended = recommendedModels.contains(model);
           return _buildModelCard(model, aiProvider,
               isRecommended: isRecommended);
-        }).toList(),
+        }),
 
         SizedBox(height: 16),
       ],

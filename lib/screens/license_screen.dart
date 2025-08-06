@@ -5,6 +5,8 @@ import '../core/theme/app_theme.dart';
 import '../services/browser_service.dart';
 
 class LicenseScreen extends StatefulWidget {
+  const LicenseScreen({super.key});
+
   @override
   State<LicenseScreen> createState() => _LicenseScreenState();
 }

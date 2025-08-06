@@ -193,6 +193,8 @@ class LicenseService {
       debugPrint('🔑 Validating lifetime key online...');
       debugPrint('🌐 Calling: $baseUrl/validate-lifetime-key');
       debugPrint('📝 Key: ${licenseKey.substring(0, 10)}...');
+      debugPrint('🖥️ Platform: ${Platform.operatingSystem}');
+      debugPrint('📱 Key length: ${licenseKey.length}');
 
       final response = await http.post(
         Uri.parse('$baseUrl/validate-lifetime-key'),
@@ -263,21 +265,47 @@ class LicenseService {
     }
   }
 
-  /// Get customer portal URL (if user has subscription)
+  /// Get customer portal URL (works for both lifetime and subscription licenses)
   Future<String?> getCustomerPortalUrl() async {
     try {
+      // First try subscription key
       final subscriptionKey = await _getStoredSubscriptionKey();
-      if (subscriptionKey == null) return null;
+      if (subscriptionKey != null) {
+        final response = await http.post(
+          Uri.parse('$baseUrl/customer-portal'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'license_key': subscriptionKey}),
+        );
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/customer-portal'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'license_key': subscriptionKey}),
-      );
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          return data['portal_url'];
+        }
+      }
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['url'];
+      // If subscription doesn't work, try lifetime key
+      final lifetimeKey = await _getStoredLifetimeKey();
+      if (lifetimeKey != null) {
+        final response = await http.post(
+          Uri.parse('$baseUrl/customer-portal'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'license_key': lifetimeKey}),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          return data['portal_url'];
+        }
+        
+        // Handle legacy lifetime licenses
+        if (response.statusCode == 404) {
+          final errorData = jsonDecode(response.body);
+          if (errorData['legacy'] == true) {
+            debugPrint('ℹ️ Legacy lifetime license detected - directing to direct portal');
+            // Return the direct Stripe portal URL for legacy customers
+            return 'https://billing.stripe.com/p/login/cNieVc50A7yGfkv4BQ73G00';
+          }
+        }
       }
 
       return null;
@@ -473,9 +501,15 @@ class LicenseService {
       // Use SharedPreferences directly for simpler Windows deployment
       final prefs = await SharedPreferences.getInstance();
       final storedKey = prefs.getString(_licenseKeyKey);
-      if (storedKey != null && storedKey.startsWith('ij_life_'))
+      debugPrint('🔍 Checking stored key: ${storedKey != null ? "Found key starting with ${storedKey.substring(0, 10)}..." : "No key found"}');
+      debugPrint('🖥️ Platform: ${Platform.operatingSystem}');
+      
+      if (storedKey != null && storedKey.startsWith('ij_life_')) {
+        debugPrint('✅ Valid lifetime key found in storage');
         return storedKey;
+      }
 
+      debugPrint('❌ No valid lifetime key in storage');
       return null;
     } catch (e) {
       debugPrint('❌ Error loading stored lifetime key: $e');
@@ -497,8 +531,9 @@ class LicenseService {
       // Use SharedPreferences directly for simpler Windows deployment
       final prefs = await SharedPreferences.getInstance();
       final storedKey = prefs.getString('subscription_key');
-      if (storedKey != null && storedKey.startsWith('ij_sub_'))
+      if (storedKey != null && storedKey.startsWith('ij_sub_')) {
         return storedKey;
+      }
 
       return null;
     } catch (e) {

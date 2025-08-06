@@ -16,10 +16,10 @@
 In Railway dashboard → Your Project → Variables tab:
 
 ```
-STRIPE_SECRET_KEY=sk_live_YOUR_ACTUAL_KEY_HERE
+STRIPE_SECRET_KEY=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
 STRIPE_WEBHOOK_SECRET=whsec_xxx  (get from Stripe dashboard)
 FRONTEND_URL=https://islajournal.app
-https://islajournal.appPORT=3000
+PORT=3000
 ```
 
 ### 4. Get Your Backend URL

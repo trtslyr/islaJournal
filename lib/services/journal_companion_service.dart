@@ -112,7 +112,7 @@ class JournalCompanionService {
         }
       }
       
-      print('   ✅ Conversation truncated: ${usedTokens} tokens');
+      print('   ✅ Conversation truncated: $usedTokens tokens');
       return conversationLines.join('\n');
       
     } catch (e) {
@@ -237,9 +237,9 @@ class JournalCompanionService {
         
         try {
           final file = await _dbService.getFile(fileId);
-          if (file?.content?.isNotEmpty == true) {
+          if (file?.content.isNotEmpty == true) {
             // Clean the content
-            final cleanContent = _extractUserContentOnly(file!.content!);
+            final cleanContent = _extractUserContentOnly(file!.content);
             if (cleanContent.trim().isEmpty) {
               print('   ⏭️ Skipping ${file.name} - no user content after cleaning');
               continue;
@@ -249,13 +249,13 @@ class JournalCompanionService {
             
             // Check if adding this file would exceed reasonable limits
             if (totalTokensNeeded + fileTokens > maxReasonableLimit) {
-              print('   ⏹️ Stopping at ${file.name} - would exceed reasonable limit (${maxReasonableLimit} tokens)');
+              print('   ⏹️ Stopping at ${file.name} - would exceed reasonable limit ($maxReasonableLimit tokens)');
               break;
             }
             
             selectedFiles.add('${file.name}:\n$cleanContent');
             totalTokensNeeded += fileTokens;
-            print('   ✅ Added ${file.name} (${fileTokens} tokens)');
+            print('   ✅ Added ${file.name} ($fileTokens tokens)');
             
           } else {
             print('   ⏭️ Skipping ${file?.name ?? 'unknown'} - no content');
@@ -267,7 +267,7 @@ class JournalCompanionService {
       
       if (selectedFiles.isNotEmpty) {
         final result = selectedFiles.join('\n\n');
-        print('   ✅ Custom context: ${selectedFiles.length} files, ${totalTokensNeeded} tokens used');
+        print('   ✅ Custom context: ${selectedFiles.length} files, $totalTokensNeeded tokens used');
         return result;
       }
       
@@ -311,7 +311,7 @@ class JournalCompanionService {
           if (usedTokens + entryTokens <= tokenBudget) {
             pinnedEntries.add(entry);
             usedTokens += entryTokens;
-            print('   ✅ Added pinned file: ${file.name} (${entryTokens} tokens)');
+            print('   ✅ Added pinned file: ${file.name} ($entryTokens tokens)');
           } else {
             print('   ⏹️ Pinned content budget reached, stopping at file ${file.name}');
             break;
@@ -332,8 +332,8 @@ class JournalCompanionService {
           
           for (final file in folderFiles) {
             final fileContent = await _dbService.getFile(file.id);
-            if (fileContent?.content?.isNotEmpty == true) {
-              final cleanContent = _extractUserContentOnly(fileContent!.content!);
+            if (fileContent?.content.isNotEmpty == true) {
+              final cleanContent = _extractUserContentOnly(fileContent!.content);
               if (cleanContent.trim().isEmpty) continue;
               
               final entry = '${folder.name}/${file.name}:\n$cleanContent';
@@ -342,7 +342,7 @@ class JournalCompanionService {
               if (usedTokens + entryTokens <= tokenBudget) {
                 pinnedEntries.add(entry);
                 usedTokens += entryTokens;
-                print('   ✅ Added file from pinned folder: ${folder.name}/${file.name} (${entryTokens} tokens)');
+                print('   ✅ Added file from pinned folder: ${folder.name}/${file.name} ($entryTokens tokens)');
               } else {
                 print('   ⏹️ Pinned content budget reached, stopping at folder file ${folder.name}/${file.name}');
                 break;
@@ -356,7 +356,7 @@ class JournalCompanionService {
       
       if (pinnedEntries.isNotEmpty) {
         final result = pinnedEntries.join('\n\n');
-        print('   ✅ Pinned context: ${pinnedEntries.length} entries (${pinnedFiles.length} files + ${pinnedFolders.length} folders), ${usedTokens} tokens');
+        print('   ✅ Pinned context: ${pinnedEntries.length} entries (${pinnedFiles.length} files + ${pinnedFolders.length} folders), $usedTokens tokens');
         return result;
       }
       
@@ -524,7 +524,7 @@ class JournalCompanionService {
     int currentTokens = 0;
 
     for (final sentence in sentences) {
-      final sentenceTokens = _estimateTokens(sentence + '. ');
+      final sentenceTokens = _estimateTokens('$sentence. ');
       if (currentTokens + sentenceTokens <= tokenBudget) {
         result.add(sentence);
         currentTokens += sentenceTokens;
@@ -533,7 +533,7 @@ class JournalCompanionService {
       }
     }
 
-    return result.isNotEmpty ? result.join('. ') + '.' : '';
+    return result.isNotEmpty ? '${result.join('. ')}.' : '';
   }
 
   /// Estimate tokens in text (rough approximation)
@@ -633,13 +633,13 @@ class JournalCompanionService {
       for (final fileMetadata in allFiles) {
         try {
           processed++;
-          print('   📄 Processing ${processed}/${allFiles.length}: ${fileMetadata.name}');
+          print('   📄 Processing $processed/${allFiles.length}: ${fileMetadata.name}');
           
           // Load full file content
           final file = await _dbService.getFile(fileMetadata.id);
-          if (file?.content?.isNotEmpty == true) {
+          if (file?.content.isNotEmpty == true) {
             // Generate embeddings using the import service chunking logic
-            final chunks = _chunkContent(file!.content!);
+            final chunks = _chunkContent(file!.content);
             print('     🧠 Generating ${chunks.length} chunks...');
             
             for (int i = 0; i < chunks.length; i++) {

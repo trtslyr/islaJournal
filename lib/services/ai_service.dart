@@ -434,7 +434,7 @@ class AIService {
       // Verify file is not corrupted by checking it's a reasonable size
       final fileSize = await modelFile.length();
       if (fileSize < 1024 * 1024) { // Less than 1MB is definitely not a valid model
-        throw Exception('Model file appears corrupted (too small): ${fileSize} bytes');
+        throw Exception('Model file appears corrupted (too small): $fileSize bytes');
       }
 
       _currentModelPath = modelPath;

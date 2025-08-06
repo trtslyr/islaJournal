@@ -201,7 +201,7 @@ class _EditorWidgetState extends State<EditorWidget> {
         contentPadding: EdgeInsets.zero,
         hintStyle: TextStyle(
           fontFamily: 'JetBrainsMono',
-          color: Theme.of(context).hintColor?.withOpacity(0.6),
+          color: Theme.of(context).hintColor.withOpacity(0.6),
           fontSize: 14.0,
           fontWeight: FontWeight.w400,
           height: 1.6,

@@ -11,6 +11,8 @@ import '../core/theme/app_theme.dart';
 import 'import_progress_widget.dart';
 
 class ImportDialog extends StatefulWidget {
+  const ImportDialog({super.key});
+
   @override
   _ImportDialogState createState() => _ImportDialogState();
 }
@@ -36,7 +38,7 @@ class _ImportDialogState extends State<ImportDialog> {
           color: AppTheme.darkText,
         ),
       ),
-      content: Container(
+      content: SizedBox(
         width: 400,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -230,7 +232,7 @@ class _ImportDialogState extends State<ImportDialog> {
         
         _showPickerHelp();
       }
-    } catch (e, stackTrace) {
+    } catch (e) {
       
       // More specific error handling
       if (e.toString().contains('Operation not permitted') || 

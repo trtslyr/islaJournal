@@ -285,7 +285,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
                     items.add(
                       PopupMenuItem<String>(
                         value: 'delete_all',
-                        child: Container(
+                        child: SizedBox(
                           width: double.infinity,
                           child: const Text(
                             'Delete All Chats',
@@ -858,16 +858,16 @@ class _AIChatPanelState extends State<AIChatPanel> {
     final maxTokens = activeConversation.contextSettings.maxTokens;
     final availableTokens = maxTokens - 1800; // Reserve for core context
 
-    int _estimateTokens(String text) {
+    int estimateTokens(String text) {
       return (text.length / 4).round(); // Rough estimate: 4 chars = 1 token
     }
 
-    int _calculateSelectedTokens(List<String> fileIds) {
+    int calculateSelectedTokens(List<String> fileIds) {
       int total = 0;
       for (final id in fileIds) {
         final file = sortedFiles.firstWhere((f) => f.id == id, orElse: () => sortedFiles.first);
-        if (file.content?.isNotEmpty == true) {
-          total += _estimateTokens(file.content!);
+        if (file.content.isNotEmpty == true) {
+          total += estimateTokens(file.content);
         }
       }
       return total;
@@ -877,7 +877,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-          final selectedTokens = _calculateSelectedTokens(selectedIds);
+          final selectedTokens = calculateSelectedTokens(selectedIds);
           final isOverLimit = selectedTokens > availableTokens;
           
           return AlertDialog(
@@ -914,7 +914,7 @@ class _AIChatPanelState extends State<AIChatPanel> {
                 itemBuilder: (context, index) {
                   final file = sortedFiles[index];
                   final isSelected = selectedIds.contains(file.id);
-                  final fileTokens = _estimateTokens(file.content ?? '');
+                  final fileTokens = estimateTokens(file.content ?? '');
                   
                   return CheckboxListTile(
                     title: Text(file.name),
