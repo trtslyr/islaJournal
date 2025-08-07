@@ -72,6 +72,9 @@ class AIService {
   String? _deviceType;
   int _deviceRAMGB = 8; // Default conservative estimate
   
+  // Auto-download preference
+  bool _autoDownloadEnabled = true; // Can be controlled via settings
+  
   // Ollama model catalog - no downloads needed, managed by Ollama
   static const Map<String, DeviceOptimizedModel> _availableModels = {
     // Fast and small
@@ -151,6 +154,12 @@ class AIService {
   String? get currentModelId => _currentModelId;
   String? get deviceType => _deviceType;
   int get deviceRAMGB => _deviceRAMGB;
+  bool get autoDownloadEnabled => _autoDownloadEnabled;
+  
+  set autoDownloadEnabled(bool enabled) {
+    _autoDownloadEnabled = enabled;
+    debugPrint('🔧 Auto-download ${enabled ? 'enabled' : 'disabled'}');
+  }
 
   Future<void> initialize() async {
     // Initialize Windows stability service first
@@ -358,6 +367,7 @@ class AIService {
   }
 
   /// Auto-selects the best available model based on what's actually in Ollama
+  /// If no models exist, automatically downloads the best model for this device
   Future<void> _autoSelectBestModel() async {
     if (_currentModelId != null && _modelStatuses[_currentModelId!] == ModelStatus.loaded) {
       debugPrint('✅ Model $_currentModelId already loaded, skipping auto-selection.');
@@ -374,10 +384,62 @@ class AIService {
         debugPrint('🎯 Auto-selecting first available Ollama model: $modelToLoad');
         await loadModel(modelToLoad);
       } else {
-        debugPrint('⚠️ No models found in Ollama.');
+        // Fresh install: No models in Ollama, auto-download best model for device
+        if (_autoDownloadEnabled) {
+          debugPrint('📦 Fresh install detected: No models in Ollama, starting auto-download...');
+          await _autoDownloadBestModelForDevice();
+        } else {
+          debugPrint('⚠️ No models found in Ollama. Auto-download disabled by user.');
+        }
       }
     } catch (e) {
       debugPrint('❌ Error during auto-model selection: $e');
+    }
+  }
+
+  /// Downloads and loads the best model for this device automatically
+  Future<void> _autoDownloadBestModelForDevice() async {
+    try {
+      final bestModel = getBestModelForDevice();
+      if (bestModel == null) {
+        debugPrint('❌ No suitable model found for device capabilities');
+        return;
+      }
+
+      debugPrint('🎯 Auto-downloading best model for device: ${bestModel.name} (${bestModel.sizeGB}GB for ${_deviceRAMGB}GB RAM)');
+      
+      // Download the model
+      await downloadModel(bestModel.id);
+      
+      // Load the model
+      await loadModel(bestModel.id);
+      
+      debugPrint('✅ Auto-download complete: ${bestModel.name} is ready!');
+    } catch (e) {
+      debugPrint('❌ Auto-download failed: $e');
+      // Fallback: try to download the smallest model
+      await _autoDownloadFallbackModel();
+    }
+  }
+
+  /// Fallback: Download the smallest available model if the recommended one fails
+  Future<void> _autoDownloadFallbackModel() async {
+    try {
+      // Find the smallest model
+      final models = _availableModels.values.toList();
+      models.sort((a, b) => a.sizeGB.compareTo(b.sizeGB));
+      
+      if (models.isNotEmpty) {
+        final fallbackModel = models.first;
+        debugPrint('🔄 Fallback: Downloading smallest model: ${fallbackModel.name}');
+        
+        await downloadModel(fallbackModel.id);
+        await loadModel(fallbackModel.id);
+        
+        debugPrint('✅ Fallback download complete: ${fallbackModel.name} is ready!');
+      }
+    } catch (e) {
+      debugPrint('❌ Fallback download also failed: $e');
     }
   }
 

@@ -29,6 +29,12 @@ class AIProvider with ChangeNotifier {
   String? get currentModelId => _aiService.currentModelId;
   String? get deviceType => _aiService.deviceType;
   int get deviceRAMGB => _aiService.deviceRAMGB;
+  bool get autoDownloadEnabled => _aiService.autoDownloadEnabled;
+  
+  set autoDownloadEnabled(bool enabled) {
+    _aiService.autoDownloadEnabled = enabled;
+    notifyListeners();
+  }
 
   Future<void> initialize() async {
     await _aiService.initialize();

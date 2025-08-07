@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Ollama service for Windows - HTTP API integration
@@ -13,6 +15,9 @@ class OllamaService {
     'http://0.0.0.0:11434',
   ];
   static const String _defaultModel = 'llama3.2-3b';
+  
+  // Dio client for better Windows compatibility
+  late final Dio _dio;
   
   // Model state
   String? _currentModel;
