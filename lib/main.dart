@@ -139,22 +139,18 @@ class _LicenseCheckWrapperState extends State<LicenseCheckWrapper> {
       builder: (context, license, child) {
         debugPrint('🔍 Main app checking license: ${license.isValid} (${license.licenseStatus?.type})');
         
-        // TEMPORARY: License validation disabled for testing
-        debugPrint('⚠️ LICENSE VALIDATION TEMPORARILY DISABLED - SHOWING HOME SCREEN');
-        return const HomeScreen();
+        // License validation is ENABLED
+        if (license.isValid && 
+            license.licenseStatus != null && 
+            license.licenseStatus!.isValid &&
+            (license.licenseStatus!.type == LicenseType.lifetime || 
+             license.licenseStatus!.type == LicenseType.subscription)) {
+          debugPrint('✅ Showing HomeScreen for valid license');
+          return const HomeScreen();
+        }
         
-        // ORIGINAL LICENSE CHECK (DISABLED):
-        // if (license.isValid && 
-        //     license.licenseStatus != null && 
-        //     license.licenseStatus!.isValid &&
-        //     (license.licenseStatus!.type == LicenseType.lifetime || 
-        //      license.licenseStatus!.type == LicenseType.subscription)) {
-        //   debugPrint('✅ Showing HomeScreen for valid license');
-        //   return const HomeScreen();
-        // }
-        // 
-        // debugPrint('🔒 Showing LicenseScreen - no valid license (isValid: ${license.isValid}, status: ${license.licenseStatus?.type})');
-        // return LicenseScreen();
+        debugPrint('🔒 Showing LicenseScreen - no valid license (isValid: ${license.isValid}, status: ${license.licenseStatus?.type})');
+        return LicenseScreen();
       },
     );
   }

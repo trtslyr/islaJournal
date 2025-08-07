@@ -26,25 +26,17 @@ class LicenseProvider extends ChangeNotifier {
 
   Future<void> checkLicense() async {
     try {
-      // TEMPORARY: License validation disabled for testing
-      debugPrint('⚠️ LICENSE VALIDATION TEMPORARILY DISABLED');
-      _licenseStatus = LicenseStatus(type: LicenseType.lifetime, isValid: true, neverExpires: true);
-      debugPrint('✅ License Status: ${_licenseStatus?.type}, Valid: ${_licenseStatus?.isValid} (FORCED FOR TESTING)');
-
+      // License validation is ENABLED
+      debugPrint('🔍 Performing real license validation...');
+      _licenseStatus = await LicenseService().checkLicense();
+      debugPrint('✅ License Status: ${_licenseStatus?.type}, Valid: ${_licenseStatus?.isValid}');
+      
       WidgetsBinding.instance.addPostFrameCallback((_) {
         notifyListeners();
       });
-      
-      // ORIGINAL LICENSE CHECK (DISABLED):
-      // _licenseStatus = await LicenseService().checkLicense();
-      // debugPrint('✅ License Status: ${_licenseStatus?.type}, Valid: ${_licenseStatus?.isValid}');
-      // WidgetsBinding.instance.addPostFrameCallback((_) {
-      //   notifyListeners();
-      // });
     } catch (e) {
       debugPrint('❌ License check error: $e');
-      // Even on error, force valid status for testing
-      _licenseStatus = LicenseStatus(type: LicenseType.lifetime, isValid: true, neverExpires: true);
+      _licenseStatus = LicenseStatus(type: LicenseType.none, isValid: false);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         notifyListeners();
