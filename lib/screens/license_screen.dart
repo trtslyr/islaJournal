@@ -49,7 +49,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
                       SizedBox(height: 20),
                       _buildLoginSection(),
                       SizedBox(height: 20),
-                      _buildSubscriptionSection(),
+                      _buildPurchaseSection(),
                       SizedBox(height: 40), // Extra bottom padding
                     ],
                   );
@@ -266,7 +266,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
     );
   }
   
-  Widget _buildSubscriptionSection() {
+  Widget _buildPurchaseSection() {
     return Card(
       child: Padding(
         padding: EdgeInsets.all(20),
@@ -275,10 +275,10 @@ class _LicenseScreenState extends State<LicenseScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.subscriptions, color: AppTheme.warmBrown),
+                Icon(Icons.shopping_cart, color: AppTheme.warmBrown),
                 SizedBox(width: 8),
                 Text(
-                  'Subscribe',
+                  'Purchase Isla Journal',
                   style: TextStyle(
                     fontFamily: 'JetBrainsMono',
                     fontSize: 16,
@@ -290,7 +290,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
             ),
             SizedBox(height: 8),
             Text(
-              'Choose your subscription plan',
+              'One-time purchase - yours forever',
               style: TextStyle(
                 fontFamily: 'JetBrainsMono',
                 fontSize: 12,
@@ -301,30 +301,11 @@ class _LicenseScreenState extends State<LicenseScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => _startCheckout('monthly'),
-                child: Text('Monthly - \$7'),
-              ),
-            ),
-            SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => _startCheckout('annual'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.warmBrown,
-                ),
-                child: Text('Annual - \$49 (Save \$35!)'),
-              ),
-            ),
-            SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
                 onPressed: () => _startCheckout('lifetime'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.darkerBrown,
                 ),
-                child: Text('Lifetime - \$99 (Never Pay Again!)'),
+                child: Text('Buy Isla Journal - \$99'),
               ),
             ),
           ],
@@ -379,43 +360,27 @@ class _LicenseScreenState extends State<LicenseScreen> {
     bool success = false;
     String errorDetails = '';
     
-    // Determine key type and validate accordingly
+    // Only lifetime keys supported
     if (key.startsWith('ij_life_')) {
       try {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('🌐 Connecting to backend server...'),
+            content: Text('🔍 Validating license key...'),
             backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
+            duration: Duration(seconds: 2),
           ),
         );
         success = await provider.validateLifetimeKey(key);
         if (!success) {
-          errorDetails = 'Backend rejected key (check server logs for details)';
+          errorDetails = 'Invalid license key';
         }
       } catch (e) {
-        errorDetails = 'Connection failed: ${e.toString().substring(0, 100)}...';
-      }
-    } else if (key.startsWith('ij_sub_')) {
-      try {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('🌐 Connecting to backend server...'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
-          ),
-        );
-        success = await provider.validateSubscriptionKey(key);
-        if (!success) {
-          errorDetails = 'Backend rejected the key';
-        }
-      } catch (e) {
-        errorDetails = 'Connection failed: ${e.toString().substring(0, 100)}...';
+        errorDetails = 'Validation failed: ${e.toString().substring(0, 100)}...';
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Invalid license key format. Keys should start with ij_life_ or ij_sub_'),
+          content: Text('Invalid license key format. Keys should start with ij_life_'),
           backgroundColor: AppTheme.warningRed,
         ),
       );
@@ -442,38 +407,20 @@ class _LicenseScreenState extends State<LicenseScreen> {
   }
   
   Future<void> _startCheckout(String planType) async {
-    // Use specific payment links for each plan type
-    String paymentUrl;
-    String planName;
+    // Only lifetime purchases supported
+    const paymentUrl = 'https://pay.islajournal.app/b/cNieVc50A7yGfkv4BQ73G00';
     
-    switch (planType) {
-      case 'monthly':
-        paymentUrl = 'https://pay.islajournal.app/b/dRmaEWct2cT03BN6JY73G01';
-        planName = 'Monthly';
-        break;
-      case 'annual':
-        paymentUrl = 'https://pay.islajournal.app/b/7sY28qakUg5cfkv2tI73G02';
-        planName = 'Annual';
-        break;
-      case 'lifetime':
-        paymentUrl = 'https://pay.islajournal.app/b/cNieVc50A7yGfkv4BQ73G00';
-        planName = 'Lifetime';
-        break;
-      default:
-        return;
-    }
-    
-    // Open specific payment link in browser
+    // Open payment link in browser
     await BrowserService.openUrlWithConfirmation(
       context, 
       paymentUrl,
-      title: 'Complete $planName Purchase',
+      title: 'Purchase Isla Journal',
     );
     
     // Show helpful message
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$planName purchase page opened in browser! Complete your purchase and then enter your license key above.'),
+        content: Text('Purchase page opened in browser! Complete your purchase and then enter your license key above.'),
         backgroundColor: Colors.blue,
         duration: Duration(seconds: 10),
       ),

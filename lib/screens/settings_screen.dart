@@ -863,7 +863,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return AlertDialog(
           backgroundColor: AppTheme.creamBeige,
           title: Text(
-            'Upgrade Your License',
+            'Purchase Isla Journal',
             style: TextStyle(
               fontFamily: 'JetBrainsMono',
               fontWeight: FontWeight.w600,
@@ -873,45 +873,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Monthly Option
+              // Single Purchase Option
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    _openPaymentLink('https://pay.islajournal.app/b/dRmaEWct2cT03BN6JY73G01', 'Monthly');
-                  },
-                  child: Text('Monthly - \$7'),
-                ),
-              ),
-              SizedBox(height: 8),
-              // Annual Option
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _openPaymentLink('https://pay.islajournal.app/b/7sY28qakUg5cfkv2tI73G02', 'Annual');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.warmBrown,
-                  ),
-                  child: Text('Annual - \$49 (Save \$35!)'),
-                ),
-              ),
-              SizedBox(height: 8),
-              // Lifetime Option
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _openPaymentLink('https://pay.islajournal.app/b/cNieVc50A7yGfkv4BQ73G00', 'Lifetime');
+                    _openPaymentLink('https://pay.islajournal.app/b/cNieVc50A7yGfkv4BQ73G00', 'Purchase');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.darkerBrown,
                   ),
-                  child: Text('Lifetime - \$99 (Never Pay Again!)'),
+                  child: Text('Buy Isla Journal - \$99'),
                 ),
               ),
             ],
