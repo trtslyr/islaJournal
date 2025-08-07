@@ -604,6 +604,31 @@ class AIService {
     }
   }
 
+  /// Force sync with Ollama and refresh model statuses
+  Future<Map<String, dynamic>> syncWithOllama() async {
+    try {
+      debugPrint('🔄 Syncing with Ollama...');
+      
+      // Use ollama service to sync
+      final result = await _ollamaService.syncWithOllama();
+      
+      if (result['success']) {
+        // Refresh our model statuses based on what's actually in Ollama
+        await _checkExistingModels();
+        debugPrint('✅ Model statuses refreshed after Ollama sync');
+      }
+      
+      return result;
+    } catch (e) {
+      debugPrint('❌ Failed to sync with Ollama: $e');
+      return {
+        'success': false,
+        'error': 'Failed to sync with Ollama: $e',
+        'models': <String>[]
+      };
+    }
+  }
+
 
 
   Future<String> getStorageUsage() async {

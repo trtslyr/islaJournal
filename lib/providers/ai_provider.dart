@@ -100,6 +100,22 @@ class AIProvider with ChangeNotifier {
     }
   }
 
+  /// Force sync with Ollama and refresh model statuses
+  Future<Map<String, dynamic>> syncWithOllama() async {
+    try {
+      final result = await _aiService.syncWithOllama();
+      notifyListeners(); // Refresh UI after sync
+      return result;
+    } catch (e) {
+      debugPrint('❌ Failed to sync with Ollama: $e');
+      return {
+        'success': false,
+        'error': 'Failed to sync with Ollama: $e',
+        'models': <String>[]
+      };
+    }
+  }
+
   Future<void> generateText(String prompt, {int maxTokens = 100}) async {
     try {
       _aiResponse = await _aiService.generateText(prompt, maxTokens: maxTokens);

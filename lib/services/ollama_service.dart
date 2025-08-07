@@ -52,6 +52,40 @@ class OllamaService {
     }
   }
   
+  /// Force sync with Ollama - check status and refresh models
+  Future<Map<String, dynamic>> syncWithOllama() async {
+    try {
+      debugPrint('🔄 Starting Ollama sync...');
+      
+      // Check if Ollama is running
+      final isRunning = await _checkOllamaStatus();
+      if (!isRunning) {
+        return {
+          'success': false,
+          'error': 'Ollama is not running. Please start Ollama and try again.',
+          'models': <String>[]
+        };
+      }
+      
+      // Get fresh list of models
+      final models = await getAvailableModels();
+      debugPrint('✅ Ollama sync successful - found ${models.length} models');
+      
+      return {
+        'success': true,
+        'models': models,
+        'message': 'Successfully synced with Ollama. Found ${models.length} model(s).'
+      };
+    } catch (e) {
+      debugPrint('❌ Ollama sync failed: $e');
+      return {
+        'success': false,
+        'error': 'Failed to sync with Ollama: $e',
+        'models': <String>[]
+      };
+    }
+  }
+  
   /// Get available models from ollama
   Future<List<String>> getAvailableModels() async {
     try {

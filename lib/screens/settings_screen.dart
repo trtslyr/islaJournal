@@ -1094,18 +1094,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
                 SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () => BrowserService.openUrl('https://ollama.ai/download'),
-                  icon: Icon(Icons.download, size: 16),
-                  label: Text('Download Ollama'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.warmBrown,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => BrowserService.openUrl('https://ollama.ai/download'),
+                      icon: Icon(Icons.download, size: 16),
+                      label: Text('Download Ollama'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.warmBrown,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
                     ),
-                  ),
+                    SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _syncWithOllama(aiProvider),
+                      icon: Icon(Icons.sync, size: 16),
+                      label: Text('Sync with Ollama'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
       );
@@ -1276,6 +1294,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               actions: [
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+                    await _syncWithOllama(aiProvider);
+                  },
+                  icon: Icon(Icons.sync, size: 16),
+                  label: Text('Sync with Ollama'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: Text(
@@ -1793,6 +1824,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SnackBar(
             content: Text('Failed to delete model: $e'),
             backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _syncWithOllama(AIProvider aiProvider) async {
+    if (!mounted) return;
+    
+    // Show loading indicator
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            SizedBox(width: 12),
+            Text('Syncing with Ollama...'),
+          ],
+        ),
+        duration: Duration(seconds: 10),
+      ),
+    );
+    
+    try {
+      final result = await aiProvider.syncWithOllama();
+      
+      if (mounted) {
+        // Hide loading indicator
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        
+        if (result['success']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Successfully synced with Ollama'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['error'] ?? 'Failed to sync with Ollama'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to sync with Ollama: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
           ),
         );
       }
