@@ -200,15 +200,22 @@ class LicenseService {
 
       final startTime = DateTime.now();
       debugPrint('🚀 Starting HTTP request to backend...');
+      
+      // Clean the license key of any whitespace/encoding issues
+      final cleanKey = licenseKey.trim();
+      final requestBody = jsonEncode({'license_key': cleanKey});
+      debugPrint('📦 Request body: $requestBody');
+      debugPrint('🧹 Clean key: "$cleanKey"');
+      debugPrint('📏 Key bytes: ${cleanKey.codeUnits}');
 
       final response = await http.post(
         Uri.parse('$baseUrl/validate-lifetime-key'),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
           'Accept': 'application/json',
           'User-Agent': 'IslaJournal/1.0',
         },
-        body: jsonEncode({'license_key': licenseKey}),
+        body: requestBody,
       ).timeout(Duration(seconds: 15));
 
       final duration = DateTime.now().difference(startTime).inMilliseconds;

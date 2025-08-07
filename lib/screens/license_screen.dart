@@ -391,7 +391,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
         );
         success = await provider.validateLifetimeKey(key);
         if (!success) {
-          errorDetails = 'Backend rejected the key';
+          errorDetails = 'Backend rejected key (check server logs for details)';
         }
       } catch (e) {
         errorDetails = 'Connection failed: ${e.toString().substring(0, 100)}...';
