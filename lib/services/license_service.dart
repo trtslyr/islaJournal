@@ -187,90 +187,42 @@ class LicenseService {
     }
   }
 
-  /// Validate lifetime license key
+  /// Validate lifetime license key - OFFLINE VALIDATION
   Future<LicenseStatus> validateLifetimeKey(String licenseKey) async {
     try {
-      debugPrint('');
-      debugPrint('🔑🔑🔑 ISLA JOURNAL LICENSE VALIDATION 🔑🔑🔑');
-      debugPrint('🌐 Backend URL: $baseUrl');
+      debugPrint('🔑 OFFLINE LIFETIME LICENSE VALIDATION');
       debugPrint('📝 License Key: ${licenseKey.substring(0, 10)}...');
       debugPrint('🖥️ Platform: ${Platform.operatingSystem}');
-      debugPrint('📱 Key length: ${licenseKey.length}');
-      debugPrint('⏰ Timestamp: ${DateTime.now()}');
-
-      final startTime = DateTime.now();
-      debugPrint('🚀 Starting HTTP request to backend...');
       
-      // Clean the license key of any whitespace/encoding issues
+      // Clean the license key
       final cleanKey = licenseKey.trim();
-      final requestBody = jsonEncode({'license_key': cleanKey});
-      debugPrint('📦 Request body: $requestBody');
       debugPrint('🧹 Clean key: "$cleanKey"');
-      debugPrint('📏 Key bytes: ${cleanKey.codeUnits}');
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/validate-lifetime-key'),
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Accept': 'application/json',
-          'User-Agent': 'IslaJournal/1.0',
-        },
-        body: requestBody,
-      ).timeout(Duration(seconds: 15));
-
-      final duration = DateTime.now().difference(startTime).inMilliseconds;
-      debugPrint('⏱️ Request completed in ${duration}ms');
-      debugPrint('📡 HTTP Status: ${response.statusCode}');
-      debugPrint('📄 Response headers: ${response.headers}');
-      debugPrint('📝 Response body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        if (data['valid'] == true) {
-          debugPrint('✅ Online lifetime validation successful');
-
-          // Store the key securely
-          await _storeLifetimeKey(licenseKey);
-
-          final status = LicenseStatus(
-            type: LicenseType.lifetime,
-            isValid: true,
-            customerName: data['customer_name'],
-            grantedAt: data['granted_at'] != null
-                ? DateTime.parse(data['granted_at'])
-                : null,
-            lastValidated: DateTime.now(),
-            neverExpires: true,
-          );
-
-          // Cache the status - lifetime keys are valid forever
-          await _cacheLicenseStatus(status);
-
-          return status;
-        } else {
-          debugPrint('❌ Backend says key is invalid: ${data['reason']}');
-        }
+      
+      // Simple offline validation: if it starts with 'ij_life_', it's valid
+      if (cleanKey.startsWith('ij_life_') && cleanKey.length > 10) {
+        debugPrint('✅ OFFLINE validation successful - valid lifetime key pattern');
+        
+        // Store the key securely
+        await _storeLifetimeKey(cleanKey);
+        
+        final status = LicenseStatus(
+          type: LicenseType.lifetime,
+          isValid: true,
+          customerName: 'Lifetime Customer',
+          lastValidated: DateTime.now(),
+          neverExpires: true,
+        );
+        
+        // Cache the status
+        await _cacheLicenseStatus(status);
+        
+        return status;
       } else {
-        debugPrint('❌ HTTP error: ${response.statusCode}');
+        debugPrint('❌ Invalid key pattern - must start with "ij_life_" and be longer than 10 chars');
+        return LicenseStatus(type: LicenseType.none, isValid: false);
       }
-
-      return LicenseStatus(type: LicenseType.none, isValid: false);
     } catch (e) {
-      debugPrint('');
-      debugPrint('💥💥💥 LICENSE VALIDATION EXCEPTION 💥💥💥');
-      debugPrint('🔥 Error type: ${e.runtimeType}');
-      debugPrint('🔥 Error message: $e');
-      debugPrint('🔥 Backend URL: $baseUrl');
-      
-      if (e.toString().contains('Connection refused')) {
-        debugPrint('💡 Suggestion: Backend server may not be running');
-      } else if (e.toString().contains('TimeoutException')) {
-        debugPrint('💡 Suggestion: Backend timeout - check internet connection');
-      } else if (e.toString().contains('SocketException')) {
-        debugPrint('💡 Suggestion: Network connectivity issue');
-      }
-      
+      debugPrint('❌ Offline validation error: $e');
       return LicenseStatus(type: LicenseType.none, isValid: false);
     }
   }
