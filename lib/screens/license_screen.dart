@@ -366,14 +366,52 @@ class _LicenseScreenState extends State<LicenseScreen> {
       return;
     }
     
+    // Show progress message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🔍 Validating license key...'),
+        backgroundColor: Colors.blue,
+        duration: Duration(seconds: 2),
+      ),
+    );
+    
     final provider = Provider.of<LicenseProvider>(context, listen: false);
     bool success = false;
+    String errorDetails = '';
     
     // Determine key type and validate accordingly
     if (key.startsWith('ij_life_')) {
-      success = await provider.validateLifetimeKey(key);
+      try {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🌐 Connecting to backend server...'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        success = await provider.validateLifetimeKey(key);
+        if (!success) {
+          errorDetails = 'Backend rejected the key';
+        }
+      } catch (e) {
+        errorDetails = 'Connection failed: ${e.toString().substring(0, 100)}...';
+      }
     } else if (key.startsWith('ij_sub_')) {
-      success = await provider.validateSubscriptionKey(key);
+      try {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🌐 Connecting to backend server...'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        success = await provider.validateSubscriptionKey(key);
+        if (!success) {
+          errorDetails = 'Backend rejected the key';
+        }
+      } catch (e) {
+        errorDetails = 'Connection failed: ${e.toString().substring(0, 100)}...';
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -385,12 +423,19 @@ class _LicenseScreenState extends State<LicenseScreen> {
     }
     
     if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ License validated successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
       Navigator.of(context).pushReplacementNamed('/home');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Invalid license key. Please check and try again.'),
+          content: Text('❌ Validation failed: $errorDetails'),
           backgroundColor: AppTheme.warningRed,
+          duration: Duration(seconds: 5),
         ),
       );
     }
