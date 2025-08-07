@@ -329,17 +329,24 @@ class AIService {
   }
 
   Future<void> _checkExistingModels() async {
-    // Initialize all models as not downloaded first
+    // Initialize all predefined models as not downloaded first
     for (final modelId in _availableModels.keys) {
       _modelStatuses[modelId] = ModelStatus.notDownloaded;
     }
     
     try {
       final ollamaModels = await _ollamaService.getAvailableModels();
+      debugPrint('🔍 Found ${ollamaModels.length} models in Ollama: ${ollamaModels.join(', ')}');
+      
       for (final ollamaModel in ollamaModels) {
+        // Check if it matches our predefined models
         if (_availableModels.containsKey(ollamaModel)) {
           _modelStatuses[ollamaModel] = ModelStatus.downloaded;
-          debugPrint('✅ Found Ollama model: $ollamaModel');
+          debugPrint('✅ Found predefined model: $ollamaModel');
+        } else {
+          // Add any Ollama model as a dynamic model
+          _modelStatuses[ollamaModel] = ModelStatus.downloaded;
+          debugPrint('✅ Found dynamic Ollama model: $ollamaModel');
         }
       }
     } catch (e) {
@@ -350,7 +357,7 @@ class AIService {
     debugPrint('📊 Model status initialized: ${_modelStatuses.length} models checked');
   }
 
-  /// Auto-selects the best available model based on device capabilities and Ollama's available models.
+  /// Auto-selects the best available model based on what's actually in Ollama
   Future<void> _autoSelectBestModel() async {
     if (_currentModelId != null && _modelStatuses[_currentModelId!] == ModelStatus.loaded) {
       debugPrint('✅ Model $_currentModelId already loaded, skipping auto-selection.');
@@ -361,25 +368,13 @@ class AIService {
       final availableOllamaModels = await _ollamaService.getAvailableModels();
       debugPrint('🔍 Found ${availableOllamaModels.length} models in Ollama: ${availableOllamaModels.join(', ')}');
 
-      // Filter _availableModels to only include those actually present in Ollama
-      final modelsToConsider = _availableModels.values.where((model) =>
-          availableOllamaModels.contains(model.id) &&
-          model.minRAMGB <= _deviceRAMGB
-      ).toList();
-
-      // Sort by quality score (descending) and then by size (ascending)
-      modelsToConsider.sort((a, b) {
-        final qualityComparison = b.qualityScore.compareTo(a.qualityScore);
-        if (qualityComparison != 0) return qualityComparison;
-        return a.sizeGB.compareTo(b.sizeGB);
-      });
-
-      if (modelsToConsider.isNotEmpty) {
-        final bestModel = modelsToConsider.first;
-        debugPrint('🎯 Auto-selecting best available model: ${bestModel.id}');
-        await loadModel(bestModel.id);
+      if (availableOllamaModels.isNotEmpty) {
+        // Just use the first available model from Ollama
+        final modelToLoad = availableOllamaModels.first;
+        debugPrint('🎯 Auto-selecting first available Ollama model: $modelToLoad');
+        await loadModel(modelToLoad);
       } else {
-        debugPrint('⚠️ No suitable Ollama models found for auto-selection based on device RAM or availability.');
+        debugPrint('⚠️ No models found in Ollama.');
       }
     } catch (e) {
       debugPrint('❌ Error during auto-model selection: $e');

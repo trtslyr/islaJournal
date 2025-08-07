@@ -7,6 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// This replaces fllama on Windows to prevent crashes
 class OllamaService {
   static const String _baseUrl = 'http://localhost:11434';
+  static const List<String> _alternativeUrls = [
+    'http://127.0.0.1:11434',
+    'http://localhost:11434',
+    'http://0.0.0.0:11434',
+  ];
   static const String _defaultModel = 'llama3.2-3b';
   
   // Model state
@@ -37,33 +42,59 @@ class OllamaService {
     }
   }
   
-  /// Check if ollama is running
+  /// Check if ollama is running - bulletproof version
   Future<bool> _checkOllamaStatus() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/tags'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(Duration(seconds: 5));
-      
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('⚠️ Ollama not responding: $e');
-      return false;
+    // Try multiple URLs to be absolutely sure
+    final urlsToTry = [
+      'http://localhost:11434/api/tags',
+      'http://127.0.0.1:11434/api/tags',
+    ];
+    
+    for (final url in urlsToTry) {
+      try {
+        debugPrint('🔍 Trying connection to: $url');
+        final response = await http.get(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'IslaJournal/1.0',
+          },
+        ).timeout(Duration(seconds: 10));
+        
+        debugPrint('📡 Response from $url: ${response.statusCode}');
+        if (response.statusCode == 200) {
+          debugPrint('✅ Ollama responding on: $url');
+          return true;
+        }
+      } catch (e) {
+        debugPrint('❌ Failed $url: $e');
+        continue; // Try next URL
+      }
     }
+    
+    debugPrint('❌ Ollama not responding on any URL');
+    return false;
   }
   
   /// Force sync with Ollama - check status and refresh models
   Future<Map<String, dynamic>> syncWithOllama() async {
     try {
       debugPrint('🔄 Starting Ollama sync...');
+      debugPrint('🌐 Checking connection to $_baseUrl');
+      
+      // Detailed connection diagnostics
+      final diagnostics = await _runConnectionDiagnostics();
+      debugPrint('🔍 Connection diagnostics: $diagnostics');
       
       // Check if Ollama is running
       final isRunning = await _checkOllamaStatus();
       if (!isRunning) {
         return {
           'success': false,
-          'error': 'Ollama is not running. Please start Ollama and try again.',
-          'models': <String>[]
+          'error': 'Ollama connection failed. ${diagnostics['suggestion'] ?? 'Please start Ollama and try again.'}',
+          'models': <String>[],
+          'diagnostics': diagnostics
         };
       }
       
@@ -74,7 +105,8 @@ class OllamaService {
       return {
         'success': true,
         'models': models,
-        'message': 'Successfully synced with Ollama. Found ${models.length} model(s).'
+        'message': 'Successfully synced with Ollama. Found ${models.length} model(s).',
+        'diagnostics': diagnostics
       };
     } catch (e) {
       debugPrint('❌ Ollama sync failed: $e');
@@ -85,33 +117,97 @@ class OllamaService {
       };
     }
   }
-  
-  /// Get available models from ollama
-  Future<List<String>> getAvailableModels() async {
+
+  /// Run comprehensive connection diagnostics
+  Future<Map<String, dynamic>> _runConnectionDiagnostics() async {
+    final diagnostics = <String, dynamic>{
+      'baseUrl': _baseUrl,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
     try {
+      // Test 1: Basic connectivity
+      debugPrint('🔍 Testing basic connectivity to $_baseUrl...');
       final response = await http.get(
         Uri.parse('$_baseUrl/api/tags'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(Duration(seconds: 10));
       
+      diagnostics['httpStatus'] = response.statusCode;
+      diagnostics['responseTime'] = DateTime.now().millisecondsSinceEpoch;
+      
       if (response.statusCode == 200) {
+        diagnostics['connectionStatus'] = 'SUCCESS';
         final data = jsonDecode(response.body);
-        final models = <String>[];
-        
-        if (data['models'] != null) {
-          for (final model in data['models']) {
-            models.add(model['name']);
-          }
-        }
-        
-        return models;
+        diagnostics['modelsFound'] = data['models']?.length ?? 0;
+        diagnostics['rawResponse'] = data;
       } else {
-        throw Exception('Failed to get models: ${response.statusCode}');
+        diagnostics['connectionStatus'] = 'HTTP_ERROR';
+        diagnostics['error'] = 'HTTP ${response.statusCode}: ${response.body}';
+        diagnostics['suggestion'] = 'Ollama may not be running or listening on port 11434';
       }
     } catch (e) {
-      debugPrint('❌ Failed to get available models: $e');
-      return [];
+      diagnostics['connectionStatus'] = 'CONNECTION_FAILED';
+      diagnostics['error'] = e.toString();
+      
+      if (e.toString().contains('Connection refused')) {
+        diagnostics['suggestion'] = 'Ollama is not running. Start Ollama and try again.';
+      } else if (e.toString().contains('TimeoutException')) {
+        diagnostics['suggestion'] = 'Ollama is running but not responding. Check firewall settings.';
+      } else if (e.toString().contains('SocketException')) {
+        diagnostics['suggestion'] = 'Network connectivity issue. Check if localhost:11434 is accessible.';
+      } else {
+        diagnostics['suggestion'] = 'Unknown connection error. Check Ollama installation.';
+      }
     }
+
+    return diagnostics;
+  }
+  
+  /// Get available models from ollama - bulletproof version
+  Future<List<String>> getAvailableModels() async {
+    final urlsToTry = [
+      'http://localhost:11434/api/tags',
+      'http://127.0.0.1:11434/api/tags',
+    ];
+    
+    for (final url in urlsToTry) {
+      try {
+        debugPrint('🔍 Getting models from: $url');
+        final response = await http.get(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'IslaJournal/1.0',
+          },
+        ).timeout(Duration(seconds: 15));
+        
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final models = <String>[];
+          
+          if (data['models'] != null) {
+            for (final model in data['models']) {
+              final modelName = model['name'] as String;
+              models.add(modelName);
+              debugPrint('📦 Found model: $modelName');
+            }
+          }
+          
+          debugPrint('✅ Successfully got ${models.length} models from $url');
+          return models;
+        } else {
+          debugPrint('❌ HTTP ${response.statusCode} from $url: ${response.body}');
+        }
+      } catch (e) {
+        debugPrint('❌ Failed to get models from $url: $e');
+        continue; // Try next URL
+      }
+    }
+    
+    debugPrint('❌ Failed to get models from any URL');
+    return [];
   }
   
   /// Pull/download a model
