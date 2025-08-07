@@ -10,7 +10,7 @@ import '../services/ai_service.dart';
 import '../core/theme/app_theme.dart';
 import '../widgets/import_dialog.dart';
 import '../services/browser_service.dart';
-import '../widgets/ollama_test_widget.dart';
+
 
 /// Settings screen for managing AI models and app preferences
 class SettingsScreen extends StatefulWidget {
@@ -25,7 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double _currentTokens = 4000.0; // Updated default value to match new range
   bool _showLicenseKey = false;
   String? _currentLicenseKey;
-  bool _isModelsExpanded = false; // AI Models section collapsed by default
+  // Removed _isModelsExpanded - using simple Ollama status instead
 
   // License key input controller
   final TextEditingController _licenseKeyController = TextEditingController();
@@ -224,7 +224,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildLicenseStatusCard(LicenseProvider licenseProvider) {
-    final status = licenseProvider.licenseStatus;
 
     return Container(
       padding: const EdgeInsets.all(12.0),
@@ -947,107 +946,625 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// AI Models section with model management
+  /// AI Assistant section with Ollama status
   Widget _buildAISection(AIProvider aiProvider) {
     return Consumer<AIProvider>(
       builder: (context, aiProvider, child) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Collapsible header
-            InkWell(
-              onTap: () {
-                setState(() {
-                  _isModelsExpanded = !_isModelsExpanded;
-                });
-              },
-              child: Container(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      _isModelsExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: AppTheme.darkText,
-                      size: 20,
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'AI Models',
-                        style: TextStyle(
-                          fontFamily: 'JetBrainsMono',
-                          fontSize: 16.0,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.darkText,
-                        ),
-                      ),
-                    ),
-                    // Show active model indicator
-                    if (!_isModelsExpanded && aiProvider.isModelLoaded) ...[
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      SizedBox(width: 4),
-                      Text(
-                        'Active',
-                        style: TextStyle(
-                          fontFamily: 'JetBrainsMono',
-                          fontSize: 10.0,
-                          color: Colors.green,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+            // Simple AI status header
+            Text(
+              'AI Assistant',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
+                fontSize: 16.0,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.darkText,
               ),
             ),
+            SizedBox(height: 12),
+            
+            // Ollama status card
+            _buildOllamaStatusCard(aiProvider),
+          ],
+        );
+      },
+    );
+  }
 
-            // Expandable content
-            AnimatedCrossFade(
-              crossFadeState: _isModelsExpanded
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              duration: Duration(milliseconds: 200),
-              firstChild: SizedBox.shrink(),
-              secondChild: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: 8),
+  /// Build Ollama status card with visual indicators
+  Widget _buildOllamaStatusCard(AIProvider aiProvider) {
+    final hasModel = aiProvider.currentModelId != null;
+    final isReady = hasModel && aiProvider.isModelLoaded;
+    
+    // Check if Ollama is installed by seeing if we have any available models
+    final hasAvailableModels = aiProvider.modelStatuses.values.any((status) => 
+      status == ModelStatus.downloaded || status == ModelStatus.loaded || status == ModelStatus.error);
+    final isOllamaInstalled = hasAvailableModels || hasModel;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Main status card
+        Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.creamBeige,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.mediumGray.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // AI Status Header
+          Row(
+            children: [
+              Icon(
+                Icons.psychology,
+                color: AppTheme.warmBrown,
+                size: 24,
+              ),
+              SizedBox(width: 12),
+              Text(
+                'AI Assistant',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.darkText,
+                ),
+              ),
+              Spacer(),
+              // Status indicator
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: isReady ? Colors.green : AppTheme.mediumGray,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              SizedBox(width: 8),
+              Text(
+                isReady ? 'Ready' : 'Not Ready',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isReady ? Colors.green : AppTheme.mediumGray,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          
+              // Clean current model display with edit button
+              _buildCleanModelDisplay(aiProvider, isOllamaInstalled),
+              
+              SizedBox(height: 12),
+              
+              // Quick info
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkerCream.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isReady 
+                    ? '✅ AI is ready for questions and writing assistance (works offline)'
+                    : '💡 Install Ollama and download a model to enable AI features',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.mediumGray,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build clean model display with edit button
+  Widget _buildCleanModelDisplay(AIProvider aiProvider, bool isOllamaInstalled) {
+    final currentModel = aiProvider.currentModelId;
+    
+    if (!isOllamaInstalled) {
+      // Show Ollama download if not installed
+      return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Current Model:',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.mediumGray,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+            'No model selected',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.darkText,
+                  fontFamily: 'JetBrainsMono',
+                ),
+              ),
+                SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () => BrowserService.openUrl('https://ollama.ai/download'),
+                  icon: Icon(Icons.download, size: 16),
+                  label: Text('Download Ollama'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.warmBrown,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              ],
+      );
+    }
+    
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Current Model:',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.mediumGray,
+                ),
+              ),
+              SizedBox(height: 4),
+              if (currentModel != null) ...[
+                Text(
+                  aiProvider.availableModels[currentModel]?.name ?? currentModel,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.darkText,
+                    fontFamily: 'JetBrainsMono',
+                  ),
+                ),
+                if (aiProvider.availableModels[currentModel] != null) ...[
+                  SizedBox(height: 2),
                   Text(
-                    'Device: ${aiProvider.deviceType ?? 'Unknown'} (${aiProvider.deviceRAMGB}GB RAM)',
+                    '${aiProvider.availableModels[currentModel]!.sizeGB}GB • Quality: ${aiProvider.availableModels[currentModel]!.qualityScore}/10',
                     style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
-                      fontSize: 12.0,
+                      fontSize: 11,
                       color: AppTheme.mediumGray,
                     ),
                   ),
-                  SizedBox(height: 16),
-
-                  // Current model status
-                  _buildCurrentModelStatus(aiProvider),
-                  SizedBox(height: 24),
-
-                  // Available models
-                  _buildAvailableModelsList(aiProvider),
-                  SizedBox(height: 16),
-
-                  // Storage info
-                  _buildStorageInfo(aiProvider),
-                  
-                          // Ollama setup and test for Windows and Mac
-        if (Platform.isWindows || Platform.isMacOS) ...[
-          SizedBox(height: 24),
-          _buildOllamaSetupSection(),
-          SizedBox(height: 16),
-          OllamaTestWidget(),
-        ],
                 ],
+              ] else ...[
+                Text(
+                  'No model loaded',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.mediumGray,
+                    fontFamily: 'JetBrainsMono',
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => _showModelSelectionDialog(aiProvider),
+          icon: Icon(Icons.edit, size: 16),
+          label: Text('Edit Models'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.warmBrown,
+            foregroundColor: Colors.white,
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+
+
+  /// Show comprehensive model management dialog
+  void _showModelSelectionDialog(AIProvider aiProvider) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final allModels = aiProvider.availableModels.entries.toList();
+            final recommendedModels = aiProvider.getRecommendedModels();
+            
+            // Group models by status
+            final downloadedModels = allModels.where((entry) => 
+                aiProvider.modelStatuses[entry.key] == ModelStatus.downloaded || 
+                aiProvider.modelStatuses[entry.key] == ModelStatus.loaded).toList();
+            final notDownloadedModels = allModels.where((entry) => 
+                aiProvider.modelStatuses[entry.key] == ModelStatus.notDownloaded).toList();
+            final downloadingModels = allModels.where((entry) => 
+                aiProvider.modelStatuses[entry.key] == ModelStatus.downloading).toList();
+
+            return AlertDialog(
+              title: Text(
+                'Manage AI Models',
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 16.0,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 400,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Downloaded models section
+                      if (downloadedModels.isNotEmpty) ...[
+                        Text(
+                          'Downloaded Models',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.darkText,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        ...downloadedModels.map((entry) => _buildModelListTile(
+                          entry.value, 
+                          aiProvider, 
+                          recommendedModels.contains(entry.value),
+                          setState,
+                        )),
+                        SizedBox(height: 16),
+                      ],
+                      
+                      // Currently downloading models
+                      if (downloadingModels.isNotEmpty) ...[
+                        Text(
+                          'Downloading',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        ...downloadingModels.map((entry) => _buildModelListTile(
+                          entry.value, 
+                          aiProvider, 
+                          recommendedModels.contains(entry.value),
+                          setState,
+                        )),
+                        SizedBox(height: 16),
+                      ],
+                      
+                      // Available for download models
+                      if (notDownloadedModels.isNotEmpty) ...[
+                        Text(
+                          'Available for Download',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.mediumGray,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        ...notDownloadedModels.map((entry) => _buildModelListTile(
+                          entry.value, 
+                          aiProvider, 
+                          recommendedModels.contains(entry.value),
+                          setState,
+                        )),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(
+                    'Close',
+                    style: TextStyle(
+                      color: AppTheme.mediumGray,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Build individual model list tile for the dialog
+  Widget _buildModelListTile(DeviceOptimizedModel model, AIProvider aiProvider, bool isRecommended, StateSetter setState) {
+    final status = aiProvider.modelStatuses[model.id] ?? ModelStatus.notDownloaded;
+    final isCurrentModel = aiProvider.currentModelId == model.id;
+    final canDownload = model.minRAMGB <= aiProvider.deviceRAMGB;
+    
+    return Container(
+      margin: EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                model.name,
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            if (isRecommended) ...[
+          Container(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+                  color: AppTheme.warmBrown,
+                  borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+                  'RECOMMENDED',
+              style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+            if (!canDownload) ...[
+              SizedBox(width: 8),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'NEEDS ${model.minRAMGB}GB RAM',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${model.sizeGB}GB • ${model.description}',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppTheme.mediumGray,
+              ),
+            ),
+            if (status == ModelStatus.downloading) ...[
+              SizedBox(height: 4),
+              LinearProgressIndicator(
+                backgroundColor: AppTheme.mediumGray.withOpacity(0.3),
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
+              ),
+            ],
+          ],
+        ),
+        leading: _buildModelListIcon(status, isCurrentModel),
+        trailing: _buildModelListActions(model, status, aiProvider, canDownload, setState),
+        tileColor: isCurrentModel ? AppTheme.warmBrown.withOpacity(0.1) : null,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+
+  /// Build icon for model list tile
+  Widget _buildModelListIcon(ModelStatus status, bool isCurrentModel) {
+    switch (status) {
+      case ModelStatus.loaded:
+        return Icon(Icons.radio_button_checked, color: Colors.green);
+      case ModelStatus.downloaded:
+        return Icon(Icons.radio_button_unchecked, color: AppTheme.warmBrown);
+      case ModelStatus.downloading:
+        return SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.warmBrown),
+          ),
+        );
+      case ModelStatus.error:
+        return Icon(Icons.error, color: Colors.red);
+      default:
+        return Icon(Icons.download, color: AppTheme.mediumGray);
+    }
+  }
+
+  /// Build action buttons for model list tile
+  Widget _buildModelListActions(DeviceOptimizedModel model, ModelStatus status, AIProvider aiProvider, bool canDownload, StateSetter setState) {
+    switch (status) {
+      case ModelStatus.notDownloaded:
+        return ElevatedButton(
+          onPressed: canDownload ? () async {
+            setState(() {}); // Update UI immediately
+            await _downloadModel(model.id, aiProvider);
+            setState(() {}); // Update UI after download
+          } : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.warmBrown,
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            minimumSize: Size(80, 32),
+          ),
+          child: Text(
+            'Download',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.white,
+            ),
+          ),
+        );
+      
+      case ModelStatus.downloaded:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _switchToModel(model.id, aiProvider);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.warmBrown,
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                minimumSize: Size(60, 32),
+              ),
+              child: Text(
+                'Use',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            SizedBox(width: 4),
+            IconButton(
+              onPressed: () => _showDeleteConfirmationInDialog(model, aiProvider, setState),
+              icon: Icon(Icons.delete, size: 18, color: Colors.red),
+              padding: EdgeInsets.all(4),
+              constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
+        );
+      
+      case ModelStatus.loaded:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.green),
+              ),
+              child: Text(
+                'Active',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.green,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            SizedBox(width: 4),
+            IconButton(
+              onPressed: () => _showDeleteConfirmationInDialog(model, aiProvider, setState),
+              icon: Icon(Icons.delete, size: 18, color: Colors.red),
+              padding: EdgeInsets.all(4),
+              constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
+        );
+      
+      case ModelStatus.downloading:
+        return Container(
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Text(
+            'Downloading...',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppTheme.mediumGray,
+            ),
+          ),
+        );
+      
+      case ModelStatus.error:
+        return ElevatedButton(
+          onPressed: canDownload ? () async {
+            setState(() {}); // Update UI immediately
+            await _downloadModel(model.id, aiProvider);
+            setState(() {}); // Update UI after download
+          } : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            minimumSize: Size(80, 32),
+          ),
+          child: Text(
+            'Retry',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.white,
+            ),
+          ),
+        );
+    }
+  }
+
+  /// Show delete confirmation within the dialog
+  void _showDeleteConfirmationInDialog(DeviceOptimizedModel model, AIProvider aiProvider, StateSetter setState) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(
+            'Delete Model',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 16.0,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to delete "${model.name}"?\n\nThis will free up ${model.sizeGB}GB of storage but you\'ll need to download it again to use it.',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12.0,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: AppTheme.mediumGray),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop(); // Close confirmation dialog
+                await _deleteModel(model.id, aiProvider);
+                setState(() {}); // Update the main dialog
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+              ),
+              child: Text(
+                'Delete',
+                style: TextStyle(color: Colors.white),
               ),
             ),
           ],
@@ -1167,498 +1684,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAvailableModelsList(AIProvider aiProvider) {
-    final recommendedModels = aiProvider.getRecommendedModels();
-    final allModels = aiProvider.availableModels.values.toList();
 
-    // Sort models by RAM requirement (ascending)
-    allModels.sort((a, b) => a.minRAMGB.compareTo(b.minRAMGB));
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Available Models',
-          style: TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 14.0,
-            fontWeight: FontWeight.w500,
-            color: AppTheme.darkText,
-          ),
-        ),
-        SizedBox(height: 8),
-        Text(
-          'Download, load, and delete AI models. Only keep what you need to save storage.',
-          style: TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 12.0,
-            color: AppTheme.mediumGray,
-          ),
-        ),
-        SizedBox(height: 12),
 
-        // Individual model cards with buttons
-        ...allModels.map((model) {
-          final isRecommended = recommendedModels.contains(model);
-          return _buildModelCard(model, aiProvider,
-              isRecommended: isRecommended);
-        }),
 
-        SizedBox(height: 16),
-      ],
-    );
-  }
 
-  void _handleModelAction(
-      DeviceOptimizedModel model, ModelStatus status, AIProvider aiProvider) {
-    switch (status) {
-      case ModelStatus.notDownloaded:
-        _downloadModel(model.id, aiProvider);
-        break;
-      case ModelStatus.downloaded:
-        _loadModel(model.id, aiProvider);
-        break;
-      case ModelStatus.loaded:
-        _unloadModel(aiProvider);
-        break;
-      case ModelStatus.error:
-        _downloadModel(model.id, aiProvider); // Retry
-        break;
-      default:
-        break;
-    }
-  }
-
-  void _handleDeleteModel(String modelId, AIProvider aiProvider) {
-    _showDeleteModelDialog(modelId, aiProvider);
-  }
-
-  String _getActionButtonText(ModelStatus status) {
-    switch (status) {
-      case ModelStatus.notDownloaded:
-        return 'Download';
-      case ModelStatus.downloading:
-        return 'Downloading...';
-      case ModelStatus.downloaded:
-        return 'Load Model';
-      case ModelStatus.loaded:
-        return 'Unload';
-      case ModelStatus.error:
-        return 'Retry Download';
-    }
-  }
-
-  Color _getActionButtonColor(ModelStatus status) {
-    switch (status) {
-      case ModelStatus.notDownloaded:
-        return AppTheme.warmBrown;
-      case ModelStatus.downloading:
-        return AppTheme.mediumGray;
-      case ModelStatus.downloaded:
-        return Colors.green;
-      case ModelStatus.loaded:
-        return Colors.orange;
-      case ModelStatus.error:
-        return AppTheme.warningRed;
-    }
-  }
-
-  Color _getStatusColor(ModelStatus status) {
-    switch (status) {
-      case ModelStatus.notDownloaded:
-        return AppTheme.mediumGray;
-      case ModelStatus.downloading:
-        return Colors.blue;
-      case ModelStatus.downloaded:
-        return Colors.orange;
-      case ModelStatus.loaded:
-        return Colors.green;
-      case ModelStatus.error:
-        return AppTheme.warningRed;
-    }
-  }
-
-  String _getStatusText(ModelStatus status) {
-    switch (status) {
-      case ModelStatus.notDownloaded:
-        return 'NOT DOWNLOADED';
-      case ModelStatus.downloading:
-        return 'DOWNLOADING';
-      case ModelStatus.downloaded:
-        return 'READY TO LOAD';
-      case ModelStatus.loaded:
-        return 'LOADED';
-      case ModelStatus.error:
-        return 'ERROR';
-    }
-  }
-
-  Widget _buildModelCard(DeviceOptimizedModel model, AIProvider aiProvider,
-      {required bool isRecommended}) {
-    final status =
-        aiProvider.modelStatuses[model.id] ?? ModelStatus.notDownloaded;
-    final canDownload = model.minRAMGB <= aiProvider.deviceRAMGB;
-
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.darkerCream,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isRecommended && model.isRecommended
-              ? AppTheme.warmBrown.withOpacity(0.3)
-              : AppTheme.mediumGray.withOpacity(0.3),
-          width: isRecommended && model.isRecommended ? 2 : 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          model.name,
-                          style: TextStyle(
-                            fontFamily: 'JetBrainsMono',
-                            fontSize: 13.0,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.darkText,
-                          ),
-                        ),
-                        if (model.isRecommended) ...[
-                          SizedBox(width: 8),
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppTheme.warmBrown,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'RECOMMENDED',
-                              style: TextStyle(
-                                fontFamily: 'JetBrainsMono',
-                                fontSize: 8.0,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '${model.quantization} • ${model.sizeGB}GB • Quality ${model.qualityScore}/10',
-                      style: TextStyle(
-                        fontFamily: 'JetBrainsMono',
-                        fontSize: 11.0,
-                        color: AppTheme.mediumGray,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _buildModelStatusIndicator(status),
-            ],
-          ),
-          SizedBox(height: 8),
-          Text(
-            model.description,
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 11.0,
-              color: AppTheme.mediumGray,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Optimized for: ${model.optimizedFor.join(', ')}',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 10.0,
-              color: AppTheme.mediumGray,
-            ),
-          ),
-          if (!canDownload) ...[
-            SizedBox(height: 8),
-            Text(
-              '⚠️ Requires ${model.minRAMGB}GB RAM (you have ${aiProvider.deviceRAMGB}GB)',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 10.0,
-                color: Colors.orange,
-              ),
-            ),
-          ],
-          SizedBox(height: 12),
-          _buildModelControls(model, status, aiProvider, canDownload),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModelControls(DeviceOptimizedModel model, ModelStatus status,
-      AIProvider aiProvider, bool canDownload) {
-    final downloadProgress = aiProvider.downloadProgress;
-
-    // Show progress bar only if downloading AND progress is valid
-    if (status == ModelStatus.downloading &&
-        downloadProgress != null &&
-        downloadProgress.total > 0) {
-      return _buildDownloadProgress(downloadProgress);
-    }
-
-    return Row(
-      children: [
-        if (status == ModelStatus.notDownloaded && canDownload) ...[
-          ElevatedButton(
-            onPressed: () => _downloadModel(model.id, aiProvider),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.warmBrown,
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.download, size: 14, color: Colors.white),
-                SizedBox(width: 4),
-                Text(
-                  'Download',
-                  style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12.0,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ] else if (status == ModelStatus.downloaded) ...[
-          ElevatedButton(
-            onPressed: () => _loadModel(model.id, aiProvider),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.play_arrow, size: 14, color: Colors.white),
-                SizedBox(width: 4),
-                Text(
-                  'Load',
-                  style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12.0,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: 8),
-          _buildDeleteModelButton(model.id, aiProvider),
-        ] else if (status == ModelStatus.loaded) ...[
-          ElevatedButton(
-            onPressed: () => _unloadModel(aiProvider),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.stop, size: 14, color: Colors.white),
-                SizedBox(width: 4),
-                Text(
-                  'Unload',
-                  style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12.0,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: 8),
-          _buildDeleteModelButton(model.id, aiProvider),
-        ] else if (status == ModelStatus.error) ...[
-          ElevatedButton(
-            onPressed:
-                canDownload ? () => _downloadModel(model.id, aiProvider) : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.refresh, size: 14, color: Colors.white),
-                SizedBox(width: 4),
-                Text(
-                  'Retry',
-                  style: TextStyle(
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12.0,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        if (!canDownload && status == ModelStatus.notDownloaded) ...[
-          Text(
-            'Insufficient RAM',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 11.0,
-              color: Colors.orange,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildModelStatusIndicator(ModelStatus status) {
-    Color color;
-    IconData icon;
-
-    switch (status) {
-      case ModelStatus.downloaded:
-        color = Colors.blue;
-        icon = Icons.download_done;
-        break;
-      case ModelStatus.loaded:
-        color = Colors.green;
-        icon = Icons.check_circle;
-        break;
-      case ModelStatus.downloading:
-        color = Colors.orange;
-        icon = Icons.downloading;
-        break;
-      case ModelStatus.error:
-        color = Colors.red;
-        icon = Icons.error;
-        break;
-      case ModelStatus.notDownloaded:
-      default:
-        color = AppTheme.mediumGray;
-        icon = Icons.cloud_download;
-        break;
-    }
-
-    return Icon(icon, color: color, size: 20);
-  }
-
-  Widget _buildDownloadProgress(DownloadProgress progress) {
-    final isComplete = progress.percentage >= 100.0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: LinearProgressIndicator(
-                value: progress.percentage / 100,
-                backgroundColor: AppTheme.mediumGray.withOpacity(0.3),
-                valueColor: AlwaysStoppedAnimation<Color>(
-                    isComplete ? Colors.green : AppTheme.warmBrown),
-              ),
-            ),
-            SizedBox(width: 8),
-            Text(
-              '${progress.percentage.toStringAsFixed(1)}%',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 11.0,
-                color: isComplete ? Colors.green : AppTheme.darkText,
-                fontWeight: isComplete ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 4),
-        Text(
-          isComplete
-              ? 'Download complete! Preparing...'
-              : '${progress.speed.toStringAsFixed(1)} MB/s • ${progress.remainingTime}s remaining',
-          style: TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 10.0,
-            color: isComplete ? Colors.green : AppTheme.mediumGray,
-            fontWeight: isComplete ? FontWeight.w500 : FontWeight.normal,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDeleteModelButton(String modelId, AIProvider aiProvider) {
-    return OutlinedButton(
-      onPressed: () => _showDeleteModelDialog(modelId, aiProvider),
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: Colors.red.withOpacity(0.5)),
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.delete, size: 14, color: Colors.red),
-          SizedBox(width: 4),
-          Text(
-            'Delete',
-            style: TextStyle(
-              fontFamily: 'JetBrainsMono',
-              fontSize: 12.0,
-              color: Colors.red,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStorageInfo(AIProvider aiProvider) {
-    return FutureBuilder<String>(
-      future: aiProvider.getStorageUsage(),
-      builder: (context, snapshot) {
-        return Container(
-          padding: EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppTheme.darkerCream.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppTheme.mediumGray.withOpacity(0.3)),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.storage, size: 16, color: AppTheme.mediumGray),
-              SizedBox(width: 8),
-              Text(
-                'Storage used: ${snapshot.data ?? 'Calculating...'}',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 11.0,
-                  color: AppTheme.mediumGray,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   Future<void> _downloadModel(String modelId, AIProvider aiProvider) async {
     try {
@@ -1700,6 +1730,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to load model: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _switchToModel(String modelId, AIProvider aiProvider) async {
+    try {
+      // If there's a current model loaded, unload it first
+      if (aiProvider.currentModelId != null && aiProvider.isModelLoaded) {
+        await aiProvider.unloadModel();
+      }
+      
+      // Load the new model
+      await aiProvider.loadModel(modelId);
+      
+      if (mounted) {
+        final modelName = aiProvider.availableModels[modelId]?.name ?? modelId;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Switched to $modelName'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to switch model: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteModel(String modelId, AIProvider aiProvider) async {
+    try {
+      // If this model is currently loaded, unload it first
+      if (aiProvider.currentModelId == modelId && aiProvider.isModelLoaded) {
+        await aiProvider.unloadModel();
+      }
+      
+      // Delete the model
+      await aiProvider.deleteModel(modelId);
+      
+      if (mounted) {
+        final modelName = aiProvider.availableModels[modelId]?.name ?? modelId;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Deleted $modelName'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete model: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -2954,4 +3046,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+
+
 }

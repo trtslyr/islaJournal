@@ -74,35 +74,61 @@ class AIService {
   
   // Ollama model catalog - no downloads needed, managed by Ollama
   static const Map<String, DeviceOptimizedModel> _availableModels = {
-    // Basic models for low RAM
-    'llama3.2:1b': DeviceOptimizedModel(
-      id: 'llama3.2:1b',
-      name: 'Llama 3.2 1B',
-      description: 'Very fast, basic intelligence. For 4GB RAM or less.',
-      quantization: 'Q4_0',
-      downloadUrl: '', // Managed by Ollama
-      sizeGB: 1,
-      minRAMGB: 2,
-      optimizedFor: ['4GB RAM or less', 'Basic tasks'],
-      isRecommended: true,
-      qualityScore: 6.5,
-    ),
-    
-    // Universal compatibility for 8GB systems
-    'llama3.2:3b': DeviceOptimizedModel(
-      id: 'llama3.2:3b',
-      name: 'Llama 3.2 3B',
-      description: 'Works on any system. Best for most users.',
+    // Fast and small
+    'phi3:mini': DeviceOptimizedModel(
+      id: 'phi3:mini',
+      name: 'Phi-3 Mini',
+      description: 'Microsoft\'s efficient small model. Great for basic tasks.',
       quantization: 'Q4_0',
       downloadUrl: '', // Managed by Ollama
       sizeGB: 2,
       minRAMGB: 4,
-      optimizedFor: ['8GB RAM', 'General use'],
+      optimizedFor: ['8GB RAM', 'Speed', 'Basic tasks'],
+      isRecommended: true,
+      qualityScore: 7.0,
+    ),
+    
+    // Balanced performance
+    'gemma2:2b': DeviceOptimizedModel(
+      id: 'gemma2:2b',
+      name: 'Gemma 2 2B',
+      description: 'Google\'s efficient model with good performance.',
+      quantization: 'Q4_0',
+      downloadUrl: '', // Managed by Ollama
+      sizeGB: 2,
+      minRAMGB: 4,
+      optimizedFor: ['8GB RAM', 'Balanced performance'],
       isRecommended: true,
       qualityScore: 7.5,
     ),
     
-    // High-end systems
+    // Latest models
+    'llama3.2:latest': DeviceOptimizedModel(
+      id: 'llama3.2:latest',
+      name: 'Llama 3.2 Latest',
+      description: 'Latest Llama 3.2 model with good capabilities.',
+      quantization: 'Q4_0',
+      downloadUrl: '', // Managed by Ollama
+      sizeGB: 3,
+      minRAMGB: 6,
+      optimizedFor: ['8GB+ RAM', 'General use'],
+      qualityScore: 8.0,
+    ),
+    
+    // High performance
+    'llama3.1:latest': DeviceOptimizedModel(
+      id: 'llama3.1:latest',
+      name: 'Llama 3.1 Latest',
+      description: 'High-quality model for complex tasks.',
+      quantization: 'Q4_K_M',
+      downloadUrl: '', // Managed by Ollama
+      sizeGB: 5,
+      minRAMGB: 10,
+      optimizedFor: ['16GB+ RAM', 'Complex tasks'],
+      qualityScore: 8.5,
+    ),
+    
+    // For high-end systems
     'llama3:8b': DeviceOptimizedModel(
       id: 'llama3:8b',
       name: 'Llama 3 8B',
@@ -130,19 +156,22 @@ class AIService {
     // Initialize Windows stability service first
     await WindowsStabilityService.initialize();
     
-    // Initialize ollama service on Windows
-    if (Platform.isWindows) {
+    // Initialize ollama service on Windows and macOS
+    if (Platform.isWindows || Platform.isMacOS) {
       try {
         await _ollamaService.initialize();
-        debugPrint('✅ Ollama service initialized for Windows');
+        debugPrint('✅ Ollama service initialized for ${Platform.operatingSystem}');
       } catch (e) {
-        debugPrint('⚠️ Ollama not available, falling back to fllama: $e');
+        debugPrint('⚠️ Ollama not available: $e');
       }
     }
     
     await _detectDeviceCapabilities();
     await _checkExistingModels();
     await _loadPreviouslyLoadedModel();
+    
+    // Auto-select best model if no model is loaded
+    await _autoSelectBestModel();
   }
 
   Future<void> _detectDeviceCapabilities() async {
@@ -305,19 +334,56 @@ class AIService {
       _modelStatuses[modelId] = ModelStatus.notDownloaded;
     }
     
-    final modelsDir = await _getModelsDirectory();
-    if (!await modelsDir.exists()) return;
-    
-    // Check which models actually exist
-    for (final modelId in _availableModels.keys) {
-      final modelFile = File('${modelsDir.path}/$modelId.gguf');
-      if (await modelFile.exists()) {
-        _modelStatuses[modelId] = ModelStatus.downloaded;
-        debugPrint('✅ Found existing model: $modelId');
+    try {
+      final ollamaModels = await _ollamaService.getAvailableModels();
+      for (final ollamaModel in ollamaModels) {
+        if (_availableModels.containsKey(ollamaModel)) {
+          _modelStatuses[ollamaModel] = ModelStatus.downloaded;
+          debugPrint('✅ Found Ollama model: $ollamaModel');
+        }
       }
+    } catch (e) {
+      debugPrint('❌ Failed to get Ollama models: $e');
+      // If Ollama is not running or fails, all models remain 'notDownloaded'
     }
     
     debugPrint('📊 Model status initialized: ${_modelStatuses.length} models checked');
+  }
+
+  /// Auto-selects the best available model based on device capabilities and Ollama's available models.
+  Future<void> _autoSelectBestModel() async {
+    if (_currentModelId != null && _modelStatuses[_currentModelId!] == ModelStatus.loaded) {
+      debugPrint('✅ Model $_currentModelId already loaded, skipping auto-selection.');
+      return; // A model is already loaded, no need to auto-select
+    }
+
+    try {
+      final availableOllamaModels = await _ollamaService.getAvailableModels();
+      debugPrint('🔍 Found ${availableOllamaModels.length} models in Ollama: ${availableOllamaModels.join(', ')}');
+
+      // Filter _availableModels to only include those actually present in Ollama
+      final modelsToConsider = _availableModels.values.where((model) =>
+          availableOllamaModels.contains(model.id) &&
+          model.minRAMGB <= _deviceRAMGB
+      ).toList();
+
+      // Sort by quality score (descending) and then by size (ascending)
+      modelsToConsider.sort((a, b) {
+        final qualityComparison = b.qualityScore.compareTo(a.qualityScore);
+        if (qualityComparison != 0) return qualityComparison;
+        return a.sizeGB.compareTo(b.sizeGB);
+      });
+
+      if (modelsToConsider.isNotEmpty) {
+        final bestModel = modelsToConsider.first;
+        debugPrint('🎯 Auto-selecting best available model: ${bestModel.id}');
+        await loadModel(bestModel.id);
+      } else {
+        debugPrint('⚠️ No suitable Ollama models found for auto-selection based on device RAM or availability.');
+      }
+    } catch (e) {
+      debugPrint('❌ Error during auto-model selection: $e');
+    }
   }
 
   Future<Directory> _getModelsDirectory() async {

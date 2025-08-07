@@ -137,7 +137,7 @@ class OllamaService {
             'seed': -1,
           }
         }),
-      ).timeout(Duration(seconds: 30));
+      ).timeout(Duration(seconds: 120)); // Increased timeout for large models
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -185,7 +185,7 @@ class OllamaService {
         Uri.parse('$_baseUrl/api/delete'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'name': modelName}),
-      ).timeout(Duration(seconds: 30));
+      ).timeout(Duration(seconds: 60)); // Increased timeout for model operations
       
       if (response.statusCode == 200) {
         debugPrint('✅ Model $modelName deleted successfully');
