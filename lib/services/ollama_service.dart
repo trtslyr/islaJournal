@@ -42,7 +42,7 @@ class OllamaService {
     }
   }
   
-  /// Check if ollama is running - bulletproof version
+  /// Check if ollama is running - bulletproof version with detailed logging
   Future<bool> _checkOllamaStatus() async {
     // Try multiple URLs to be absolutely sure
     final urlsToTry = [
@@ -50,9 +50,18 @@ class OllamaService {
       'http://127.0.0.1:11434/api/tags',
     ];
     
-    for (final url in urlsToTry) {
+    debugPrint('🚀 ISLA JOURNAL API CONNECTION TEST');
+    debugPrint('📍 Testing ${urlsToTry.length} different URLs...');
+    
+    for (int i = 0; i < urlsToTry.length; i++) {
+      final url = urlsToTry[i];
+      debugPrint('');
+      debugPrint('🔍 [${ i + 1}/${urlsToTry.length}] TRYING: $url');
+      
       try {
-        debugPrint('🔍 Trying connection to: $url');
+        final startTime = DateTime.now();
+        debugPrint('⏱️  Starting HTTP request...');
+        
         final response = await http.get(
           Uri.parse(url),
           headers: {
@@ -62,34 +71,52 @@ class OllamaService {
           },
         ).timeout(Duration(seconds: 10));
         
-        debugPrint('📡 Response from $url: ${response.statusCode}');
+        final duration = DateTime.now().difference(startTime).inMilliseconds;
+        debugPrint('⏱️  Request completed in ${duration}ms');
+        debugPrint('📡 HTTP Status: ${response.statusCode}');
+        debugPrint('📄 Response headers: ${response.headers}');
+        debugPrint('📝 Response body preview: ${response.body.substring(0, response.body.length > 100 ? 100 : response.body.length)}...');
+        
         if (response.statusCode == 200) {
-          debugPrint('✅ Ollama responding on: $url');
+          debugPrint('✅ SUCCESS! Ollama is responding on: $url');
+          debugPrint('🎯 Will use this URL for all future requests');
           return true;
+        } else {
+          debugPrint('❌ Bad status code from $url');
         }
       } catch (e) {
-        debugPrint('❌ Failed $url: $e');
+        debugPrint('💥 EXCEPTION from $url:');
+        debugPrint('   Error type: ${e.runtimeType}');
+        debugPrint('   Error message: $e');
         continue; // Try next URL
       }
     }
     
-    debugPrint('❌ Ollama not responding on any URL');
+    debugPrint('');
+    debugPrint('💀 TOTAL FAILURE - Ollama not responding on ANY URL');
+    debugPrint('🔧 Check: Is Ollama running? Try opening http://localhost:11434/api/tags in browser');
     return false;
   }
   
   /// Force sync with Ollama - check status and refresh models
   Future<Map<String, dynamic>> syncWithOllama() async {
     try {
-      debugPrint('🔄 Starting Ollama sync...');
-      debugPrint('🌐 Checking connection to $_baseUrl');
+      debugPrint('');
+      debugPrint('🔄🔄🔄 STARTING ISLA JOURNAL SYNC 🔄🔄🔄');
+      debugPrint('🌐 Base URL configured as: $_baseUrl');
+      debugPrint('📅 Sync timestamp: ${DateTime.now()}');
       
       // Detailed connection diagnostics
+      debugPrint('🔍 Running connection diagnostics...');
       final diagnostics = await _runConnectionDiagnostics();
-      debugPrint('🔍 Connection diagnostics: $diagnostics');
+      debugPrint('📊 Diagnostics result: $diagnostics');
       
       // Check if Ollama is running
+      debugPrint('🔌 Testing Ollama connection...');
       final isRunning = await _checkOllamaStatus();
+      
       if (!isRunning) {
+        debugPrint('💀 SYNC FAILED - Ollama not accessible');
         return {
           'success': false,
           'error': 'Ollama connection failed. ${diagnostics['suggestion'] ?? 'Please start Ollama and try again.'}',
@@ -99,8 +126,10 @@ class OllamaService {
       }
       
       // Get fresh list of models
+      debugPrint('📋 Fetching available models...');
       final models = await getAvailableModels();
-      debugPrint('✅ Ollama sync successful - found ${models.length} models');
+      debugPrint('📦 Models discovered: $models');
+      debugPrint('✅ SYNC SUCCESSFUL - found ${models.length} models');
       
       return {
         'success': true,
@@ -109,7 +138,8 @@ class OllamaService {
         'diagnostics': diagnostics
       };
     } catch (e) {
-      debugPrint('❌ Ollama sync failed: $e');
+      debugPrint('💥 SYNC EXCEPTION: $e');
+      debugPrint('Stack trace: ${StackTrace.current}');
       return {
         'success': false,
         'error': 'Failed to sync with Ollama: $e',
