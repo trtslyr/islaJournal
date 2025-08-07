@@ -1096,19 +1096,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 SizedBox(height: 12),
                 Row(
                   children: [
-                    ElevatedButton.icon(
-                      onPressed: () => BrowserService.openUrl('https://ollama.ai/download'),
-                      icon: Icon(Icons.download, size: 16),
-                      label: Text('Download Ollama'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.warmBrown,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
+                ElevatedButton.icon(
+                  onPressed: () => BrowserService.openUrl('https://ollama.ai/download'),
+                  icon: Icon(Icons.download, size: 16),
+                  label: Text('Download Ollama'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.warmBrown,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
                     ),
+                  ),
+                ),
                     SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () => _syncWithOllama(aiProvider),
@@ -1119,12 +1119,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         foregroundColor: Colors.white,
                         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+          ),
+        ],
+      ),
               ],
       );
     }
@@ -1132,9 +1132,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Row(
       children: [
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
               Text(
                 'Current Model:',
                 style: TextStyle(
@@ -1143,39 +1143,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               SizedBox(height: 4),
-              if (currentModel != null) ...[
-                Text(
+          if (currentModel != null) ...[
+            Text(
                   aiProvider.availableModels[currentModel]?.name ?? currentModel,
-                  style: TextStyle(
+              style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.darkText,
-                    fontFamily: 'JetBrainsMono',
-                  ),
-                ),
+                fontWeight: FontWeight.w500,
+                color: AppTheme.darkText,
+                fontFamily: 'JetBrainsMono',
+              ),
+            ),
                 if (aiProvider.availableModels[currentModel] != null) ...[
                   SizedBox(height: 2),
-                  Text(
+            Text(
                     '${aiProvider.availableModels[currentModel]!.sizeGB}GB • Quality: ${aiProvider.availableModels[currentModel]!.qualityScore}/10',
-                    style: TextStyle(
+              style: TextStyle(
                       fontSize: 11,
-                      color: AppTheme.mediumGray,
+                color: AppTheme.mediumGray,
                     ),
-                  ),
-                ],
-              ] else ...[
-                Text(
-                  'No model loaded',
-                  style: TextStyle(
+              ),
+            ],
+          ] else ...[
+            Text(
+              'No model loaded',
+              style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
-                    color: AppTheme.mediumGray,
-                    fontFamily: 'JetBrainsMono',
-                  ),
-                ),
-              ],
-            ],
-          ),
+                color: AppTheme.mediumGray,
+                fontFamily: 'JetBrainsMono',
+              ),
+            ),
+          ],
+        ],
+      ),
         ),
         ElevatedButton.icon(
           onPressed: () => _showModelSelectionDialog(aiProvider),
@@ -1204,7 +1204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             final allModels = aiProvider.availableModels.entries.toList();
-            final recommendedModels = aiProvider.getRecommendedModels();
+    final recommendedModels = aiProvider.getRecommendedModels();
             
             // Group models by status
             final downloadedModels = allModels.where((entry) => 
@@ -1229,19 +1229,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 height: 400,
                 child: SingleChildScrollView(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
                       // Downloaded models section
                       if (downloadedModels.isNotEmpty) ...[
-                        Text(
+        Text(
                           'Downloaded Models',
-                          style: TextStyle(
+          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.darkText,
-                          ),
-                        ),
-                        SizedBox(height: 8),
+            color: AppTheme.darkText,
+          ),
+        ),
+        SizedBox(height: 8),
                         ...downloadedModels.map((entry) => _buildModelListTile(
                           entry.value, 
                           aiProvider, 
@@ -1253,9 +1253,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       
                       // Currently downloading models
                       if (downloadingModels.isNotEmpty) ...[
-                        Text(
+        Text(
                           'Downloading',
-                          style: TextStyle(
+          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: Colors.blue,
@@ -1268,7 +1268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           recommendedModels.contains(entry.value),
                           setState,
                         )),
-                        SizedBox(height: 16),
+        SizedBox(height: 16),
                       ],
                       
                       // Available for download models
@@ -1329,39 +1329,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final status = aiProvider.modelStatuses[model.id] ?? ModelStatus.notDownloaded;
     final isCurrentModel = aiProvider.currentModelId == model.id;
     final canDownload = model.minRAMGB <= aiProvider.deviceRAMGB;
-    
+
     return Container(
       margin: EdgeInsets.only(bottom: 8),
       child: ListTile(
         title: Row(
-          children: [
-            Expanded(
+            children: [
+              Expanded(
               child: Text(
-                model.name,
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
+                          model.name,
+                          style: TextStyle(
+                            fontFamily: 'JetBrainsMono',
                   fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
             ),
             if (isRecommended) ...[
-          Container(
+                          Container(
                 padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-                  color: AppTheme.warmBrown,
-                  borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-                  'RECOMMENDED',
-              style: TextStyle(
+                            decoration: BoxDecoration(
+                              color: AppTheme.warmBrown,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'RECOMMENDED',
+                              style: TextStyle(
                     fontSize: 8,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
             if (!canDownload) ...[
               SizedBox(width: 8),
               Container(
@@ -1372,7 +1372,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 child: Text(
                   'NEEDS ${model.minRAMGB}GB RAM',
-                  style: TextStyle(
+                      style: TextStyle(
                     fontSize: 8,
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
@@ -1385,13 +1385,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+          Text(
               '${model.sizeGB}GB • ${model.description}',
-              style: TextStyle(
+            style: TextStyle(
                 fontSize: 11,
-                color: AppTheme.mediumGray,
-              ),
+              color: AppTheme.mediumGray,
             ),
+          ),
             if (status == ModelStatus.downloading) ...[
               SizedBox(height: 4),
               LinearProgressIndicator(
@@ -1444,41 +1444,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
             await _downloadModel(model.id, aiProvider);
             setState(() {}); // Update UI after download
           } : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.warmBrown,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.warmBrown,
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             minimumSize: Size(80, 32),
           ),
           child: Text(
-            'Download',
-            style: TextStyle(
+                  'Download',
+                  style: TextStyle(
               fontSize: 11,
-              color: Colors.white,
-            ),
-          ),
+                    color: Colors.white,
+                  ),
+                ),
         );
       
       case ModelStatus.downloaded:
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ElevatedButton(
+          ElevatedButton(
               onPressed: () async {
                 Navigator.of(context).pop();
                 await _switchToModel(model.id, aiProvider);
               },
-              style: ElevatedButton.styleFrom(
+            style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.warmBrown,
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 minimumSize: Size(60, 32),
               ),
               child: Text(
                 'Use',
-                style: TextStyle(
+                  style: TextStyle(
                   fontSize: 11,
-                  color: Colors.white,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
             ),
             SizedBox(width: 4),
             IconButton(
@@ -1492,8 +1492,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       
       case ModelStatus.loaded:
         return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+              mainAxisSize: MainAxisSize.min,
+              children: [
             Container(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
@@ -1503,7 +1503,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               child: Text(
                 'Active',
-                style: TextStyle(
+                  style: TextStyle(
                   fontSize: 11,
                   color: Colors.green,
                   fontWeight: FontWeight.w500,
@@ -1539,18 +1539,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             await _downloadModel(model.id, aiProvider);
             setState(() {}); // Update UI after download
           } : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             minimumSize: Size(80, 32),
           ),
           child: Text(
-            'Retry',
-            style: TextStyle(
+                  'Retry',
+                  style: TextStyle(
               fontSize: 11,
-              color: Colors.white,
-            ),
-          ),
+                    color: Colors.white,
+                  ),
+                ),
         );
     }
   }
@@ -1617,26 +1617,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         border: Border.all(color: AppTheme.mediumGray.withOpacity(0.3)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
               Icon(
                 Icons.smart_toy,
                 size: 20,
                 color: AppTheme.warmBrown,
-              ),
-              SizedBox(width: 8),
-              Text(
+            ),
+            SizedBox(width: 8),
+            Text(
                 'Current Model',
-                style: TextStyle(
-                  fontFamily: 'JetBrainsMono',
+              style: TextStyle(
+                fontFamily: 'JetBrainsMono',
                   fontSize: 14.0,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.darkText,
-                ),
               ),
-            ],
+            ),
+          ],
           ),
           SizedBox(height: 12),
           if (currentModel != null) ...[
@@ -1648,12 +1648,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 fontWeight: FontWeight.w500,
                 color: AppTheme.darkText,
               ),
-            ),
-            SizedBox(height: 4),
-            Text(
+        ),
+        SizedBox(height: 4),
+        Text(
               '${currentModel.quantization} • ${currentModel.sizeGB}GB • Quality: ${currentModel.qualityScore}/10',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
                 fontSize: 11.0,
                 color: AppTheme.mediumGray,
               ),
@@ -1670,7 +1670,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (aiProvider.isModelLoaded) ...[
               SizedBox(height: 12),
               Row(
-                children: [
+        children: [
                   Container(
                     width: 8,
                     height: 8,
@@ -1680,16 +1680,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   SizedBox(width: 8),
-                  Text(
+          Text(
                     'Model loaded and ready',
-                    style: TextStyle(
-                      fontFamily: 'JetBrainsMono',
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
                       fontSize: 11.0,
                       color: Colors.green,
-                    ),
-                  ),
-                ],
-              ),
+            ),
+          ),
+        ],
+      ),
             ],
           ] else ...[
             Text(
@@ -1701,14 +1701,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             SizedBox(height: 8),
-            Text(
+              Text(
               'Download and load a model to use AI features',
-              style: TextStyle(
-                fontFamily: 'JetBrainsMono',
-                fontSize: 11.0,
-                color: AppTheme.mediumGray,
+                style: TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 11.0,
+                  color: AppTheme.mediumGray,
+                ),
               ),
-            ),
           ],
         ],
       ),
@@ -1862,11 +1862,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         
         if (result['success']) {
+          final message = result['message'] ?? 'Successfully synced with Ollama';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message'] ?? 'Successfully synced with Ollama'),
+              content: Text('$message${aiProvider.isModelLoaded ? ' - AI Chat is now ready!' : ''}'),
               backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
+              duration: Duration(seconds: 4),
             ),
           );
         } else {

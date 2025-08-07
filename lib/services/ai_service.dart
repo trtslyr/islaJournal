@@ -616,6 +616,12 @@ class AIService {
         // Refresh our model statuses based on what's actually in Ollama
         await _checkExistingModels();
         debugPrint('✅ Model statuses refreshed after Ollama sync');
+        
+        // If no model is currently loaded but we have downloaded models, auto-load the best one
+        if (_currentModelId == null || !isModelLoaded) {
+          await _autoSelectBestModel();
+          debugPrint('🎯 Auto-loaded model after sync');
+        }
       }
       
       return result;
