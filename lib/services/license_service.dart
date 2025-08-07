@@ -190,20 +190,32 @@ class LicenseService {
   /// Validate lifetime license key
   Future<LicenseStatus> validateLifetimeKey(String licenseKey) async {
     try {
-      debugPrint('🔑 Validating lifetime key online...');
-      debugPrint('🌐 Calling: $baseUrl/validate-lifetime-key');
-      debugPrint('📝 Key: ${licenseKey.substring(0, 10)}...');
+      debugPrint('');
+      debugPrint('🔑🔑🔑 ISLA JOURNAL LICENSE VALIDATION 🔑🔑🔑');
+      debugPrint('🌐 Backend URL: $baseUrl');
+      debugPrint('📝 License Key: ${licenseKey.substring(0, 10)}...');
       debugPrint('🖥️ Platform: ${Platform.operatingSystem}');
       debugPrint('📱 Key length: ${licenseKey.length}');
+      debugPrint('⏰ Timestamp: ${DateTime.now()}');
+
+      final startTime = DateTime.now();
+      debugPrint('🚀 Starting HTTP request to backend...');
 
       final response = await http.post(
         Uri.parse('$baseUrl/validate-lifetime-key'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'IslaJournal/1.0',
+        },
         body: jsonEncode({'license_key': licenseKey}),
-      );
+      ).timeout(Duration(seconds: 15));
 
-      debugPrint('📡 Response status: ${response.statusCode}');
-      debugPrint('📡 Response body: ${response.body}');
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('⏱️ Request completed in ${duration}ms');
+      debugPrint('📡 HTTP Status: ${response.statusCode}');
+      debugPrint('📄 Response headers: ${response.headers}');
+      debugPrint('📝 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -238,7 +250,20 @@ class LicenseService {
 
       return LicenseStatus(type: LicenseType.none, isValid: false);
     } catch (e) {
-      debugPrint('❌ Lifetime key validation error: $e');
+      debugPrint('');
+      debugPrint('💥💥💥 LICENSE VALIDATION EXCEPTION 💥💥💥');
+      debugPrint('🔥 Error type: ${e.runtimeType}');
+      debugPrint('🔥 Error message: $e');
+      debugPrint('🔥 Backend URL: $baseUrl');
+      
+      if (e.toString().contains('Connection refused')) {
+        debugPrint('💡 Suggestion: Backend server may not be running');
+      } else if (e.toString().contains('TimeoutException')) {
+        debugPrint('💡 Suggestion: Backend timeout - check internet connection');
+      } else if (e.toString().contains('SocketException')) {
+        debugPrint('💡 Suggestion: Network connectivity issue');
+      }
+      
       return LicenseStatus(type: LicenseType.none, isValid: false);
     }
   }
